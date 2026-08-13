@@ -1,30 +1,29 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:modellyng/main.dart';
+import 'package:modellyng/src/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('welcome screen enters the research workspace', (tester) async {
+    await tester.pumpWidget(const ModellyngApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(
+      find.text('Ubah paper menjadi\npengetahuan yang\ndapat diverifikasi.'),
+      findsOneWidget,
+    );
+    final getStarted = find.byKey(const Key('get-started-button'));
+    await tester.ensureVisible(getStarted);
+    await tester.tap(getStarted);
+    await tester.pump(const Duration(milliseconds: 400));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    expect(find.text('Selamat datang, Aditya'), findsOneWidget);
+    expect(find.text('Proyek terbaru'), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('dashboard exposes the primary MVP actions', (tester) async {
+    await tester.pumpWidget(const ModellyngApp(skipWelcome: true));
+
+    expect(find.text('Proyek baru'), findsWidgets);
+    expect(find.text('12 hasil AI menunggu verifikasi Anda'), findsOneWidget);
+    expect(find.text('Paper dianalisis'), findsOneWidget);
   });
 }
