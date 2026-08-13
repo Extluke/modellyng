@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: modellyng
+      POSTGRES_USER: modellyng
+      POSTGRES_PASSWORD: modellyng
+    ports:
+      - "5432:5432"
+    volumes:
+      - modellyng_postgres:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./backend
+    environment:
+      MODELLYNG_DATABASE_URL: postgresql://modellyng:modellyng@postgres:5432/modellyng
+      MODELLYNG_REDIS_URL: redis://redis:6379/0
+      MODELLYNG_ENQUEUE_JOBS: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: ./backend
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
+    environment:
+      MODELLYNG_DATABASE_URL: postgresql://modellyng:modellyng@postgres:5432/modellyng
+      MODELLYNG_REDIS_URL: redis://redis:6379/0
+      MODELLYNG_ENQUEUE_JOBS: "true"
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  modellyng_postgres:
