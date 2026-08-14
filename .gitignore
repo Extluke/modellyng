@@ -30,8 +30,13 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/frontend/build/
 /coverage/
+.node_modules/
+/node_modules/
 .tool-state/
+/tmp/
+/output/
 backend/.env
 backend/.venv/
 __pycache__/
@@ -44,12 +49,12 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio / Xcode build artifacts & generated files
-/android/app/debug
-/android/app/profile
-/android/app/release
-android/.gradle/
-android/local.properties
-ios/Pods/
-ios/Runner.xcworkspace/
-ios/.symlinks/
+/frontend/android/app/debug
+/frontend/android/app/profile
+/frontend/android/app/release
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/ios/Pods/
+frontend/ios/Runner.xcworkspace/
+frontend/ios/.symlinks/
 

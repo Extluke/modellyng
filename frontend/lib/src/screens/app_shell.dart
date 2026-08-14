@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/auth_repository.dart';
+import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import 'account_screen.dart';
 import 'dashboard_screen.dart';
 import 'new_project_screen.dart';
-import 'project_workspace_screen.dart';
+import 'project_overview_screen.dart';
 import 'projects_screen.dart';
 import 'review_queue_screen.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
 
   static const _destinations = <_Destination>[
@@ -44,14 +47,16 @@ class _AppShellState extends State<AppShell> {
   ];
 
   Future<void> _createProject() async {
-    final created = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const NewProjectScreen()));
-    if (!mounted || created != true) return;
+    final created = await Navigator.of(context).push<ResearchProject>(
+      MaterialPageRoute(builder: (_) => const NewProjectScreen()),
+    );
+    if (!mounted || created == null) return;
+    final userId = ref.read(authRepositoryProvider).currentUser?.id;
+    if (userId != null) ref.invalidate(projectsProvider(userId));
     setState(() => _selectedIndex = 1);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Proyek dibuat. Job analisis demo telah masuk antrean.'),
+        content: Text('Proyek berhasil disimpan di Supabase lokal.'),
       ),
     );
   }
@@ -59,23 +64,34 @@ class _AppShellState extends State<AppShell> {
   void _openProject(ResearchProject project) {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ProjectWorkspaceScreen(project: project),
+        builder: (_) => ProjectOverviewScreen(project: project),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(authRepositoryProvider).currentUser;
+    if (user == null) return const SizedBox.shrink();
+    final email = user.email ?? 'Pengguna lokal';
+    final metadataName = user.userMetadata?['display_name'] as String?;
+    final displayName = metadataName?.trim().isNotEmpty == true
+        ? metadataName!.trim()
+        : email.split('@').first;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final desktop = constraints.maxWidth >= 900;
         final pages = [
           DashboardScreen(
+            userId: user.id,
+            displayName: displayName,
             onNewProject: _createProject,
             onOpenProject: _openProject,
             onOpenReview: () => setState(() => _selectedIndex = 2),
           ),
           ProjectsScreen(
+            userId: user.id,
             onNewProject: _createProject,
             onOpenProject: _openProject,
           ),
@@ -110,6 +126,8 @@ class _AppShellState extends State<AppShell> {
               ? Row(
                   children: [
                     _DesktopSidebar(
+                      displayName: displayName,
+                      email: email,
                       selectedIndex: _selectedIndex,
                       destinations: _destinations,
                       onSelected: (index) =>
@@ -148,12 +166,16 @@ class _AppShellState extends State<AppShell> {
 
 class _DesktopSidebar extends StatelessWidget {
   const _DesktopSidebar({
+    required this.displayName,
+    required this.email,
     required this.selectedIndex,
     required this.destinations,
     required this.onSelected,
     required this.onNewProject,
   });
 
+  final String displayName;
+  final String email;
   final int selectedIndex;
   final List<_Destination> destinations;
   final ValueChanged<int> onSelected;
@@ -211,13 +233,13 @@ class _DesktopSidebar extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: 0.62,
+                      value: 0,
                       minHeight: 6,
                       borderRadius: BorderRadius.all(Radius.circular(99)),
                     ),
                     SizedBox(height: 7),
                     Text(
-                      '186 / 300 halaman',
+                      '0 / 5 paper hari ini',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.primaryDark,
@@ -227,23 +249,31 @@ class _DesktopSidebar extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 8),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                 leading: CircleAvatar(
                   backgroundColor: AppColors.primarySoft,
                   child: Text(
-                    'AS',
-                    style: TextStyle(
+                    displayName.isEmpty ? 'ML' : displayName[0].toUpperCase(),
+                    style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
                 title: Text(
-                  'Aditya Saputra',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                subtitle: Text('Researcher', style: TextStyle(fontSize: 11)),
+                subtitle: Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
+                ),
               ),
             ],
           ),
@@ -289,27 +319,6 @@ class _NavigationTile extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 ),
               ),
-              if (destination.label == 'Review') ...[
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.orangeSoft,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Text(
-                    '12',
-                    style: TextStyle(
-                      color: AppColors.orange,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

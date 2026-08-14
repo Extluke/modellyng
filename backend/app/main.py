@@ -1,28 +1,39 @@
 from uuid import UUID
 
-from fastapi import APIRouter, FastAPI, status
+from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from .auth import CurrentUser
 from .config import get_settings
-from .repository import EntityNotFoundError, repository
+from .health import dependency_health
+from .repository import (
+    EntityNotFoundError,
+    InvalidReviewError,
+    InvalidUploadError,
+    RepositoryError,
+    project_repository,
+)
 from .schemas import (
-    AnalysisJobCreate,
-    AnalysisJobRead,
+    DependencyHealthRead,
     HealthRead,
     PaperCreate,
     PaperRead,
     ProjectCreate,
     ProjectRead,
+    ReviewQueueItemRead,
+    ReviewRecordCreate,
+    ReviewRecordRead,
 )
 
 settings = get_settings()
+MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
+PDF_READ_CHUNK_BYTES = 1024 * 1024
+
 app = FastAPI(
     title=settings.app_name,
+    description="Local API for the AI-assisted PDF extraction MVP.",
     version="0.1.0",
-    description=(
-        "API contract for evidence-centered paper extraction, comparison, "
-        "research-gap detection, and human review."
-    ),
 )
 app.add_middleware(
     CORSMiddleware,
@@ -34,117 +45,177 @@ app.add_middleware(
 
 
 @app.exception_handler(EntityNotFoundError)
-async def entity_not_found_handler(_, exc: EntityNotFoundError):
-    from fastapi.responses import JSONResponse
-
+async def entity_not_found_handler(_, exc: EntityNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+@app.exception_handler(RepositoryError)
+async def repository_error_handler(_, exc: RepositoryError) -> JSONResponse:
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+@app.exception_handler(InvalidUploadError)
+async def invalid_upload_handler(_, exc: InvalidUploadError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(InvalidReviewError)
+async def invalid_review_handler(_, exc: InvalidReviewError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
 @app.get("/health", response_model=HealthRead, tags=["system"])
-def health() -> HealthRead:
+async def health() -> HealthRead:
+    """Return a lightweight liveness response for local development."""
     return HealthRead(status="ok", service="modellyng-api", version="0.1.0")
 
 
-router = APIRouter(prefix=settings.api_prefix)
+@app.get(
+    "/health/dependencies",
+    response_model=DependencyHealthRead,
+    tags=["system"],
+)
+async def health_dependencies() -> DependencyHealthRead:
+    """Check whether Redis and local Supabase are reachable from the API."""
+    return await dependency_health()
 
 
-@router.post(
+api = APIRouter(prefix=settings.api_prefix)
+
+
+@api.post(
     "/projects",
     response_model=ProjectRead,
     status_code=status.HTTP_201_CREATED,
     tags=["projects"],
 )
-def create_project(payload: ProjectCreate) -> ProjectRead:
-    return repository.create_project(payload)
+async def create_project(
+    payload: ProjectCreate,
+    current_user: CurrentUser,
+) -> ProjectRead:
+    return await project_repository.create_project(current_user, payload)
 
 
-@router.get("/projects", response_model=list[ProjectRead], tags=["projects"])
-def list_projects() -> list[ProjectRead]:
-    return repository.list_projects()
+@api.get("/projects", response_model=list[ProjectRead], tags=["projects"])
+async def list_projects(current_user: CurrentUser) -> list[ProjectRead]:
+    return await project_repository.list_projects(current_user)
 
 
-@router.get("/projects/{project_id}", response_model=ProjectRead, tags=["projects"])
-def get_project(project_id: UUID) -> ProjectRead:
-    return repository.get_project(project_id)
+@api.get(
+    "/projects/{project_id}",
+    response_model=ProjectRead,
+    tags=["projects"],
+)
+async def get_project(
+    project_id: UUID,
+    current_user: CurrentUser,
+) -> ProjectRead:
+    return await project_repository.get_project(current_user, project_id)
 
 
-@router.post(
+@api.post(
     "/projects/{project_id}/papers",
     response_model=PaperRead,
     status_code=status.HTTP_201_CREATED,
     tags=["papers"],
 )
-def create_paper(project_id: UUID, payload: PaperCreate) -> PaperRead:
-    return repository.create_paper(project_id, payload)
+async def create_paper(
+    project_id: UUID,
+    payload: PaperCreate,
+    current_user: CurrentUser,
+) -> PaperRead:
+    return await project_repository.create_paper(current_user, project_id, payload)
 
 
-@router.get(
+@api.post(
+    "/projects/{project_id}/papers/upload",
+    response_model=PaperRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["papers"],
+)
+async def upload_paper(
+    project_id: UUID,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> PaperRead:
+    """Receive a PDF through FastAPI, then store it with the user's RLS token."""
+    filename = file.filename or ""
+    content = bytearray()
+    try:
+        while chunk := await file.read(PDF_READ_CHUNK_BYTES):
+            content.extend(chunk)
+            if len(content) > MAX_PDF_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Ukuran PDF melebihi batas 50 MB per file",
+                )
+    finally:
+        await file.close()
+
+    return await project_repository.upload_pdf(
+        current_user,
+        project_id,
+        original_filename=filename,
+        content=bytes(content),
+    )
+
+
+@api.get(
     "/projects/{project_id}/papers",
     response_model=list[PaperRead],
     tags=["papers"],
 )
-def list_papers(project_id: UUID) -> list[PaperRead]:
-    return repository.list_papers(project_id)
+async def list_papers(
+    project_id: UUID,
+    current_user: CurrentUser,
+) -> list[PaperRead]:
+    return await project_repository.list_papers(current_user, project_id)
 
 
-@router.post(
-    "/projects/{project_id}/analysis-jobs",
-    response_model=AnalysisJobRead,
+@api.post(
+    "/projects/{project_id}/papers/{paper_id}/process",
+    response_model=PaperRead,
     status_code=status.HTTP_202_ACCEPTED,
-    tags=["analysis"],
+    tags=["papers"],
 )
-def create_analysis_job(
-    project_id: UUID, payload: AnalysisJobCreate
-) -> AnalysisJobRead:
-    job = repository.create_job(project_id, payload)
-    if settings.enqueue_jobs:
-        from .celery_app import celery_app
+async def process_paper(
+    project_id: UUID,
+    paper_id: UUID,
+    current_user: CurrentUser,
+) -> PaperRead:
+    """Queue local PDF extraction or return the already active job."""
+    return await project_repository.start_pdf_processing(
+        current_user,
+        project_id,
+        paper_id,
+    )
 
-        celery_app.send_task("modellyng.run_analysis", args=[str(job.id)], task_id=str(job.id))
-    return job
 
-
-@router.get(
-    "/analysis-jobs/{job_id}",
-    response_model=AnalysisJobRead,
-    tags=["analysis"],
+@api.get(
+    "/reviews",
+    response_model=list[ReviewQueueItemRead],
+    tags=["reviews"],
 )
-def get_analysis_job(job_id: UUID) -> AnalysisJobRead:
-    job = repository.get_job(job_id)
-    if not settings.enqueue_jobs:
-        return job
-
-    from .celery_app import celery_app
-    from .schemas import JobStatus
-
-    result = celery_app.AsyncResult(str(job_id))
-    if result.state == "PROGRESS":
-        metadata = result.info or {}
-        return job.model_copy(
-            update={
-                "status": JobStatus.PROCESSING,
-                "stage": metadata.get("stage", "processing"),
-                "progress": metadata.get("progress", job.progress),
-            }
-        )
-    if result.state == "SUCCESS":
-        return job.model_copy(
-            update={"status": JobStatus.COMPLETED, "stage": "completed", "progress": 1}
-        )
-    if result.state == "FAILURE":
-        return job.model_copy(
-            update={
-                "status": JobStatus.FAILED,
-                "stage": "failed",
-                "error_message": str(result.info),
-            }
-        )
-    return job
+async def list_reviews(current_user: CurrentUser) -> list[ReviewQueueItemRead]:
+    return await project_repository.list_review_queue(current_user)
 
 
-app.include_router(router)
+@api.post(
+    "/reviews/{component_id}",
+    response_model=ReviewRecordRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["reviews"],
+)
+async def review_component(
+    component_id: UUID,
+    payload: ReviewRecordCreate,
+    current_user: CurrentUser,
+) -> ReviewRecordRead:
+    return await project_repository.review_component(
+        current_user,
+        component_id,
+        payload,
+    )
 
 
-@app.get("/", include_in_schema=False)
-def api_root() -> dict[str, str]:
-    return {"service": "Modellyng API", "docs": "/docs", "health": "/health"}
+app.include_router(api)

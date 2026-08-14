@@ -160,6 +160,11 @@ class StatusBadge extends StatelessWidget {
 
   factory StatusBadge.paper(PaperStatus status) {
     return switch (status) {
+      PaperStatus.validating => const StatusBadge(
+        label: 'Dalam antrean',
+        color: AppColors.blue,
+        background: AppColors.blueSoft,
+      ),
       PaperStatus.ready => const StatusBadge(
         label: 'Siap',
         color: AppColors.green,
@@ -300,12 +305,14 @@ class EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    this.action,
     super.key,
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -320,6 +327,7 @@ class EmptyState extends StatelessWidget {
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Text(message, textAlign: TextAlign.center),
+            if (action != null) ...[const SizedBox(height: 18), action!],
           ],
         ),
       ),

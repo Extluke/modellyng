@@ -1,29 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/demo_data.dart';
-import '../models/research_models.dart';
+import '../data/auth_repository.dart';
+import '../data/project_repository.dart';
+import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
-class ReviewQueueScreen extends StatefulWidget {
+class ReviewQueueScreen extends ConsumerWidget {
   const ReviewQueueScreen({super.key});
 
   @override
-  State<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userId = ref.watch(authRepositoryProvider).currentUser?.id;
+    final queue = userId == null
+        ? const AsyncValue<List<ReviewQueueItem>>.data([])
+        : ref.watch(reviewQueueProvider(userId));
 
-class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
-  final Set<String> _resolved = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final items = DemoData.components
-        .where(
-          (item) =>
-              item.status == VerificationStatus.needsReview &&
-              !_resolved.contains(item.label),
-        )
-        .toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
       child: Center(
@@ -35,30 +28,48 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
               const PageHeading(
                 title: 'Antrean verifikasi',
                 subtitle:
-                    'Validasi hubungan Result → Evidence → Source sebelum data menjadi final.',
+                    'Periksa hasil Gemini dan kutipan sumber sebelum data menjadi final.',
               ),
               const SizedBox(height: 24),
-              if (items.isEmpty)
-                const Card(
+              queue.when(
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+                error: (error, _) => Card(
                   child: EmptyState(
-                    icon: Icons.task_alt_rounded,
-                    title: 'Semua hasil sudah ditinjau',
-                    message: 'Tidak ada claim yang menunggu keputusan Anda.',
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Antrean review belum dapat dimuat',
+                    message: 'Pastikan FastAPI dan Supabase lokal berjalan.',
+                    action: FilledButton.icon(
+                      onPressed: userId == null
+                          ? null
+                          : () => ref.invalidate(reviewQueueProvider(userId)),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Coba lagi'),
+                    ),
                   ),
-                )
-              else
-                for (final item in items) ...[
-                  _ReviewCard(
-                    component: item,
-                    onResolve: (message) {
-                      setState(() => _resolved.add(item.label));
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(message)));
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                ],
+                ),
+                data: (items) => items.isEmpty
+                    ? const Card(
+                        child: EmptyState(
+                          icon: Icons.task_alt_rounded,
+                          title: 'Belum ada hasil yang perlu ditinjau',
+                          message:
+                              'Hasil ekstraksi Gemini akan muncul setelah paper selesai diproses.',
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          for (final item in items) ...[
+                            _ReviewCard(item: item, userId: userId!),
+                            const SizedBox(height: 14),
+                          ],
+                        ],
+                      ),
+              ),
             ],
           ),
         ),
@@ -67,14 +78,94 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
   }
 }
 
-class _ReviewCard extends StatelessWidget {
-  const _ReviewCard({required this.component, required this.onResolve});
+class _ReviewCard extends ConsumerStatefulWidget {
+  const _ReviewCard({required this.item, required this.userId});
 
-  final ExtractedComponent component;
-  final ValueChanged<String> onResolve;
+  final ReviewQueueItem item;
+  final String userId;
+
+  @override
+  ConsumerState<_ReviewCard> createState() => _ReviewCardState();
+}
+
+class _ReviewCardState extends ConsumerState<_ReviewCard> {
+  bool _submitting = false;
+
+  Future<void> _submit(
+    ReviewDecision decision, {
+    String? correctedValue,
+  }) async {
+    setState(() => _submitting = true);
+    try {
+      await ref.read(reviewRepositoryProvider).submitDecision(
+        componentId: widget.item.componentId,
+        decision: decision,
+        correctedValue: correctedValue,
+      );
+      ref.invalidate(reviewQueueProvider(widget.userId));
+      ref.invalidate(projectsProvider(widget.userId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keputusan review berhasil disimpan.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Keputusan belum dapat disimpan. Silakan coba kembali.'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _edit() async {
+    final controller = TextEditingController(text: widget.item.aiValue);
+    final corrected = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit ${widget.item.parameterLabel}'),
+        content: SizedBox(
+          width: 560,
+          child: TextField(
+            controller: controller,
+            minLines: 5,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              labelText: 'Nilai final hasil koreksi',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(context, value);
+            },
+            child: const Text('Simpan koreksi'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (corrected != null) {
+      await _submit(ReviewDecision.edit, correctedValue: corrected);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final confidence = item.confidence == null
+        ? 'Tidak tersedia'
+        : '${(item.confidence! * 100).round()}%';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -82,250 +173,93 @@ class _ReviewCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    component.label,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                StatusBadge.verification(component.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Urban Climate Resilience: A Systematic Review',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 18),
-            _LabeledBlock(
-              label: 'HASIL EKSTRAKSI AI',
-              child: Text(component.value),
-            ),
-            const SizedBox(height: 12),
-            _LabeledBlock(
-              label: 'SUPPORTING EVIDENCE',
-              background: const Color(0xFFF8F7FF),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '“${component.evidence}”',
-                    style: const TextStyle(
-                      fontStyle: FontStyle.italic,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 16,
-                        color: AppColors.primary,
+                      Text(
+                        item.parameterLabel,
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          component.location,
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _showSource(context, component),
-                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                        label: const Text('Buka sumber'),
-                      ),
+                      const SizedBox(height: 4),
+                      Text('${item.paperTitle} · ${item.projectTitle}'),
                     ],
                   ),
-                ],
-              ),
+                ),
+                StatusBadge(
+                  label: 'Keyakinan $confidence',
+                  color: item.evidence.isEmpty
+                      ? AppColors.orange
+                      : AppColors.blue,
+                  background: item.evidence.isEmpty
+                      ? AppColors.orangeSoft
+                      : AppColors.blueSoft,
+                ),
+              ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
+            Text(item.aiValue, style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 16),
+            Text('Bukti sumber', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (item.evidence.isEmpty)
+              const Text(
+                'Gemini tidak memberikan kutipan yang dapat diverifikasi. Periksa hasil dengan hati-hati.',
+                style: TextStyle(color: AppColors.orange),
+              )
+            else
+              for (final evidence in item.evidence)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: AppColors.blueSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Halaman ${evidence.pageNumber}: “${evidence.quote}”',
+                    style: const TextStyle(height: 1.45),
+                  ),
+                ),
+            const SizedBox(height: 14),
             Wrap(
               spacing: 10,
-              runSpacing: 10,
+              runSpacing: 8,
               children: [
                 FilledButton.icon(
-                  onPressed: () =>
-                      onResolve('${component.label} ditandai terverifikasi.'),
+                  onPressed: _submitting
+                      ? null
+                      : () => _submit(ReviewDecision.accept),
                   icon: const Icon(Icons.check_rounded),
                   label: const Text('Terima'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => _showEdit(context),
+                  onPressed: _submitting ? null : _edit,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Edit'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => onResolve('${component.label} ditolak.'),
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text('Tolak'),
-                ),
                 TextButton.icon(
-                  onPressed: () => onResolve(
-                    'Analisis ulang ${component.label} telah diminta.',
+                  onPressed: _submitting
+                      ? null
+                      : () => _submit(ReviewDecision.reject),
+                  icon: const Icon(Icons.close_rounded, color: AppColors.red),
+                  label: const Text(
+                    'Tolak',
+                    style: TextStyle(color: AppColors.red),
                   ),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Analisis ulang'),
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Model: ${item.modelName} · File: ${item.originalFilename}',
+              style: const TextStyle(fontSize: 11, color: AppColors.muted),
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showSource(BuildContext context, ExtractedComponent component) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 640),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.picture_as_pdf_outlined,
-                      color: AppColors.red,
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Preview evidence · halaman sumber',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.all(20),
-                  padding: const EdgeInsets.all(28),
-                  color: const Color(0xFFF2F3F6),
-                  child: Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 510),
-                      padding: const EdgeInsets.all(34),
-                      color: Colors.white,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'INTRODUCTION',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text(
-                            'Urban areas face increasingly interconnected climate risks. Existing studies discuss multiple intervention pathways across infrastructure systems.',
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            color: const Color(0xFFFFEB85),
-                            child: Text(component.evidence),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'This motivates a structured synthesis of the available evidence and its limitations.',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEdit(BuildContext context) {
-    final controller = TextEditingController(text: component.value);
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Edit ${component.label}'),
-        content: SizedBox(
-          width: 520,
-          child: TextField(controller: controller, maxLines: 6),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              onResolve(
-                '${component.label} disimpan sebagai hasil koreksi manusia.',
-              );
-            },
-            child: const Text('Simpan koreksi'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LabeledBlock extends StatelessWidget {
-  const _LabeledBlock({
-    required this.label,
-    required this.child,
-    this.background = const Color(0xFFFAFAFC),
-  });
-
-  final String label;
-  final Widget child;
-  final Color background;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
       ),
     );
   }

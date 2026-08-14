@@ -1,0 +1,15 @@
+{
+  "name": "modellyng-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local development tooling for the Modellyng monorepo.",
+  "scripts": {
+    "supabase:init": "supabase init",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
+    "supabase:stop": "supabase stop"
+  },
+  "devDependencies": {
+    "supabase": "^2.114.0"
+  }
+}

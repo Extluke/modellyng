@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/demo_data.dart';
+import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({
+    required this.userId,
+    required this.displayName,
     required this.onNewProject,
     required this.onOpenProject,
     required this.onOpenReview,
     super.key,
   });
 
+  final String userId;
+  final String displayName;
   final VoidCallback onNewProject;
   final ValueChanged<ResearchProject> onOpenProject;
   final VoidCallback onOpenReview;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final projects = ref.watch(projectsProvider(userId));
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
       child: Center(
@@ -28,7 +35,7 @@ class DashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PageHeading(
-                title: 'Selamat datang, Aditya',
+                title: 'Selamat datang, $displayName',
                 subtitle:
                     'Lanjutkan sintesis literatur Anda atau mulai workspace riset baru.',
                 action: FilledButton.icon(
@@ -38,22 +45,22 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const _DashboardMetrics(),
-              const SizedBox(height: 28),
-              _AttentionBanner(onReview: onOpenReview),
-              const SizedBox(height: 30),
-              SectionHeading(
-                title: 'Proyek terbaru',
-                subtitle: 'Workspace yang terakhir Anda kerjakan.',
-                trailing: TextButton(
-                  onPressed: () {},
-                  child: const Text('Lihat semua'),
+              projects.when(
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(36),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+                error: (error, _) => _LoadError(
+                  onRetry: () => ref.invalidate(projectsProvider(userId)),
+                ),
+                data: (items) => _DashboardContent(
+                  projects: items,
+                  onNewProject: onNewProject,
+                  onOpenProject: onOpenProject,
                 ),
               ),
-              const SizedBox(height: 14),
-              _ProjectGrid(onOpenProject: onOpenProject),
-              const SizedBox(height: 30),
-              const _ProcessingPanel(),
             ],
           ),
         ),
@@ -62,8 +69,104 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
+class _DashboardContent extends StatelessWidget {
+  const _DashboardContent({
+    required this.projects,
+    required this.onNewProject,
+    required this.onOpenProject,
+  });
+
+  final List<ResearchProject> projects;
+  final VoidCallback onNewProject;
+  final ValueChanged<ResearchProject> onOpenProject;
+
+  @override
+  Widget build(BuildContext context) {
+    final paperCount = projects.fold<int>(
+      0,
+      (total, project) => total + project.paperCount,
+    );
+    final reviewCount = projects.fold<int>(
+      0,
+      (total, project) => total + project.reviewCount,
+    );
+    final knowledgeNodeCount = projects.fold<int>(
+      0,
+      (total, project) => total + project.knowledgeNodeCount,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DashboardMetrics(
+          projectCount: projects.length,
+          paperCount: paperCount,
+          reviewCount: reviewCount,
+          knowledgeNodeCount: knowledgeNodeCount,
+        ),
+        const SizedBox(height: 30),
+        const SectionHeading(
+          title: 'Proyek terbaru',
+          subtitle: 'Workspace yang terakhir Anda kerjakan.',
+        ),
+        const SizedBox(height: 14),
+        if (projects.isEmpty)
+          Card(
+            child: EmptyState(
+              icon: Icons.create_new_folder_outlined,
+              title: 'Belum ada proyek',
+              message:
+                  'Buat proyek pertama untuk menyiapkan workspace ekstraksi paper.',
+              action: FilledButton.icon(
+                onPressed: onNewProject,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Buat proyek pertama'),
+              ),
+            ),
+          )
+        else
+          _ProjectGrid(
+            projects: projects.take(3).toList(growable: false),
+            onOpenProject: onOpenProject,
+          ),
+        const SizedBox(height: 26),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.primarySoft,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.verified_user_outlined, color: AppColors.primary),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Data dashboard berasal dari akun dan proyek Anda. Hasil Gemini baru menjadi knowledge node setelah Anda menerima atau mengoreksinya di halaman Review.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DashboardMetrics extends StatelessWidget {
-  const _DashboardMetrics();
+  const _DashboardMetrics({
+    required this.projectCount,
+    required this.paperCount,
+    required this.reviewCount,
+    required this.knowledgeNodeCount,
+  });
+
+  final int projectCount;
+  final int paperCount;
+  final int reviewCount;
+  final int knowledgeNodeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -77,30 +180,29 @@ class _DashboardMetrics extends StatelessWidget {
         const spacing = 12.0;
         final width =
             (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        const cards = [
+        final cards = [
           MetricCard(
             icon: Icons.description_outlined,
-            label: 'Paper dianalisis',
-            value: '44',
+            label: 'Paper',
+            value: '$paperCount',
             color: AppColors.blue,
-            note: '+8 bulan ini',
           ),
           MetricCard(
             icon: Icons.folder_outlined,
-            label: 'Proyek aktif',
-            value: '3',
+            label: 'Proyek',
+            value: '$projectCount',
             color: AppColors.primary,
           ),
           MetricCard(
             icon: Icons.hub_outlined,
             label: 'Knowledge nodes',
-            value: '326',
+            value: '$knowledgeNodeCount',
             color: AppColors.green,
           ),
           MetricCard(
             icon: Icons.fact_check_outlined,
             label: 'Menunggu review',
-            value: '12',
+            value: '$reviewCount',
             color: AppColors.orange,
           ),
         ];
@@ -116,88 +218,10 @@ class _DashboardMetrics extends StatelessWidget {
   }
 }
 
-class _AttentionBanner extends StatelessWidget {
-  const _AttentionBanner({required this.onReview});
-
-  final VoidCallback onReview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF7E9), Color(0xFFFFFBF4)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF6D9A9)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final content = Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.orangeSoft,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.rule_folder_outlined,
-                  color: AppColors.orange,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '12 hasil AI menunggu verifikasi Anda',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Tinjau claim dan evidence sebelum hasil digunakan dalam sintesis akhir.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-          if (constraints.maxWidth < 660) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                content,
-                const SizedBox(height: 14),
-                OutlinedButton(
-                  onPressed: onReview,
-                  child: const Text('Buka antrean review'),
-                ),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: content),
-              const SizedBox(width: 18),
-              OutlinedButton(
-                onPressed: onReview,
-                child: const Text('Tinjau sekarang'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
 class _ProjectGrid extends StatelessWidget {
-  const _ProjectGrid({required this.onOpenProject});
+  const _ProjectGrid({required this.projects, required this.onOpenProject});
 
+  final List<ResearchProject> projects;
   final ValueChanged<ResearchProject> onOpenProject;
 
   @override
@@ -216,7 +240,7 @@ class _ProjectGrid extends StatelessWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            for (final project in DemoData.projects)
+            for (final project in projects)
               SizedBox(
                 width: width,
                 child: _ProjectCard(
@@ -275,19 +299,13 @@ class _ProjectCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                project.description,
+                project.description.isEmpty
+                    ? 'Belum ada deskripsi.'
+                    : project.description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 20),
-              LinearProgressIndicator(
-                value: project.progress,
-                minHeight: 6,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor: AppColors.border,
-                color: project.accent,
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 18),
               Row(
                 children: [
                   Text(
@@ -298,17 +316,11 @@ class _ProjectCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      project.updatedLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.muted,
-                      ),
+                  Text(
+                    project.updatedLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted,
                     ),
                   ),
                 ],
@@ -321,50 +333,22 @@ class _ProjectCard extends StatelessWidget {
   }
 }
 
-class _ProcessingPanel extends StatelessWidget {
-  const _ProcessingPanel();
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.onRetry});
+
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionHeading(
-              title: 'Aktivitas pemrosesan',
-              subtitle: 'Job analisis berjalan secara asynchronous.',
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Heat Vulnerability and Green Infrastructure',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Mencocokkan claim dengan evidence · tahap 4 dari 6',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text('64%', style: Theme.of(context).textTheme.titleMedium),
-              ],
-            ),
-          ],
+      child: EmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Data proyek belum dapat dimuat',
+        message: 'Pastikan FastAPI dan Supabase lokal sedang berjalan.',
+        action: FilledButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Coba lagi'),
         ),
       ),
     );
