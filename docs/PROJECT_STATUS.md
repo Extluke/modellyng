@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-08-14
+Last updated: 2026-08-22
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -35,11 +35,24 @@ not yet a public production service.
 - Flutter web release running locally on port 8082.
 - End-to-end test of upload -> worker -> Gemini -> 11 review components ->
   human decisions -> ready project.
+- Authenticated Structured Paper Result API and responsive Flutter result page.
+- Private Evidence PDF Viewer loaded from authenticated bytes; evidence links
+  navigate to the verified source page without making the bucket public.
+- Review queue grouped by paper with per-paper progress and project filtering.
+- Rejection and re-analysis require a reviewer reason; re-analysis creates a
+  fresh Celery job while preserving the prior AI output and review history.
+- Auditable review history for the 100 latest decisions.
+- Comparative Paper Matrix for comparing the latest reviewed values and their
+  evidence across at least two ready papers.
+- Concept / Evidence Map with traceable paper -> reviewed concept -> private
+  PDF evidence relationships and responsive desktop/mobile presentations.
+- Research Gap Map that exposes limitations and future-work statements as
+  explicitly reviewable candidates linked to their paper and private evidence.
 
 The last verified automated baseline was:
 
-- Backend: 13 tests passing.
-- Flutter: static analysis clean and 4 widget tests passing.
+- Backend: 29 tests passing.
+- Flutter: static analysis clean and 10 widget tests passing.
 - Flutter web release build passing.
 - Dependency health: Redis and local Supabase healthy.
 
@@ -52,12 +65,23 @@ The last verified automated baseline was:
   monitoring, automated backups, or production privacy workflow yet.
 - The Gemini key previously used during development must be rotated before a
   public demonstration. Never copy a key into this document or Git.
-- Review results exist, but a dedicated structured result page and integrated
-  PDF evidence viewer do not exist yet.
+- Exact quote highlighting inside the PDF is not implemented; navigation is
+  currently page-level.
+- Review history is read-only and limited to the latest 100 decisions.
+- Matrix and map currently include ready papers only. The map reflects the
+  reviewed academic components; semantic merging of equivalent concepts across
+  differently worded papers is not implemented yet.
+- Research Gap Map deliberately does not invent or automatically finalize a
+  cross-paper gap. It maps reviewed limitations/future work verbatim as
+  candidates; researchers must validate and synthesize them.
+- Worker startup now rejects missing Supabase service-role configuration before
+  creating a stuck job. Transient Gemini quota/high-demand responses use
+  bounded exponential retries and persist an honest retry/failure stage.
 
-## Next feature — P0
+## Completed feature — Structured Paper Result + Evidence PDF Viewer
 
-Build **Structured Paper Result + Evidence PDF Viewer**.
+**Structured Paper Result + Evidence PDF Viewer** is complete for the first
+vertical slice.
 
 ### User outcome
 
@@ -94,16 +118,34 @@ Highlighting the exact quote inside the PDF is desirable but may be a second
 increment after reliable page navigation. Do not block the first slice on
 pixel-perfect highlighting.
 
-## Planned backlog after P0
+## Completed feature — Comparative Matrix + Concept / Evidence + Research Gap Maps
 
-1. Review UX: group by paper, review progress (for example 7/11), filters,
-   rejection reasons, history, and safe bulk actions.
-2. Comparative matrix across multiple fully reviewed papers.
-3. Evidence-backed candidate research-gap generation.
-4. Export to Word, Excel/CSV, and presentation-ready reports.
-5. OCR for scanned PDFs with an explicit OCR-quality review step.
-6. Real plan/quota enforcement and usage reporting.
-7. Production privacy, deletion/retention policy, monitoring, backups,
+The comparative matrix and evidence map are complete as evidence-preserving
+read views. Matrix cells show reviewed values with their supporting evidence.
+The map exposes paper -> concept -> evidence chains, and evidence actions open
+the authenticated paper result/PDF viewer on the claimed page. Both features
+provide responsive mobile and desktop layouts and explicit empty states.
+Research Gap Map adds filterable candidate chains sourced only from reviewed
+`limitations` and `future_work` components. Each supported candidate retains
+its link to the source paper, evidence quote, and authenticated PDF page, and
+the interface clearly warns that candidates are not automatic conclusions.
+
+## Current priority — Review UX follow-up
+
+The first Review/re-analysis refinement is complete: grouping, progress,
+project filter, required reasons, history, and actual re-analysis enqueueing.
+Potential follow-ups are parameter/status filters, paginated history, and safe
+bulk accept actions with explicit confirmation.
+
+## Planned backlog
+
+1. Review UX follow-up: parameter/status filters, paginated history, and safe
+   bulk actions.
+2. Human-curated cross-paper gap synthesis and explicit candidate decisions.
+3. Export to Word, Excel/CSV, and presentation-ready reports.
+4. OCR for scanned PDFs with an explicit OCR-quality review step.
+5. Real plan/quota enforcement and usage reporting.
+6. Production privacy, deletion/retention policy, monitoring, backups,
    rate-limiting, and public pilot deployment.
 
 ## Local service map

@@ -23,6 +23,10 @@ class PdfProcessingRepository:
         self._storage_url = f"{settings.supabase_url}/storage/v1"
         self._service_key = settings.supabase_service_role_key
         self._storage_bucket = settings.object_storage_bucket
+        if not self._service_key.strip():
+            raise ProcessingRepositoryError(
+                "MODELLYNG_SUPABASE_SERVICE_ROLE_KEY wajib diisi untuk worker"
+            )
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -247,8 +251,9 @@ class PdfProcessingRepository:
             self.update_paper_status(paper_id, "failed")
             if project_id:
                 self.update_project_status(project_id, "needs_review")
-        except ProcessingRepositoryError:
-            # The worker log still retains the original exception.
+        except Exception:
+            # Failure persistence is best-effort. Never replace the original
+            # pipeline exception with a secondary status-update exception.
             pass
 
     def _patch(self, table: str, record_id: UUID, payload: dict[str, object]) -> None:

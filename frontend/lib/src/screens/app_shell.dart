@@ -7,7 +7,9 @@ import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import 'account_screen.dart';
+import 'comparative_matrix_screen.dart';
 import 'dashboard_screen.dart';
+import 'maps_screen.dart';
 import 'new_project_screen.dart';
 import 'project_overview_screen.dart';
 import 'projects_screen.dart';
@@ -38,6 +40,16 @@ class _AppShellState extends ConsumerState<AppShell> {
       label: 'Review',
       icon: Icons.fact_check_outlined,
       selectedIcon: Icons.fact_check_rounded,
+    ),
+    _Destination(
+      label: 'Matrix',
+      icon: Icons.table_chart_outlined,
+      selectedIcon: Icons.table_chart_rounded,
+    ),
+    _Destination(
+      label: 'Maps',
+      icon: Icons.hub_outlined,
+      selectedIcon: Icons.hub_rounded,
     ),
     _Destination(
       label: 'Account',
@@ -96,6 +108,8 @@ class _AppShellState extends ConsumerState<AppShell> {
             onOpenProject: _openProject,
           ),
           const ReviewQueueScreen(),
+          ComparativeMatrixScreen(userId: user.id),
+          MapsScreen(userId: user.id),
           const AccountScreen(),
         ];
 

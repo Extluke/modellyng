@@ -19,7 +19,14 @@ final reviewQueueProvider = FutureProvider.autoDispose
       return items;
     });
 
-enum ReviewDecision { accept, edit, reject }
+final reviewHistoryProvider = FutureProvider.autoDispose
+    .family<List<ReviewHistoryItem>, String>((ref, userId) async {
+      final session = ref.watch(authSessionProvider).value;
+      if (session?.user.id != userId) return const [];
+      return ref.watch(reviewRepositoryProvider).listHistory();
+    });
+
+enum ReviewDecision { accept, edit, reject, requestReanalysis }
 
 class ReviewEvidence {
   const ReviewEvidence({required this.quote, required this.pageNumber});
@@ -97,6 +104,29 @@ class ReviewQueueItem {
   };
 }
 
+class ReviewHistoryItem {
+  const ReviewHistoryItem({
+    required this.action,
+    required this.paperTitle,
+    required this.parameter,
+    required this.note,
+    required this.createdAt,
+  });
+  final String action;
+  final String paperTitle;
+  final String parameter;
+  final String? note;
+  final DateTime? createdAt;
+  factory ReviewHistoryItem.fromJson(Map<String, dynamic> json) =>
+      ReviewHistoryItem(
+        action: json['action']?.toString() ?? '',
+        paperTitle: json['paper_title']?.toString() ?? 'Paper',
+        parameter: json['parameter']?.toString() ?? '',
+        note: json['note']?.toString(),
+        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      );
+}
+
 class ReviewRepository {
   const ReviewRepository(this._dio);
 
@@ -110,6 +140,14 @@ class ReviewRepository {
         .toList(growable: false);
   }
 
+  Future<List<ReviewHistoryItem>> listHistory() async {
+    final response = await _dio.get<List<dynamic>>('/api/v1/reviews/history');
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ReviewHistoryItem.fromJson)
+        .toList(growable: false);
+  }
+
   Future<void> submitDecision({
     required String componentId,
     required ReviewDecision decision,
@@ -119,7 +157,9 @@ class ReviewRepository {
     await _dio.post<Map<String, dynamic>>(
       '/api/v1/reviews/$componentId',
       data: {
-        'action': decision.name,
+        'action': decision == ReviewDecision.requestReanalysis
+            ? 'request_reanalysis'
+            : decision.name,
         if (correctedValue != null) 'corrected_value': correctedValue,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       },

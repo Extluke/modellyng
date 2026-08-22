@@ -47,8 +47,7 @@ class ResearchProject {
       description: json['description']?.toString() ?? '',
       paperCount: (json['paper_count'] as num?)?.toInt() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
-      knowledgeNodeCount:
-          (json['knowledge_node_count'] as num?)?.toInt() ?? 0,
+      knowledgeNodeCount: (json['knowledge_node_count'] as num?)?.toInt() ?? 0,
       progress: switch (status) {
         ProjectStatus.ready => 1,
         ProjectStatus.processing => 0.5,
@@ -197,6 +196,7 @@ class ProjectPaper {
     'extracting_text' => 'Membaca teks per halaman',
     'saving_blocks' => 'Menyimpan hasil ekstraksi',
     'gemini_extraction' => 'Menganalisis komponen dengan Gemini',
+    'retrying_gemini' => 'Gemini sibuk, mencoba lagi otomatis',
     'saving_ai_results' => 'Menyimpan hasil dan bukti AI',
     'ai_extraction_complete' => 'Ekstraksi AI selesai',
     'queue_failed' => 'Antrean gagal dimulai',

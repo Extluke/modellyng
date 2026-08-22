@@ -13,6 +13,13 @@ from .schemas import (
     ProjectCreate,
     ProjectRead,
     ReviewQueueItemRead,
+    PaperResultRead,
+    ExtractedComponentRead,
+    ExtractionParameter,
+    ComparativeMatrixRead,
+    ConceptEvidenceMapRead,
+    ResearchGapMapRead,
+    ReviewHistoryItemRead,
     ReviewRecordCreate,
     ReviewRecordRead,
     ReviewerAction,
@@ -41,6 +48,7 @@ class SupabaseProjectRepository:
         self._rest_url = f"{settings.supabase_url}/rest/v1"
         self._storage_url = f"{settings.supabase_url}/storage/v1"
         self._anon_key = settings.supabase_anon_key
+        self._worker_service_key = settings.supabase_service_role_key
         self._storage_bucket = settings.object_storage_bucket
 
     def _headers(
@@ -262,6 +270,10 @@ class SupabaseProjectRepository:
         project_id: UUID,
         paper_id: UUID,
     ) -> PaperRead:
+        if not self._worker_service_key.strip():
+            raise RepositoryError(
+                "Worker belum dikonfigurasi: MODELLYNG_SUPABASE_SERVICE_ROLE_KEY kosong"
+            )
         paper = await self.get_paper(user, project_id, paper_id)
         if not paper.storage_key:
             raise InvalidUploadError("Paper DOI belum memiliki PDF untuk diproses")
@@ -287,6 +299,22 @@ class SupabaseProjectRepository:
         self._raise_for_repository_error(response)
         job_id = response.json()[0]["id"]
 
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            paper_response = await client.patch(
+                f"{self._rest_url}/papers",
+                headers=self._headers(user),
+                params={"id": f"eq.{paper_id}"},
+                json={"status": "processing"},
+            )
+            project_response = await client.patch(
+                f"{self._rest_url}/projects",
+                headers=self._headers(user),
+                params={"id": f"eq.{project_id}"},
+                json={"status": "processing"},
+            )
+        self._raise_for_repository_error(paper_response)
+        self._raise_for_repository_error(project_response)
+
         try:
             from .celery_app import celery_app
 
@@ -296,7 +324,9 @@ class SupabaseProjectRepository:
                 task_id=job_id,
             )
         except Exception as exc:
-            await self._mark_enqueue_failure(user, paper_id, UUID(job_id), str(exc))
+            await self._mark_enqueue_failure(
+                user, project_id, paper_id, UUID(job_id), str(exc)
+            )
             return await self.get_paper(user, project_id, paper_id)
 
         return await self.get_paper(user, project_id, paper_id)
@@ -304,6 +334,7 @@ class SupabaseProjectRepository:
     async def _mark_enqueue_failure(
         self,
         user: AuthenticatedUser,
+        project_id: UUID,
         paper_id: UUID,
         job_id: UUID,
         detail: str,
@@ -325,6 +356,12 @@ class SupabaseProjectRepository:
                 headers=self._headers(user),
                 params={"id": f"eq.{paper_id}"},
                 json={"status": "failed"},
+            )
+            await client.patch(
+                f"{self._rest_url}/projects",
+                headers=self._headers(user),
+                params={"id": f"eq.{project_id}"},
+                json={"status": "needs_review"},
             )
 
     async def list_papers(
@@ -411,6 +448,297 @@ class SupabaseProjectRepository:
             )
         return items
 
+    async def get_paper_result(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
+    ) -> PaperResultRead:
+        paper = await self.get_paper(user, project_id, paper_id)
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/extracted_components",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,paper_id,parameter,ai_value,final_value,status,confidence,"
+                        "model_name,prompt_version,created_at,"
+                        "evidence_spans(quote,page_number,section,subsection,"
+                        "paper_blocks(id,bounding_box))"
+                    ),
+                    "paper_id": f"eq.{paper_id}",
+                    "order": "created_at.desc",
+                },
+            )
+        self._raise_for_repository_error(response)
+        components: list[ExtractedComponentRead] = []
+        seen: set[str] = set()
+        for row in response.json():
+            parameter = str(row["parameter"])
+            if parameter in seen:
+                continue
+            seen.add(parameter)
+            evidence = []
+            for span in row.get("evidence_spans") or []:
+                block = span.get("paper_blocks") or {}
+                evidence.append({
+                    "quote": span["quote"],
+                    "page_number": span["page_number"],
+                    "section": span.get("section"),
+                    "subsection": span.get("subsection"),
+                    "block_id": str(block.get("id") or ""),
+                    "bounding_box": block.get("bounding_box"),
+                })
+            components.append(ExtractedComponentRead.model_validate({**row, "evidence": evidence}))
+        return PaperResultRead(paper=paper, components=components)
+
+    async def get_comparative_matrix(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ComparativeMatrixRead:
+        project = await self.get_project(user, project_id)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/papers",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,title,original_filename,created_at,"
+                        "extracted_components(id,parameter,ai_value,final_value,status,"
+                        "confidence,created_at,evidence_spans(quote,page_number,section,"
+                        "subsection,paper_blocks(id,bounding_box)))"
+                    ),
+                    "project_id": f"eq.{project_id}",
+                    "status": "eq.ready",
+                    "order": "created_at.asc",
+                },
+            )
+        self._raise_for_repository_error(response)
+        paper_rows = response.json()
+        papers = [
+            {
+                "id": row["id"],
+                "title": row.get("title") or row.get("original_filename") or "Paper",
+                "original_filename": row.get("original_filename") or "paper.pdf",
+            }
+            for row in paper_rows
+        ]
+        parameters = [parameter.value for parameter in ExtractionParameter]
+        row_cells: dict[str, list[dict[str, object]]] = {
+            parameter: [] for parameter in parameters
+        }
+        for paper in paper_rows:
+            latest: dict[str, dict[str, object]] = {}
+            components = sorted(
+                paper.get("extracted_components") or [],
+                key=lambda item: str(item.get("created_at") or ""),
+                reverse=True,
+            )
+            for component in components:
+                parameter = str(component.get("parameter") or "")
+                if parameter in latest or parameter not in row_cells:
+                    continue
+                latest[parameter] = component
+            for parameter, component in latest.items():
+                evidence = []
+                for span in component.get("evidence_spans") or []:
+                    block = span.get("paper_blocks") or {}
+                    evidence.append({
+                        "quote": span["quote"],
+                        "page_number": span["page_number"],
+                        "section": span.get("section"),
+                        "subsection": span.get("subsection"),
+                        "block_id": str(block.get("id") or ""),
+                        "bounding_box": block.get("bounding_box"),
+                    })
+                row_cells[parameter].append({
+                    "paper_id": paper["id"],
+                    "ai_value": component["ai_value"],
+                    "final_value": component.get("final_value"),
+                    "status": component["status"],
+                    "confidence": component.get("confidence"),
+                    "evidence": evidence,
+                })
+        return ComparativeMatrixRead.model_validate({
+            "project_id": project.id,
+            "project_title": project.title,
+            "papers": papers,
+            "rows": [
+                {"parameter": parameter, "cells": row_cells[parameter]}
+                for parameter in parameters
+            ],
+        })
+
+    async def get_concept_evidence_map(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ConceptEvidenceMapRead:
+        matrix = await self.get_comparative_matrix(user, project_id)
+        nodes: list[dict[str, object]] = []
+        edges: list[dict[str, str]] = []
+        for paper in matrix.papers:
+            nodes.append({
+                "id": f"paper:{paper.id}",
+                "kind": "paper",
+                "label": paper.title,
+                "detail": paper.original_filename,
+                "paper_id": paper.id,
+            })
+        for row in matrix.rows:
+            for cell in row.cells:
+                paper_id = str(cell.paper_id)
+                concept_id = f"concept:{paper_id}:{row.parameter.value}"
+                nodes.append({
+                    "id": concept_id,
+                    "kind": "concept",
+                    "label": row.parameter.value,
+                    "detail": cell.final_value or cell.ai_value,
+                    "paper_id": cell.paper_id,
+                    "parameter": row.parameter.value,
+                    "status": cell.status.value,
+                })
+                edges.append({
+                    "source": f"paper:{paper_id}",
+                    "target": concept_id,
+                    "relation": "contains",
+                })
+                for index, evidence in enumerate(cell.evidence):
+                    evidence_id = f"evidence:{paper_id}:{row.parameter.value}:{index}"
+                    nodes.append({
+                        "id": evidence_id,
+                        "kind": "evidence",
+                        "label": f"Halaman {evidence.page_number}",
+                        "detail": evidence.quote,
+                        "paper_id": cell.paper_id,
+                        "parameter": row.parameter.value,
+                        "page_number": evidence.page_number,
+                    })
+                    edges.append({
+                        "source": concept_id,
+                        "target": evidence_id,
+                        "relation": "supported_by",
+                    })
+        return ConceptEvidenceMapRead.model_validate({
+            "project_id": matrix.project_id,
+            "project_title": matrix.project_title,
+            "nodes": nodes,
+            "edges": edges,
+        })
+
+    async def get_research_gap_map(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ResearchGapMapRead:
+        """Build reviewable gap candidates without inventing new claims.
+
+        A limitation or future-work value is exposed verbatim as a candidate,
+        with its verified source evidence. It is deliberately not promoted to
+        a final research gap automatically.
+        """
+        matrix = await self.get_comparative_matrix(user, project_id)
+        paper_by_id = {str(paper.id): paper for paper in matrix.papers}
+        nodes: list[dict[str, object]] = []
+        edges: list[dict[str, str]] = []
+        candidate_count = 0
+        gap_parameters = {
+            ExtractionParameter.LIMITATIONS,
+            ExtractionParameter.FUTURE_WORK,
+        }
+        for row in matrix.rows:
+            if row.parameter not in gap_parameters:
+                continue
+            for cell in row.cells:
+                paper_id = str(cell.paper_id)
+                paper = paper_by_id.get(paper_id)
+                if paper is None:
+                    continue
+                paper_node_id = f"paper:{paper_id}"
+                if not any(node["id"] == paper_node_id for node in nodes):
+                    nodes.append({
+                        "id": paper_node_id,
+                        "kind": "paper",
+                        "label": paper.title,
+                        "detail": paper.original_filename,
+                        "paper_id": cell.paper_id,
+                    })
+                gap_id = f"gap:{paper_id}:{row.parameter.value}"
+                candidate_count += 1
+                nodes.append({
+                    "id": gap_id,
+                    "kind": "gap",
+                    "label": row.parameter.value,
+                    "detail": cell.final_value or cell.ai_value,
+                    "paper_id": cell.paper_id,
+                    "parameter": row.parameter.value,
+                    "status": cell.status.value,
+                })
+                edges.append({
+                    "source": paper_node_id,
+                    "target": gap_id,
+                    "relation": "suggests_candidate",
+                })
+                for index, evidence in enumerate(cell.evidence):
+                    evidence_id = f"gap-evidence:{paper_id}:{row.parameter.value}:{index}"
+                    nodes.append({
+                        "id": evidence_id,
+                        "kind": "evidence",
+                        "label": f"Halaman {evidence.page_number}",
+                        "detail": evidence.quote,
+                        "paper_id": cell.paper_id,
+                        "parameter": row.parameter.value,
+                        "page_number": evidence.page_number,
+                    })
+                    edges.append({
+                        "source": gap_id,
+                        "target": evidence_id,
+                        "relation": "supported_by",
+                    })
+        return ResearchGapMapRead.model_validate({
+            "project_id": matrix.project_id,
+            "project_title": matrix.project_title,
+            "nodes": nodes,
+            "edges": edges,
+            "candidate_count": candidate_count,
+        })
+
+    async def download_private_pdf(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
+    ) -> tuple[bytes, str]:
+        paper = await self.get_paper(user, project_id, paper_id)
+        if not paper.storage_key:
+            raise EntityNotFoundError("Paper ini tidak memiliki PDF")
+        encoded_path = quote(paper.storage_key, safe="/")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(
+                f"{self._storage_url}/object/authenticated/{self._storage_bucket}/{encoded_path}",
+                headers=self._headers(user),
+            )
+        self._raise_for_repository_error(response)
+        return response.content, paper.original_filename or "paper.pdf"
+
+    async def list_review_history(
+        self, user: AuthenticatedUser
+    ) -> list[ReviewHistoryItemRead]:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/review_actions",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,component_id,reviewer_id,action,corrected_value,note,created_at,"
+                        "extracted_components(parameter,paper_id,papers(title,original_filename))"
+                    ),
+                    "order": "created_at.desc",
+                    "limit": "100",
+                },
+            )
+        self._raise_for_repository_error(response)
+        result = []
+        for row in response.json():
+            component = row.pop("extracted_components") or {}
+            paper = component.get("papers") or {}
+            result.append(ReviewHistoryItemRead.model_validate({
+                **row,
+                "parameter": component["parameter"],
+                "paper_id": component["paper_id"],
+                "paper_title": paper.get("title") or paper.get("original_filename") or "Paper",
+            }))
+        return result
+
     async def review_component(
         self,
         user: AuthenticatedUser,
@@ -439,7 +767,7 @@ class SupabaseProjectRepository:
             ReviewerAction.ACCEPT: "verified",
             ReviewerAction.EDIT: "edited",
             ReviewerAction.REJECT: "rejected",
-            ReviewerAction.REQUEST_REANALYSIS: "needs_review",
+            ReviewerAction.REQUEST_REANALYSIS: "unsupported",
         }[payload.action]
         final_value = (
             payload.corrected_value
@@ -475,6 +803,12 @@ class SupabaseProjectRepository:
             paper_id=UUID(component["paper_id"]),
             project_id=UUID(component["papers"]["project_id"]),
         )
+        if payload.action == ReviewerAction.REQUEST_REANALYSIS:
+            await self.start_pdf_processing(
+                user,
+                UUID(component["papers"]["project_id"]),
+                UUID(component["paper_id"]),
+            )
         action = action_response.json()[0]
         return ReviewRecordRead.model_validate(
             {

@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
     allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         "http://localhost:8081",
@@ -30,6 +32,7 @@ class Settings(BaseSettings):
     object_storage_bucket: str = "private-papers"
     gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
     gemini_model: str = "gemini-flash-latest"
+    gemini_fallback_model: str = "gemini-flash-lite-latest"
     gemini_max_input_chars: int = 400_000
 
     model_config = SettingsConfigDict(

@@ -7,11 +7,18 @@ import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
-class ReviewQueueScreen extends ConsumerWidget {
+class ReviewQueueScreen extends ConsumerStatefulWidget {
   const ReviewQueueScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
+}
+
+class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
+  String? _projectFilter;
+
+  @override
+  Widget build(BuildContext context) {
     final userId = ref.watch(authRepositoryProvider).currentUser?.id;
     final queue = userId == null
         ? const AsyncValue<List<ReviewQueueItem>>.data([])
@@ -61,19 +68,108 @@ class ReviewQueueScreen extends ConsumerWidget {
                               'Hasil ekstraksi Gemini akan muncul setelah paper selesai diproses.',
                         ),
                       )
-                    : Column(
-                        children: [
-                          for (final item in items) ...[
-                            _ReviewCard(item: item, userId: userId!),
-                            const SizedBox(height: 14),
-                          ],
-                        ],
-                      ),
+                    : _buildGroupedQueue(items, userId!),
               ),
+              if (userId != null) ...[
+                const SizedBox(height: 28),
+                ExpansionTile(
+                  title: const Text('Riwayat keputusan review'),
+                  subtitle: const Text(
+                    '100 keputusan terbaru tetap dapat diaudit.',
+                  ),
+                  children: [
+                    ref
+                        .watch(reviewHistoryProvider(userId))
+                        .when(
+                          loading: () => const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(),
+                          ),
+                          error: (error, _) => const ListTile(
+                            title: Text('Riwayat belum dapat dimuat.'),
+                          ),
+                          data: (history) => history.isEmpty
+                              ? const ListTile(
+                                  title: Text('Belum ada riwayat keputusan.'),
+                                )
+                              : Column(
+                                  children: [
+                                    for (final item in history)
+                                      ListTile(
+                                        leading: const Icon(
+                                          Icons.history_rounded,
+                                        ),
+                                        title: Text(
+                                          '${item.paperTitle} · ${item.action}',
+                                        ),
+                                        subtitle: Text(
+                                          item.note?.trim().isNotEmpty == true
+                                              ? item.note!
+                                              : item.parameter,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGroupedQueue(List<ReviewQueueItem> items, String userId) {
+    final projects = {
+      for (final item in items) item.projectId: item.projectTitle,
+    };
+    final visible = _projectFilter == null
+        ? items
+        : items.where((item) => item.projectId == _projectFilter).toList();
+    final groups = <String, List<ReviewQueueItem>>{};
+    for (final item in visible) {
+      groups.putIfAbsent(item.paperId, () => []).add(item);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String?>(
+          initialValue: _projectFilter,
+          decoration: const InputDecoration(labelText: 'Filter proyek'),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Semua proyek'),
+            ),
+            for (final entry in projects.entries)
+              DropdownMenuItem<String?>(
+                value: entry.key,
+                child: Text(entry.value),
+              ),
+          ],
+          onChanged: (value) => setState(() => _projectFilter = value),
+        ),
+        const SizedBox(height: 18),
+        for (final group in groups.values) ...[
+          Text(
+            group.first.paperTitle,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${11 - group.length}/11 selesai ditinjau · ${group.length} tersisa',
+            style: const TextStyle(color: AppColors.muted),
+          ),
+          const SizedBox(height: 10),
+          for (final item in group) ...[
+            _ReviewCard(item: item, userId: userId),
+            const SizedBox(height: 14),
+          ],
+          const SizedBox(height: 10),
+        ],
+      ],
     );
   }
 }
@@ -97,11 +193,13 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
   }) async {
     setState(() => _submitting = true);
     try {
-      await ref.read(reviewRepositoryProvider).submitDecision(
-        componentId: widget.item.componentId,
-        decision: decision,
-        correctedValue: correctedValue,
-      );
+      await ref
+          .read(reviewRepositoryProvider)
+          .submitDecision(
+            componentId: widget.item.componentId,
+            decision: decision,
+            correctedValue: correctedValue,
+          );
       ref.invalidate(reviewQueueProvider(widget.userId));
       ref.invalidate(projectsProvider(widget.userId));
       if (!mounted) return;
@@ -112,7 +210,9 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Keputusan belum dapat disimpan. Silakan coba kembali.'),
+          content: Text(
+            'Keputusan belum dapat disimpan. Silakan coba kembali.',
+          ),
           backgroundColor: AppColors.red,
         ),
       );
@@ -160,6 +260,69 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
     }
   }
 
+  Future<void> _submitWithReason(ReviewDecision decision) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          decision == ReviewDecision.reject
+              ? 'Alasan penolakan'
+              : 'Minta analisis ulang',
+        ),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            labelText: 'Alasan wajib',
+            alignLabelWithHint: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(context, value);
+            },
+            child: const Text('Kirim'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason != null) {
+      setState(() => _submitting = true);
+      try {
+        await ref
+            .read(reviewRepositoryProvider)
+            .submitDecision(
+              componentId: widget.item.componentId,
+              decision: decision,
+              note: reason,
+            );
+        ref.invalidate(reviewQueueProvider(widget.userId));
+        ref.invalidate(projectsProvider(widget.userId));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                decision == ReviewDecision.reject
+                    ? 'Hasil ditolak.'
+                    : 'Analisis ulang masuk antrean.',
+              ),
+            ),
+          );
+      } finally {
+        if (mounted) setState(() => _submitting = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -202,7 +365,10 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
             const SizedBox(height: 16),
             Text(item.aiValue, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 16),
-            Text('Bukti sumber', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Bukti sumber',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             if (item.evidence.isEmpty)
               const Text(
@@ -244,12 +410,20 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                 TextButton.icon(
                   onPressed: _submitting
                       ? null
-                      : () => _submit(ReviewDecision.reject),
+                      : () => _submitWithReason(ReviewDecision.reject),
                   icon: const Icon(Icons.close_rounded, color: AppColors.red),
                   label: const Text(
                     'Tolak',
                     style: TextStyle(color: AppColors.red),
                   ),
+                ),
+                TextButton.icon(
+                  onPressed: _submitting
+                      ? null
+                      : () =>
+                            _submitWithReason(ReviewDecision.requestReanalysis),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Analisis ulang'),
                 ),
               ],
             ),

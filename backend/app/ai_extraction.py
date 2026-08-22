@@ -77,7 +77,9 @@ class VerifiedPaperExtraction:
 
 
 class GeminiExtractionError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 def extract_academic_components(
@@ -90,27 +92,58 @@ def extract_academic_components(
         raise GeminiExtractionError("Teks halaman belum tersedia untuk dianalisis")
 
     prompt = build_prompt(blocks, max_chars=settings.gemini_max_input_chars)
-    try:
-        client = genai.Client(api_key=settings.gemini_api_key)
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=AiPaperExtraction,
-            ),
-        )
-        parsed = response.parsed
-        extraction = (
-            parsed
-            if isinstance(parsed, AiPaperExtraction)
-            else AiPaperExtraction.model_validate_json(response.text or "")
-        )
-    except Exception as exc:
+    client = genai.Client(api_key=settings.gemini_api_key)
+    models = [settings.gemini_model]
+    if (
+        settings.gemini_fallback_model
+        and settings.gemini_fallback_model not in models
+    ):
+        models.append(settings.gemini_fallback_model)
+    extraction: AiPaperExtraction | None = None
+    used_model = settings.gemini_model
+    last_transient: Exception | None = None
+    for index, model in enumerate(models):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=AiPaperExtraction,
+                ),
+            )
+            parsed = response.parsed
+            extraction = (
+                parsed
+                if isinstance(parsed, AiPaperExtraction)
+                else AiPaperExtraction.model_validate_json(response.text or "")
+            )
+            used_model = model
+            break
+        except Exception as exc:
+            message = str(exc)
+            transient = any(
+                marker in message.upper()
+                for marker in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE")
+            )
+            if transient and index < len(models) - 1:
+                last_transient = exc
+                continue
+            last_transient = exc
+            break
+
+    if extraction is None:
+        exc = last_transient or RuntimeError("Gemini tidak mengembalikan hasil")
         message = str(exc)
         if "429" in message or "RESOURCE_EXHAUSTED" in message.upper():
             raise GeminiExtractionError(
-                "Kuota Gemini sedang habis. Tunggu beberapa saat lalu proses ulang."
+                "Kuota Gemini sedang habis. Menunggu sebelum mencoba lagi.",
+                transient=True,
+            ) from exc
+        if "503" in message or "UNAVAILABLE" in message.upper():
+            raise GeminiExtractionError(
+                "Gemini sedang sibuk. Modellyng akan mencoba lagi otomatis.",
+                transient=True,
             ) from exc
         if "API_KEY" in message.upper() or "401" in message or "403" in message:
             raise GeminiExtractionError(
@@ -120,7 +153,7 @@ def extract_academic_components(
             "Gemini belum dapat mengekstrak dokumen ini. Silakan proses ulang."
         ) from exc
 
-    return verify_extraction(extraction, blocks, settings.gemini_model)
+    return verify_extraction(extraction, blocks, used_model)
 
 
 def build_prompt(blocks: list[dict[str, object]], *, max_chars: int) -> str:

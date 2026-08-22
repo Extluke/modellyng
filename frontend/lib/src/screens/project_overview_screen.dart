@@ -9,6 +9,7 @@ import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import 'paper_result_screen.dart';
 
 class ProjectOverviewScreen extends ConsumerStatefulWidget {
   const ProjectOverviewScreen({required this.project, super.key});
@@ -254,6 +255,15 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
                             for (final paper in items) ...[
                               _PaperTile(
                                 paper: paper,
+                                onOpenResult: () =>
+                                    Navigator.of(context).push<void>(
+                                      MaterialPageRoute(
+                                        builder: (_) => PaperResultScreen(
+                                          projectId: project.id,
+                                          paperId: paper.id,
+                                        ),
+                                      ),
+                                    ),
                                 onProcess: paper.canStartProcessing
                                     ? () => _processPaper(paper)
                                     : null,
@@ -332,9 +342,14 @@ class _UploadGuidance extends StatelessWidget {
 }
 
 class _PaperTile extends StatelessWidget {
-  const _PaperTile({required this.paper, this.onProcess});
+  const _PaperTile({
+    required this.paper,
+    required this.onOpenResult,
+    this.onProcess,
+  });
 
   final ProjectPaper paper;
+  final VoidCallback onOpenResult;
   final VoidCallback? onProcess;
 
   @override
@@ -443,6 +458,12 @@ class _PaperTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 StatusBadge.paper(paper.status),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: onOpenResult,
+                  icon: const Icon(Icons.fact_check_outlined, size: 18),
+                  label: const Text('Lihat hasil'),
+                ),
                 if (onProcess != null) ...[
                   const SizedBox(height: 8),
                   TextButton.icon(

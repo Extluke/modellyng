@@ -7,6 +7,7 @@ from app.ai_extraction import (
     AiComponent,
     AiEvidence,
     AiPaperExtraction,
+    GeminiExtractionError,
     build_prompt,
     verify_extraction,
 )
@@ -84,3 +85,8 @@ def test_ai_schema_requires_all_academic_parameters() -> None:
                 )
             ]
         )
+
+
+def test_transient_gemini_error_is_explicitly_retryable() -> None:
+    error = GeminiExtractionError("Gemini sibuk", transient=True)
+    assert error.transient is True

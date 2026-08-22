@@ -185,6 +185,11 @@ class ReviewRecordCreate(BaseModel):
     def require_correction_for_edit(self) -> "ReviewRecordCreate":
         if self.action == ReviewerAction.EDIT and not self.corrected_value:
             raise ValueError("corrected_value is required for edit actions")
+        if self.action in {
+            ReviewerAction.REJECT,
+            ReviewerAction.REQUEST_REANALYSIS,
+        } and not (self.note or "").strip():
+            raise ValueError("note is required for reject and re-analysis actions")
         return self
 
 
@@ -211,6 +216,76 @@ class ReviewQueueItemRead(BaseModel):
     model_name: str
     prompt_version: str
     created_at: datetime
+
+
+class PaperResultRead(BaseModel):
+    paper: PaperRead
+    components: list[ExtractedComponentRead]
+
+
+class ReviewHistoryItemRead(ReviewRecordRead):
+    parameter: ExtractionParameter
+    paper_id: UUID
+    paper_title: str
+
+
+class MatrixPaperRead(BaseModel):
+    id: UUID
+    title: str
+    original_filename: str
+
+
+class MatrixCellRead(BaseModel):
+    paper_id: UUID
+    ai_value: str
+    final_value: str | None = None
+    status: VerificationStatus
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence: list[EvidenceSpan]
+
+
+class MatrixRowRead(BaseModel):
+    parameter: ExtractionParameter
+    cells: list[MatrixCellRead]
+
+
+class ComparativeMatrixRead(BaseModel):
+    project_id: UUID
+    project_title: str
+    papers: list[MatrixPaperRead]
+    rows: list[MatrixRowRead]
+
+
+class ConceptMapNodeRead(BaseModel):
+    id: str
+    kind: str
+    label: str
+    detail: str
+    paper_id: UUID
+    parameter: ExtractionParameter | None = None
+    page_number: int | None = Field(default=None, ge=1)
+    status: VerificationStatus | None = None
+
+
+class ConceptMapEdgeRead(BaseModel):
+    source: str
+    target: str
+    relation: str
+
+
+class ConceptEvidenceMapRead(BaseModel):
+    project_id: UUID
+    project_title: str
+    nodes: list[ConceptMapNodeRead]
+    edges: list[ConceptMapEdgeRead]
+
+
+class ResearchGapMapRead(BaseModel):
+    project_id: UUID
+    project_title: str
+    nodes: list[ConceptMapNodeRead]
+    edges: list[ConceptMapEdgeRead]
+    candidate_count: int = Field(ge=0)
 
 
 class HealthRead(BaseModel):

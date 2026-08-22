@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from .ai_extraction import extract_academic_components
+from .ai_extraction import GeminiExtractionError, extract_academic_components
 from .celery_app import celery_app
 from .pdf_processing import extract_pdf
 from .processing_repository import PdfProcessingRepository
@@ -11,10 +11,11 @@ def process_pdf(self, job_id: str, paper_id: str) -> dict[str, object]:
     """Download, parse, and persist one private PDF outside the API process."""
     parsed_job_id = UUID(job_id)
     parsed_paper_id = UUID(paper_id)
-    repository = PdfProcessingRepository()
+    repository: PdfProcessingRepository | None = None
     project_id: UUID | None = None
 
     try:
+        repository = PdfProcessingRepository()
         self.update_state(
             state="PROGRESS",
             meta={"job_id": job_id, "stage": "downloading", "progress": 0.1},
@@ -98,11 +99,37 @@ def process_pdf(self, job_id: str, paper_id: str) -> dict[str, object]:
             "text_blocks": len(extraction.pages),
             "components": len(ai_extraction.components),
         }
+    except GeminiExtractionError as exc:
+        if repository is not None and exc.transient and self.request.retries < 3:
+            countdown = min(15 * (2 ** self.request.retries), 60)
+            repository.update_job(
+                parsed_job_id,
+                status="processing",
+                stage="retrying_gemini",
+                progress=0.85,
+                error_message=str(exc),
+            )
+            raise self.retry(exc=exc, countdown=countdown, max_retries=3)
+        if repository is not None:
+            failure_message = (
+                "Gemini tetap sibuk setelah beberapa percobaan. "
+                "Silakan proses ulang beberapa saat lagi."
+                if exc.transient
+                else str(exc)
+            )
+            repository.mark_failure(
+                job_id=parsed_job_id,
+                paper_id=parsed_paper_id,
+                project_id=project_id,
+                message=failure_message,
+            )
+        raise
     except Exception as exc:
-        repository.mark_failure(
-            job_id=parsed_job_id,
-            paper_id=parsed_paper_id,
-            project_id=project_id,
-            message=str(exc) or "Pemrosesan PDF gagal",
-        )
+        if repository is not None:
+            repository.mark_failure(
+                job_id=parsed_job_id,
+                paper_id=parsed_paper_id,
+                project_id=project_id,
+                message=str(exc) or "Pemrosesan PDF gagal",
+            )
         raise

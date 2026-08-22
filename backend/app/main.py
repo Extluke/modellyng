@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .auth import CurrentUser
 from .config import get_settings
@@ -24,6 +24,11 @@ from .schemas import (
     ReviewQueueItemRead,
     ReviewRecordCreate,
     ReviewRecordRead,
+    PaperResultRead,
+    ReviewHistoryItemRead,
+    ComparativeMatrixRead,
+    ConceptEvidenceMapRead,
+    ResearchGapMapRead,
 )
 
 settings = get_settings()
@@ -192,12 +197,86 @@ async def process_paper(
 
 
 @api.get(
+    "/projects/{project_id}/papers/{paper_id}/result",
+    response_model=PaperResultRead,
+    tags=["papers"],
+)
+async def get_paper_result(
+    project_id: UUID, paper_id: UUID, current_user: CurrentUser
+) -> PaperResultRead:
+    return await project_repository.get_paper_result(current_user, project_id, paper_id)
+
+
+@api.get(
+    "/projects/{project_id}/papers/{paper_id}/pdf",
+    response_class=Response,
+    tags=["papers"],
+)
+async def get_private_pdf(
+    project_id: UUID, paper_id: UUID, current_user: CurrentUser
+) -> Response:
+    content, filename = await project_repository.download_private_pdf(
+        current_user, project_id, paper_id
+    )
+    safe_filename = filename.replace('"', "")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_filename}"'},
+    )
+
+
+@api.get(
+    "/projects/{project_id}/comparative-matrix",
+    response_model=ComparativeMatrixRead,
+    tags=["projects"],
+)
+async def get_comparative_matrix(
+    project_id: UUID, current_user: CurrentUser
+) -> ComparativeMatrixRead:
+    return await project_repository.get_comparative_matrix(current_user, project_id)
+
+
+@api.get(
+    "/projects/{project_id}/concept-evidence-map",
+    response_model=ConceptEvidenceMapRead,
+    tags=["projects"],
+)
+async def get_concept_evidence_map(
+    project_id: UUID, current_user: CurrentUser
+) -> ConceptEvidenceMapRead:
+    return await project_repository.get_concept_evidence_map(current_user, project_id)
+
+
+@api.get(
+    "/projects/{project_id}/research-gap-map",
+    response_model=ResearchGapMapRead,
+    tags=["projects"],
+)
+async def get_research_gap_map(
+    project_id: UUID, current_user: CurrentUser
+) -> ResearchGapMapRead:
+    return await project_repository.get_research_gap_map(current_user, project_id)
+
+
+@api.get(
     "/reviews",
     response_model=list[ReviewQueueItemRead],
     tags=["reviews"],
 )
 async def list_reviews(current_user: CurrentUser) -> list[ReviewQueueItemRead]:
     return await project_repository.list_review_queue(current_user)
+
+
+@api.get(
+    "/reviews/history",
+    response_model=list[ReviewHistoryItemRead],
+    tags=["reviews"],
+)
+async def list_review_history(
+    current_user: CurrentUser,
+) -> list[ReviewHistoryItemRead]:
+    return await project_repository.list_review_history(current_user)
 
 
 @api.post(
