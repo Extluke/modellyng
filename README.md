@@ -10,7 +10,7 @@ hasil AI -> kutipan evidence -> blok/halaman sumber -> PDF privat asli
 AI tidak pernah dianggap final otomatis. Semua komponen harus tetap dapat
 ditinjau manusia melalui tindakan Accept, Edit, Reject, atau re-analysis.
 
-> Status snapshot: 22 Agustus 2026. Ini adalah MVP lokal yang sudah dapat
+> Status snapshot: 23 Agustus 2026. Ini adalah MVP lokal yang sudah dapat
 > didemonstrasikan end-to-end, tetapi belum siap untuk deployment publik.
 
 ## Baca ini dahulu jika Anda AI/coding agent baru
@@ -30,9 +30,9 @@ Supabase, atau Gemini tanpa architecture decision yang disetujui tim. Jangan
 menonaktifkan RLS, membuat bucket PDF publik, memasukkan service-role/Gemini
 key ke Flutter, atau menganggap output AI sebagai kebenaran final.
 
-Working tree saat snapshot ini berada di branch `codex/review-reanalysis` dan
-memiliki banyak perubahan fitur yang belum di-commit. Selalu jalankan
-`git status` sendiri; jangan menghapus atau menimpa perubahan lokal tersebut.
+Snapshot ini disusun dari branch `codex/review-reanalysis`. Kondisi working
+tree dapat berubah setelah handoff, jadi selalu jalankan `git status` sendiri
+dan jangan menghapus atau menimpa perubahan lokal yang bukan bagian task Anda.
 
 ## Arsitektur yang dikunci
 
@@ -301,7 +301,7 @@ Baseline terakhir yang benar-benar dijalankan:
 
 - Backend: **29 tests passed**.
 - Flutter: **static analysis clean**.
-- Flutter: **10 widget tests passed**.
+- Flutter: **11 widget tests passed**.
 - Flutter web release: **build succeeded**.
 - Redis dan local Supabase: healthy.
 - Runtime recovery test: dua PDF masing-masing menghasilkan 11 komponen dan

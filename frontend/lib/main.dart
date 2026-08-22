@@ -4,14 +4,60 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'src/app.dart';
 import 'src/config/app_config.dart';
+import 'src/theme/app_theme.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await Supabase.initialize(
+  final initialization = Supabase.initialize(
     url: AppConfig.supabaseUrl,
     publishableKey: AppConfig.supabasePublishableKey,
   );
+  runApp(
+    ProviderScope(child: _ModellyngBootstrap(initialization: initialization)),
+  );
+}
 
-  runApp(const ProviderScope(child: ModellyngApp()));
+class _ModellyngBootstrap extends StatelessWidget {
+  const _ModellyngBootstrap({required this.initialization});
+
+  final Future<Supabase> initialization;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Supabase>(
+    future: initialization,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) return const ModellyngApp();
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: snapshot.hasError
+                  ? const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_off_outlined, size: 48),
+                        SizedBox(height: 16),
+                        Text(
+                          'Layanan lokal belum dapat dihubungkan. Muat ulang setelah Supabase berjalan.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    )
+                  : const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Menyiapkan Modellyng…'),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

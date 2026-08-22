@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -252,23 +254,81 @@ class _PdfPane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => ref
       .watch(paperPdfProvider(query))
       .when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 14),
+              Text('Mengunduh PDF privat…'),
+            ],
+          ),
+        ),
         error: (error, _) =>
             _Failure(onRetry: () => ref.invalidate(paperPdfProvider(query))),
-        data: (bytes) => PdfViewer.data(
-          bytes,
-          sourceName: 'private-paper.pdf',
+        data: (bytes) => _PdfDocumentViewer(
+          bytes: bytes,
           controller: controller,
-          initialPageNumber: initialPage,
+          initialPage: initialPage,
+        ),
+      );
+}
+
+class _PdfDocumentViewer extends StatefulWidget {
+  const _PdfDocumentViewer({
+    required this.bytes,
+    required this.controller,
+    required this.initialPage,
+  });
+
+  final Uint8List bytes;
+  final PdfViewerController controller;
+  final int initialPage;
+
+  @override
+  State<_PdfDocumentViewer> createState() => _PdfDocumentViewerState();
+}
+
+class _PdfDocumentViewerState extends State<_PdfDocumentViewer> {
+  bool _ready = false;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Positioned.fill(
+        child: PdfViewer.data(
+          widget.bytes,
+          sourceName: 'private-paper.pdf',
+          controller: widget.controller,
+          initialPageNumber: widget.initialPage,
           params: PdfViewerParams(
             onViewerReady: (_, readyController) {
-              if (readyController.pageNumber != initialPage) {
-                readyController.goToPage(pageNumber: initialPage);
+              if (readyController.pageNumber != widget.initialPage) {
+                readyController.goToPage(pageNumber: widget.initialPage);
               }
+              if (mounted) setState(() => _ready = true);
             },
           ),
         ),
-      );
+      ),
+      if (!_ready)
+        const Positioned.fill(
+          child: ColoredBox(
+            color: AppColors.canvas,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 14),
+                  Text('Menyiapkan PDF privat…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 class _Failure extends StatelessWidget {

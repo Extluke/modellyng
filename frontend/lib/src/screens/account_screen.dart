@@ -6,7 +6,25 @@ import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
 class AccountScreen extends ConsumerWidget {
-  const AccountScreen({super.key});
+  const AccountScreen({this.onOpenAuditLog, super.key});
+
+  final VoidCallback? onOpenAuditLog;
+
+  Future<void> _showPrivacy(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Privasi dokumen'),
+      content: const Text(
+        'PDF disimpan di bucket privat. Akses dibatasi untuk pemilik melalui autentikasi, API FastAPI, dan Row Level Security Supabase.',
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Mengerti'),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,37 +146,44 @@ class AccountScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Card(
+              Card(
                 child: Column(
                   children: [
                     ListTile(
-                      leading: Icon(Icons.shield_outlined),
-                      title: Text('Privasi dokumen'),
-                      subtitle: Text(
+                      leading: const Icon(Icons.shield_outlined),
+                      title: const Text('Privasi dokumen'),
+                      subtitle: const Text(
                         'File tersimpan dalam bucket privat dan dilindungi Row Level Security.',
                       ),
-                      trailing: Icon(Icons.chevron_right_rounded),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => _showPrivacy(context),
                     ),
-                    Divider(height: 1),
+                    const Divider(height: 1),
                     ListTile(
-                      leading: Icon(Icons.history_rounded),
-                      title: Text('Audit log'),
-                      subtitle: Text(
+                      leading: const Icon(Icons.history_rounded),
+                      title: const Text('Audit log'),
+                      subtitle: const Text(
                         'Riwayat analisis dan keputusan reviewer akan tersimpan.',
                       ),
-                      trailing: Icon(Icons.chevron_right_rounded),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: onOpenAuditLog,
                     ),
-                    Divider(height: 1),
-                    ListTile(
+                    const Divider(height: 1),
+                    const ListTile(
+                      enabled: false,
                       leading: Icon(
                         Icons.delete_outline_rounded,
                         color: AppColors.red,
                       ),
                       title: Text('Retensi & penghapusan data'),
                       subtitle: Text(
-                        'Kelola berapa lama paper dan hasil analisis disimpan.',
+                        'Belum tersedia pada pilot lokal. Tidak ada data yang dihapus otomatis.',
                       ),
-                      trailing: Icon(Icons.chevron_right_rounded),
+                      trailing: StatusBadge(
+                        label: 'Segera',
+                        color: AppColors.muted,
+                        background: AppColors.border,
+                      ),
                     ),
                   ],
                 ),

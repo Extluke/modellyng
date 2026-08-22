@@ -32,7 +32,8 @@ not yet a public production service.
   after the review queue is complete.
 - Dynamic dashboard totals for papers, projects, papers waiting for review,
   and verified/edited knowledge nodes.
-- Flutter web release running locally on port 8082.
+- Flutter web running locally on the documented QA port 3000 (port 8082 also
+  remains allowed for alternate local sessions).
 - End-to-end test of upload -> worker -> Gemini -> 11 review components ->
   human decisions -> ready project.
 - Authenticated Structured Paper Result API and responsive Flutter result page.
@@ -48,11 +49,16 @@ not yet a public production service.
   PDF evidence relationships and responsive desktop/mobile presentations.
 - Research Gap Map that exposes limitations and future-work statements as
   explicitly reviewable candidates linked to their paper and private evidence.
+- QA polish for Flutter web: an immediate startup splash replaces the blank
+  boot screen, review dialogs show required-field and request failures,
+  private PDF preparation has an explicit loading state, desktop navigation
+  activates at logical tablet/desktop widths, and account affordances are
+  either functional or honestly marked unavailable.
 
 The last verified automated baseline was:
 
 - Backend: 29 tests passing.
-- Flutter: static analysis clean and 10 widget tests passing.
+- Flutter: static analysis clean and 11 widget tests passing.
 - Flutter web release build passing.
 - Dependency health: Redis and local Supabase healthy.
 
@@ -152,7 +158,7 @@ bulk accept actions with explicit confirmation.
 
 | Service | Local address |
 |---|---|
-| Flutter web | `http://127.0.0.1:8082` |
+| Flutter web | `http://127.0.0.1:3000` (recommended QA port; 8082 is also allowed) |
 | FastAPI | `http://127.0.0.1:8000` |
 | FastAPI health | `http://127.0.0.1:8000/health/dependencies` |
 | Supabase API | `http://127.0.0.1:54321` |

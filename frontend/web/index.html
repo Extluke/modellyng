@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Modellyng — evidence-centered academic paper analysis.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -29,10 +29,38 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>modellyng</title>
+  <title>Modellyng</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #f7f7fc; }
+    #modellyng-loading {
+      position: fixed; inset: 0; z-index: 9999; display: grid;
+      place-items: center; font-family: Arial, sans-serif; color: #20243a;
+      background: #f7f7fc;
+    }
+    #modellyng-loading .content { text-align: center; }
+    #modellyng-loading .logo {
+      width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 15px;
+      display: grid; place-items: center; color: white; font-size: 26px;
+      background: #5748e5; box-shadow: 0 12px 28px rgba(87,72,229,.25);
+    }
+    #modellyng-loading .spinner {
+      width: 24px; height: 24px; margin: 18px auto 0; border-radius: 50%;
+      border: 3px solid #dedbf9; border-top-color: #5748e5;
+      animation: modellyng-spin .8s linear infinite;
+    }
+    @keyframes modellyng-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
+  <div id="modellyng-loading" role="status" aria-live="polite">
+    <div class="content">
+      <div class="logo">◆</div>
+      <strong>Modellyng</strong>
+      <div>Menyiapkan workspace riset…</div>
+      <div class="spinner" aria-hidden="true"></div>
+    </div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -42,5 +70,10 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      document.getElementById('modellyng-loading')?.remove();
+    });
+  </script>
 </body>
 </html>

@@ -93,7 +93,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final desktop = constraints.maxWidth >= 900;
+        final desktop = constraints.maxWidth >= 760;
         final pages = [
           DashboardScreen(
             userId: user.id,
@@ -110,7 +110,18 @@ class _AppShellState extends ConsumerState<AppShell> {
           const ReviewQueueScreen(),
           ComparativeMatrixScreen(userId: user.id),
           MapsScreen(userId: user.id),
-          const AccountScreen(),
+          AccountScreen(
+            onOpenAuditLog: () {
+              setState(() => _selectedIndex = 2);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Buka “Riwayat keputusan review” untuk melihat audit log.',
+                  ),
+                ),
+              );
+            },
+          ),
         ];
 
         return Scaffold(
@@ -123,11 +134,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                   actions: [
                     IconButton(
                       tooltip: 'Notifikasi',
-                      onPressed: () {},
-                      icon: const Badge(
-                        smallSize: 8,
-                        child: Icon(Icons.notifications_outlined),
-                      ),
+                      onPressed: () =>
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Belum ada notifikasi baru.'),
+                            ),
+                          ),
+                      icon: const Icon(Icons.notifications_outlined),
                     ),
                     const SizedBox(width: 6),
                   ],

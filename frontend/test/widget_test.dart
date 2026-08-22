@@ -15,10 +15,22 @@ import 'package:modellyng/src/screens/concept_evidence_map_screen.dart';
 import 'package:modellyng/src/screens/dashboard_screen.dart';
 import 'package:modellyng/src/screens/paper_result_screen.dart';
 import 'package:modellyng/src/screens/research_gap_map_screen.dart';
+import 'package:modellyng/src/screens/review_queue_screen.dart';
 import 'package:modellyng/src/screens/welcome_screen.dart';
 import 'package:modellyng/src/widgets/common_widgets.dart';
 
 void main() {
+  test('review text validator rejects whitespace and accepts a reason', () {
+    expect(
+      validateRequiredReviewText('   ', 'Alasan wajib'),
+      'Alasan wajib tidak boleh kosong.',
+    );
+    expect(
+      validateRequiredReviewText('Perlu kutipan sumber', 'Alasan wajib'),
+      isNull,
+    );
+  });
+
   testWidgets('welcome screen exposes the authentication entry point', (
     tester,
   ) async {

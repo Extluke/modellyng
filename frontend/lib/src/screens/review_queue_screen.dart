@@ -7,6 +7,9 @@ import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
+String? validateRequiredReviewText(String value, String label) =>
+    value.trim().isEmpty ? '$label tidak boleh kosong.' : null;
+
 class ReviewQueueScreen extends ConsumerStatefulWidget {
   const ReviewQueueScreen({super.key});
 
@@ -222,79 +225,35 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
   }
 
   Future<void> _edit() async {
-    final controller = TextEditingController(text: widget.item.aiValue);
     final corrected = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit ${widget.item.parameterLabel}'),
-        content: SizedBox(
-          width: 560,
-          child: TextField(
-            controller: controller,
-            minLines: 5,
-            maxLines: 12,
-            decoration: const InputDecoration(
-              labelText: 'Nilai final hasil koreksi',
-              alignLabelWithHint: true,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
-            },
-            child: const Text('Simpan koreksi'),
-          ),
-        ],
+      builder: (context) => _RequiredTextDialog(
+        title: 'Edit ${widget.item.parameterLabel}',
+        label: 'Nilai final hasil koreksi',
+        submitLabel: 'Simpan koreksi',
+        initialValue: widget.item.aiValue,
+        minLines: 5,
+        maxLines: 12,
       ),
     );
-    controller.dispose();
     if (corrected != null) {
       await _submit(ReviewDecision.edit, correctedValue: corrected);
     }
   }
 
   Future<void> _submitWithReason(ReviewDecision decision) async {
-    final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          decision == ReviewDecision.reject
-              ? 'Alasan penolakan'
-              : 'Minta analisis ulang',
-        ),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 6,
-          decoration: const InputDecoration(
-            labelText: 'Alasan wajib',
-            alignLabelWithHint: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
-            },
-            child: const Text('Kirim'),
-          ),
-        ],
+      builder: (context) => _RequiredTextDialog(
+        title: decision == ReviewDecision.reject
+            ? 'Alasan penolakan'
+            : 'Minta analisis ulang',
+        label: 'Alasan wajib',
+        submitLabel: 'Kirim',
+        minLines: 3,
+        maxLines: 6,
       ),
     );
-    controller.dispose();
     if (reason != null) {
       setState(() => _submitting = true);
       try {
@@ -317,6 +276,17 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               ),
             ),
           );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Keputusan belum dapat dikirim. Silakan coba kembali.',
+              ),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
       } finally {
         if (mounted) setState(() => _submitting = false);
       }
@@ -437,4 +407,81 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
       ),
     );
   }
+}
+
+class _RequiredTextDialog extends StatefulWidget {
+  const _RequiredTextDialog({
+    required this.title,
+    required this.label,
+    required this.submitLabel,
+    required this.minLines,
+    required this.maxLines,
+    this.initialValue = '',
+  });
+
+  final String title;
+  final String label;
+  final String submitLabel;
+  final String initialValue;
+  final int minLines;
+  final int maxLines;
+
+  @override
+  State<_RequiredTextDialog> createState() => _RequiredTextDialogState();
+}
+
+class _RequiredTextDialogState extends State<_RequiredTextDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    final error = validateRequiredReviewText(value, widget.label);
+    if (error != null) {
+      setState(() => _errorText = error);
+      return;
+    }
+    Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: SizedBox(
+      width: 560,
+      child: TextField(
+        controller: _controller,
+        minLines: widget.minLines,
+        maxLines: widget.maxLines,
+        autofocus: true,
+        onChanged: (_) {
+          if (_errorText != null) setState(() => _errorText = null);
+        },
+        decoration: InputDecoration(
+          labelText: widget.label,
+          errorText: _errorText,
+          alignLabelWithHint: true,
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Batal'),
+      ),
+      FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
+    ],
+  );
 }
