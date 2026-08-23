@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -11,7 +11,12 @@ Modellyng is an evidence-centered academic PDF analysis application. The
 current state is a working local MVP that can be demonstrated end-to-end. It is
 not yet a public production service.
 
-## Completed and verified
+## Implemented baseline
+
+The items below exist in the active application. “Implemented” must not be read
+as production approval: direct QA on 2026-08-23 found integrity blockers in
+re-analysis and the synthesis views, documented later in this file and in
+`docs/QA_REPORT_2026-08-23.md`.
 
 - Supabase local registration, login, and session handling.
 - Per-user project isolation through authenticated API requests and RLS.
@@ -41,14 +46,16 @@ not yet a public production service.
   navigate to the verified source page without making the bucket public.
 - Review queue grouped by paper with per-paper progress and project filtering.
 - Rejection and re-analysis require a reviewer reason; re-analysis creates a
-  fresh Celery job while preserving the prior AI output and review history.
+  fresh Celery job and preserves prior AI output/history, but active-version
+  selection is defective and currently duplicates the review queue.
 - Auditable review history for the 100 latest decisions.
-- Comparative Paper Matrix for comparing the latest reviewed values and their
-  evidence across at least two ready papers.
-- Concept / Evidence Map with traceable paper -> reviewed concept -> private
-  PDF evidence relationships and responsive desktop/mobile presentations.
-- Research Gap Map that exposes limitations and future-work statements as
-  explicitly reviewable candidates linked to their paper and private evidence.
+- Comparative Paper Matrix, Concept / Evidence Map, and Research Gap Map have
+  working responsive read views and private-evidence navigation. They are
+  currently integrity-blocked because rejected/unsupported components are not
+  excluded from knowledge results.
+- Authenticated project exports in Word, Excel, UTF-8 CSV, and PowerPoint.
+  Exports contain ready papers only and preserve reviewed/original AI values,
+  status, confidence, evidence quote, page, block ID, and paper ID.
 - QA polish for Flutter web: an immediate startup splash replaces the blank
   boot screen, review dialogs show required-field and request failures,
   private PDF preparation has an explicit loading state, desktop navigation
@@ -57,13 +64,38 @@ not yet a public production service.
 
 The last verified automated baseline was:
 
-- Backend: 29 tests passing.
-- Flutter: static analysis clean and 11 widget tests passing.
+- Backend: 39 tests passing.
+- Flutter: static analysis clean and 12 widget tests passing.
 - Flutter web release build passing.
 - Dependency health: Redis and local Supabase healthy.
 
+Direct browser QA also exercised real login, project creation, two PDF uploads,
+worker/Gemini processing, all review actions, all six requested research
+features, all four export formats, search/filter, account/privacy, logout, and
+mobile/desktop layouts. The UI paths work, but the run identified two P1 data
+integrity defects:
+
+1. Re-analysis leaves old `needs_review` rows active, producing duplicated queue
+   entries and even negative progress (`-9/11`).
+2. Matrix and both Maps accept rejected/unsupported cells; Matrix additionally
+   labels every non-edited cell as verified. Exports inherit the Matrix dataset.
+
+Do not call the affected features production-ready until both defects have
+regression coverage and have been retested end-to-end.
+
 ## Current limitations
 
+- Re-analysis has no reliable active/superseded component version. Historical
+  data is correctly retained, but review queue, progress, and readiness can mix
+  rows from multiple analysis jobs.
+- Matrix, Concept Map, and Research Gap Map do not yet enforce that knowledge
+  results must be `verified` or `edited`; rejected/unsupported values can leak
+  into synthesis views and export inputs.
+- Daily plan/quota values are static (`0 / 5`) rather than backend usage data.
+- Initial private-PDF rendering on mobile can take roughly 15–20 seconds after
+  the authenticated download completes.
+- Account's Audit log shortcut opens Review but does not jump to history, which
+  is inconvenient when the queue is long.
 - Only PDFs containing searchable text are supported. Scanned/image-only PDFs
   require OCR, which is not implemented yet.
 - Gemini free-tier availability and quotas can interrupt analysis.
@@ -124,34 +156,53 @@ Highlighting the exact quote inside the PDF is desirable but may be a second
 increment after reliable page navigation. Do not block the first slice on
 pixel-perfect highlighting.
 
-## Completed feature — Comparative Matrix + Concept / Evidence + Research Gap Maps
+## Implemented but QA-blocked — Comparative Matrix + Concept / Evidence + Research Gap Maps
 
-The comparative matrix and evidence map are complete as evidence-preserving
-read views. Matrix cells show reviewed values with their supporting evidence.
+The comparative matrix and evidence map are implemented as evidence-preserving
+read views. Matrix cells show values with their supporting evidence.
 The map exposes paper -> concept -> evidence chains, and evidence actions open
 the authenticated paper result/PDF viewer on the claimed page. Both features
 provide responsive mobile and desktop layouts and explicit empty states.
-Research Gap Map adds filterable candidate chains sourced only from reviewed
-`limitations` and `future_work` components. Each supported candidate retains
+Research Gap Map adds filterable candidate chains sourced from `limitations`
+and `future_work` components. Each supported candidate retains
 its link to the source paper, evidence quote, and authenticated PDF page, and
 the interface clearly warns that candidates are not automatic conclusions.
+The backend must still filter all three views to `verified`/`edited`; the current
+code can include rejected/unsupported cells and must not be treated as final
+research synthesis.
 
-## Current priority — Review UX follow-up
+## Current priority — Data integrity fixes
 
-The first Review/re-analysis refinement is complete: grouping, progress,
-project filter, required reasons, history, and actual re-analysis enqueueing.
-Potential follow-ups are parameter/status filters, paginated history, and safe
-bulk accept actions with explicit confirmation.
+Before any new feature, fix active-version selection for re-analysis while
+preserving history, then exclude rejected/unsupported rows from Matrix and both
+Maps. Add tests proving repeated re-analysis leaves exactly 11 active parameters,
+progress stays within 0–11, readiness uses only the active set, and rejected or
+unsupported values never become knowledge nodes/candidates. Only after those
+tests and direct browser retest should Review UX refinements resume.
+
+## Completed feature — Evidence-preserving result export
+
+Users can open a project and export all ready-paper results as `.docx`, `.xlsx`,
+UTF-8 `.csv`, or `.pptx`. Generation happens behind the authenticated FastAPI
+boundary, reusing the owner-scoped comparative result query. Every artifact
+distinguishes the reviewed value from the original AI value and retains paper,
+page, block, status, confidence, and quote provenance. Projects without a ready
+paper receive an explicit action message instead of an empty or fabricated file.
+Package generation and download passed direct QA, but the exported dataset
+inherits the Matrix status-filter defect; consumers must inspect `status` until
+the verified/edited-only synthesis rule is implemented and retested.
 
 ## Planned backlog
 
-1. Review UX follow-up: parameter/status filters, paginated history, and safe
+1. P0: re-analysis active/superseded versioning and regression tests.
+2. P0: verified/edited-only synthesis and accurate Matrix status rendering.
+3. Review UX follow-up: parameter/status filters, paginated history, and safe
    bulk actions.
-2. Human-curated cross-paper gap synthesis and explicit candidate decisions.
-3. Export to Word, Excel/CSV, and presentation-ready reports.
-4. OCR for scanned PDFs with an explicit OCR-quality review step.
-5. Real plan/quota enforcement and usage reporting.
-6. Production privacy, deletion/retention policy, monitoring, backups,
+4. Real plan/quota enforcement and usage reporting.
+5. PDF render feedback/timeout and direct Audit log navigation.
+6. Human-curated cross-paper gap synthesis and explicit candidate decisions.
+7. OCR for scanned PDFs with an explicit OCR-quality review step.
+8. Production privacy, deletion/retention policy, monitoring, backups,
    rate-limiting, and public pilot deployment.
 
 ## Local service map

@@ -9,6 +9,7 @@ import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import 'export_results_screen.dart';
 import 'paper_result_screen.dart';
 
 class ProjectOverviewScreen extends ConsumerStatefulWidget {
@@ -140,6 +141,19 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         title: const BrandLockup(),
+        actions: [
+          TextButton.icon(
+            key: const Key('open-export-button'),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => ExportResultsScreen(project: project),
+              ),
+            ),
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Ekspor'),
+          ),
+          const SizedBox(width: 10),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1),

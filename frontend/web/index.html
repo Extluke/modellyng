@@ -69,11 +69,31 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
   <script>
-    window.addEventListener('flutter-first-frame', function () {
+    const removeModellyngLoading = () => {
       document.getElementById('modellyng-loading')?.remove();
+    };
+    window.addEventListener('flutter-first-frame', removeModellyngLoading, {
+      once: true,
     });
+    window.addEventListener('error', function () {
+      const loading = document.getElementById('modellyng-loading');
+      if (!loading) return;
+      loading.querySelector('.spinner')?.remove();
+      loading.querySelector('.content').lastElementChild.insertAdjacentHTML(
+        'afterend',
+        '<div style="max-width:320px;margin-top:16px;color:#d64555">Aplikasi gagal dimuat. Periksa layanan lokal lalu muat ulang.</div>',
+      );
+    }, { once: true });
+    window.setTimeout(function () {
+      const loading = document.getElementById('modellyng-loading');
+      if (!loading) return;
+      const message = loading.querySelector('.content > div:nth-child(3)');
+      if (message) {
+        message.textContent = 'Startup lebih lama dari biasanya. Coba muat ulang jika layar ini tidak berubah.';
+      }
+    }, 15000);
   </script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

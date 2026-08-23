@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse, Response
 
 from .auth import CurrentUser
 from .config import get_settings
+from .export_service import ExportUnavailableError, build_project_export
 from .health import dependency_health
 from .repository import (
     EntityNotFoundError,
@@ -46,6 +47,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -66,6 +68,11 @@ async def invalid_upload_handler(_, exc: InvalidUploadError) -> JSONResponse:
 
 @app.exception_handler(InvalidReviewError)
 async def invalid_review_handler(_, exc: InvalidReviewError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(ExportUnavailableError)
+async def export_unavailable_handler(_, exc: ExportUnavailableError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
@@ -257,6 +264,28 @@ async def get_research_gap_map(
     project_id: UUID, current_user: CurrentUser
 ) -> ResearchGapMapRead:
     return await project_repository.get_research_gap_map(current_user, project_id)
+
+
+@api.get(
+    "/projects/{project_id}/export/{export_format}",
+    response_class=Response,
+    tags=["projects"],
+)
+async def export_project_results(
+    project_id: UUID, export_format: str, current_user: CurrentUser
+) -> Response:
+    if export_format not in {"docx", "xlsx", "csv", "pptx"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Format ekspor harus docx, xlsx, csv, atau pptx",
+        )
+    matrix = await project_repository.get_comparative_matrix(current_user, project_id)
+    artifact = build_project_export(matrix, export_format)
+    return Response(
+        content=artifact.content,
+        media_type=artifact.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{artifact.filename}"'},
+    )
 
 
 @api.get(

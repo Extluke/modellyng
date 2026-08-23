@@ -15,6 +15,11 @@ google-genai>=1.0,<2.0
 # PDF extraction
 pymupdf>=1.25,<2.0
 
+# Evidence-preserving result exports
+python-docx>=1.1,<2.0
+openpyxl>=3.1,<4.0
+python-pptx>=1.0,<2.0
+
 # HTTP client and tests
 httpx>=0.28,<1.0
 pytest>=8.3,<9.0

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:modellyng/src/data/comparative_matrix_repository.dart';
 import 'package:modellyng/src/data/concept_map_repository.dart';
+import 'package:modellyng/src/data/export_repository.dart';
 import 'package:modellyng/src/data/paper_result_repository.dart';
 import 'package:modellyng/src/data/project_repository.dart';
 import 'package:modellyng/src/data/research_gap_repository.dart';
@@ -13,6 +14,7 @@ import 'package:modellyng/src/models/research_models.dart';
 import 'package:modellyng/src/screens/comparative_matrix_screen.dart';
 import 'package:modellyng/src/screens/concept_evidence_map_screen.dart';
 import 'package:modellyng/src/screens/dashboard_screen.dart';
+import 'package:modellyng/src/screens/export_results_screen.dart';
 import 'package:modellyng/src/screens/paper_result_screen.dart';
 import 'package:modellyng/src/screens/research_gap_map_screen.dart';
 import 'package:modellyng/src/screens/review_queue_screen.dart';
@@ -29,6 +31,53 @@ void main() {
       validateRequiredReviewText('Perlu kutipan sumber', 'Alasan wajib'),
       isNull,
     );
+  });
+
+  testWidgets('export screen downloads every evidence-preserving format', (
+    tester,
+  ) async {
+    const project = ResearchProject(
+      id: 'project-export',
+      title: 'Export Project',
+      description: '',
+      paperCount: 2,
+      reviewCount: 0,
+      progress: 1,
+      status: ProjectStatus.ready,
+      updatedLabel: 'Baru saja',
+      accent: Colors.indigo,
+    );
+    final requested = <String>[];
+    final saved = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: ExportResultsScreen(
+            project: project,
+            exportLoader: (format) async {
+              requested.add(format);
+              return ExportDownload(
+                bytes: Uint8List.fromList([1, 2, 3]),
+                filename: 'result.$format',
+                mediaType: 'application/octet-stream',
+              );
+            },
+            fileSaver: (download) => saved.add(download.filename),
+          ),
+        ),
+      ),
+    );
+
+    for (final format in ['docx', 'xlsx', 'csv', 'pptx']) {
+      final button = find.byKey(Key('export-$format-button'));
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    expect(requested, ['docx', 'xlsx', 'csv', 'pptx']);
+    expect(saved, ['result.docx', 'result.xlsx', 'result.csv', 'result.pptx']);
+    expect(find.textContaining('nilai AI asli'), findsOneWidget);
   });
 
   testWidgets('welcome screen exposes the authentication entry point', (
