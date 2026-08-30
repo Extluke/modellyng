@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-08-23
+Last updated: 2026-08-30
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -14,9 +14,9 @@ not yet a public production service.
 ## Implemented baseline
 
 The items below exist in the active application. “Implemented” must not be read
-as production approval: direct QA on 2026-08-23 found integrity blockers in
-re-analysis and the synthesis views, documented later in this file and in
-`docs/QA_REPORT_2026-08-23.md`.
+as public-production approval. The 2026-08-25 iteration resolved the two data
+integrity blockers found on 2026-08-23 and added a visual research workflow;
+verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
 
 - Supabase local registration, login, and session handling.
 - Per-user project isolation through authenticated API requests and RLS.
@@ -33,6 +33,10 @@ re-analysis and the synthesis views, documented later in this file and in
 - Server-side verification that every stored evidence quote exists in a source
   paper block on the claimed page.
 - Human Review queue with Accept, Edit, and Reject actions.
+- Human Review queue includes a confirmed “Terima semua” action for the
+  currently visible project filter. The owner-scoped batch is transactional,
+  accepts only active pending components, preserves audit actions, and updates
+  paper/project readiness atomically.
 - Paper/project status transition from processing to review and back to ready
   after the review queue is complete.
 - Dynamic dashboard totals for papers, projects, papers waiting for review,
@@ -46,13 +50,41 @@ re-analysis and the synthesis views, documented later in this file and in
   navigate to the verified source page without making the bucket public.
 - Review queue grouped by paper with per-paper progress and project filtering.
 - Rejection and re-analysis require a reviewer reason; re-analysis creates a
-  fresh Celery job and preserves prior AI output/history, but active-version
-  selection is defective and currently duplicates the review queue.
+  fresh Celery job, preserves prior AI output/history, and atomically promotes
+  only the completed result set as the active version.
 - Auditable review history for the 100 latest decisions.
-- Comparative Paper Matrix, Concept / Evidence Map, and Research Gap Map have
-  working responsive read views and private-evidence navigation. They are
-  currently integrity-blocked because rejected/unsupported components are not
-  excluded from knowledge results.
+- Comparative Paper Matrix, Concept / Evidence Map, and Research Gap Map use
+  only active `verified`/`edited` components. Matrix displays every ready paper
+  in one horizontally scrollable comparison table on desktop and mobile.
+- Structured Paper Result adds a research-question table that aligns each
+  question with its object/concept and discussion direction, plus a five-column
+  methodology table (`isi`, `bentuk`, `kegiatan utama`, `arah kegiatan`, and
+  `tujuan akhir`). Both tables can be downloaded as an authenticated PDF.
+- Project-scoped RAG chatbot retrieves owner-scoped `paper_blocks` directly
+  after searchable-text extraction, including papers still awaiting human
+  review. It returns private PDF page sources, blocks unrelated questions
+  before provider invocation, rejects generated answers without a valid
+  retrieved citation, treats paper text as untrusted data, and uses bounded
+  provider timeouts.
+- Project chat exchanges are persisted permanently in an owner-scoped,
+  RLS-protected message table. Reopening a project restores user questions,
+  validated AI answers, citation metadata, page numbers, quotes, and block IDs.
+- Chat citations open the authenticated private PDF on the cited page and use
+  the source quote to highlight the supporting text. Whitespace and punctuation
+  differences between server extraction and viewer text are tolerated; if an
+  exact text range cannot be matched, page navigation still succeeds and the
+  viewer reports the limitation honestly.
+- Private-PDF cold-start work is moved off the evidence-click path: PDFium is
+  initialized concurrently during app bootstrap, up to two cited PDFs are
+  prefetched after a chat answer, authenticated PDF bytes are retained in a
+  bounded 10-minute in-memory cache, and citation matching extracts/searches
+  only the known source page instead of scanning every page.
+- Chat citations now bypass full-document PDFium startup entirely: the
+  authenticated backend authorizes the owner once, fetches the cited block and
+  private PDF concurrently, and renders only the cited page as a highlighted
+  PNG. Full PDF viewing remains available for non-chat evidence navigation.
+- Research Gap Map now provides a persisted, owner-scoped Yes/No decision flow:
+  paper -> candidate -> evidence -> decision -> next research action.
 - Authenticated project exports in Word, Excel, UTF-8 CSV, and PowerPoint.
   Exports contain ready papers only and preserve reviewed/original AI values,
   status, confidence, evidence quote, page, block ID, and paper ID.
@@ -62,35 +94,27 @@ re-analysis and the synthesis views, documented later in this file and in
   activates at logical tablet/desktop widths, and account affordances are
   either functional or honestly marked unavailable.
 
-The last verified automated baseline was:
+The last verified automated baseline was (2026-08-30):
 
-- Backend: 39 tests passing.
-- Flutter: static analysis clean and 12 widget tests passing.
+- Backend: 62 tests passing, including grounded-chat refusal, citation guards,
+  and transactional bulk-review validation.
+- Flutter: static analysis clean and 19 widget tests passing.
 - Flutter web release build passing.
-- Dependency health: Redis and local Supabase healthy.
+- Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 
-Direct browser QA also exercised real login, project creation, two PDF uploads,
+Direct browser QA on 2026-08-23 exercised real login, project creation, two PDF uploads,
 worker/Gemini processing, all review actions, all six requested research
 features, all four export formats, search/filter, account/privacy, logout, and
-mobile/desktop layouts. The UI paths work, but the run identified two P1 data
-integrity defects:
-
-1. Re-analysis leaves old `needs_review` rows active, producing duplicated queue
-   entries and even negative progress (`-9/11`).
-2. Matrix and both Maps accept rejected/unsupported cells; Matrix additionally
-   labels every non-edited cell as verified. Exports inherit the Matrix dataset.
-
-Do not call the affected features production-ready until both defects have
-regression coverage and have been retested end-to-end.
+mobile/desktop layouts. On 2026-08-25 an authenticated live smoke test used the
+same QA account and real project data to verify active-version selection,
+verified/edited-only Matrix data, both gap-decision branches, structured PDF
+download, and an evidence-linked chatbot response. Browser-control QA for this
+iteration could not be repeated because the in-app browser was locked on its
+internal connection-error URL and its security policy rejected navigation;
+responsive click behavior is covered by 15 Flutter widget tests instead.
 
 ## Current limitations
 
-- Re-analysis has no reliable active/superseded component version. Historical
-  data is correctly retained, but review queue, progress, and readiness can mix
-  rows from multiple analysis jobs.
-- Matrix, Concept Map, and Research Gap Map do not yet enforce that knowledge
-  results must be `verified` or `edited`; rejected/unsupported values can leak
-  into synthesis views and export inputs.
 - Daily plan/quota values are static (`0 / 5`) rather than backend usage data.
 - Initial private-PDF rendering on mobile can take roughly 15–20 seconds after
   the authenticated download completes.
@@ -99,6 +123,8 @@ regression coverage and have been retested end-to-end.
 - Only PDFs containing searchable text are supported. Scanned/image-only PDFs
   require OCR, which is not implemented yet.
 - Gemini free-tier availability and quotas can interrupt analysis.
+- Chatbot responses depend on Gemini availability. Requests are bounded to two
+  short provider attempts and fail honestly instead of spinning indefinitely.
 - The app runs locally; it has no production domain, HTTPS deployment,
   monitoring, automated backups, or production privacy workflow yet.
 - The Gemini key previously used during development must be rotated before a
@@ -156,7 +182,7 @@ Highlighting the exact quote inside the PDF is desirable but may be a second
 increment after reliable page navigation. Do not block the first slice on
 pixel-perfect highlighting.
 
-## Implemented but QA-blocked — Comparative Matrix + Concept / Evidence + Research Gap Maps
+## Completed — Comparative Matrix + Concept / Evidence + Research Gap Maps
 
 The comparative matrix and evidence map are implemented as evidence-preserving
 read views. Matrix cells show values with their supporting evidence.
@@ -167,18 +193,20 @@ Research Gap Map adds filterable candidate chains sourced from `limitations`
 and `future_work` components. Each supported candidate retains
 its link to the source paper, evidence quote, and authenticated PDF page, and
 the interface clearly warns that candidates are not automatic conclusions.
-The backend must still filter all three views to `verified`/`edited`; the current
-code can include rejected/unsupported cells and must not be treated as final
-research synthesis.
+The backend filters all three views to the single active component version and
+to `verified`/`edited` status. Gap candidates remain human-reviewable rather
+than being promoted to research conclusions automatically.
 
-## Current priority — Data integrity fixes
+## Completed — Visual research workflow and project chatbot
 
-Before any new feature, fix active-version selection for re-analysis while
-preserving history, then exclude rejected/unsupported rows from Matrix and both
-Maps. Add tests proving repeated re-analysis leaves exactly 11 active parameters,
-progress stays within 0–11, readiness uses only the active set, and rejected or
-unsupported values never become knowledge nodes/candidates. Only after those
-tests and direct browser retest should Review UX refinements resume.
+Research-question and methodology outputs now have dedicated tabular views and
+an authenticated PDF download. Narrative list-like values render as readable
+bullets. The mobile Matrix no longer hides other papers behind a selector: one
+combined table contains every paper. Research Gap candidates have persisted
+Yes/No choices and an explicit next-step flow. The project chatbot retrieves
+searches extracted private-PDF text and returns source links to the supporting
+pages. Human review remains required for structured extraction outputs, while
+chat explicitly refuses questions whose terms cannot be grounded in the PDFs.
 
 ## Completed feature — Evidence-preserving result export
 
@@ -189,20 +217,20 @@ distinguishes the reviewed value from the original AI value and retains paper,
 page, block, status, confidence, and quote provenance. Projects without a ready
 paper receive an explicit action message instead of an empty or fabricated file.
 Package generation and download passed direct QA, but the exported dataset
-inherits the Matrix status-filter defect; consumers must inspect `status` until
-the verified/edited-only synthesis rule is implemented and retested.
+now inherits the Matrix active-version and `verified`/`edited` filters, so
+rejected, unsupported, and superseded components are excluded.
 
 ## Planned backlog
 
-1. P0: re-analysis active/superseded versioning and regression tests.
-2. P0: verified/edited-only synthesis and accurate Matrix status rendering.
-3. Review UX follow-up: parameter/status filters, paginated history, and safe
+1. Direct browser regression of the 2026-08-25 visual workflow once a fresh
+   controllable browser tab is available.
+2. Review UX follow-up: parameter/status filters, paginated history, and safe
    bulk actions.
-4. Real plan/quota enforcement and usage reporting.
-5. PDF render feedback/timeout and direct Audit log navigation.
-6. Human-curated cross-paper gap synthesis and explicit candidate decisions.
-7. OCR for scanned PDFs with an explicit OCR-quality review step.
-8. Production privacy, deletion/retention policy, monitoring, backups,
+3. Real plan/quota enforcement and usage reporting.
+4. PDF render feedback/timeout and direct Audit log navigation.
+5. Human-curated synthesis across accepted gap candidates.
+6. OCR for scanned PDFs with an explicit OCR-quality review step.
+7. Production privacy, deletion/retention policy, monitoring, backups,
    rate-limiting, and public pilot deployment.
 
 ## Local service map

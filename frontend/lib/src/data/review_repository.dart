@@ -165,4 +165,12 @@ class ReviewRepository {
       },
     );
   }
+
+  Future<int> acceptAll(List<String> componentIds) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/v1/reviews/accept-all',
+      data: {'component_ids': componentIds},
+    );
+    return (response.data?['accepted_count'] as num?)?.toInt() ?? 0;
+  }
 }

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -176,6 +177,28 @@ class ExtractedComponentRead(BaseModel):
     created_at: datetime
 
 
+class ResearchQuestionTableRow(BaseModel):
+    number: int = Field(ge=1)
+    question: str
+    related_object: str
+    discussion_direction: str
+    evidence_page: int | None = Field(default=None, ge=1)
+    evidence_quote: str | None = None
+
+
+class MethodologyTableRow(BaseModel):
+    content: str
+    form: str
+    main_activity: str
+    activity_direction: str
+    final_goal: str
+
+
+class StructuredPaperTablesRead(BaseModel):
+    research_questions: list[ResearchQuestionTableRow]
+    methodology: list[MethodologyTableRow]
+
+
 class ReviewRecordCreate(BaseModel):
     action: ReviewerAction
     corrected_value: str | None = None
@@ -221,6 +244,7 @@ class ReviewQueueItemRead(BaseModel):
 class PaperResultRead(BaseModel):
     paper: PaperRead
     components: list[ExtractedComponentRead]
+    structured_tables: StructuredPaperTablesRead
 
 
 class ReviewHistoryItemRead(ReviewRecordRead):
@@ -286,6 +310,79 @@ class ResearchGapMapRead(BaseModel):
     nodes: list[ConceptMapNodeRead]
     edges: list[ConceptMapEdgeRead]
     candidate_count: int = Field(ge=0)
+
+
+class GapDecisionValue(StrEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class ResearchGapDecisionCreate(BaseModel):
+    decision: GapDecisionValue
+    note: str | None = Field(default=None, max_length=2_000)
+
+
+class ResearchGapDecisionRead(ResearchGapDecisionCreate):
+    id: UUID
+    project_id: UUID
+    paper_id: UUID
+    parameter: ExtractionParameter
+    reviewer_id: UUID
+    created_at: datetime
+
+
+class BulkReviewAcceptRequest(BaseModel):
+    component_ids: list[UUID] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_unique_components(self) -> "BulkReviewAcceptRequest":
+        if len(set(self.component_ids)) != len(self.component_ids):
+            raise ValueError("component_ids must be unique")
+        return self
+
+
+class BulkReviewAcceptResponse(BaseModel):
+    accepted_count: int = Field(ge=1, le=200)
+
+
+class ChatHistoryMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4_000)
+
+
+class ProjectChatRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=2_000)
+    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=10)
+
+
+class ProjectChatSource(BaseModel):
+    source_id: str
+    paper_id: UUID
+    paper_title: str
+    parameter: ExtractionParameter | None = None
+    quote: str | None = None
+    page_number: int | None = Field(default=None, ge=1)
+    block_id: str | None = None
+
+
+class ProjectChatResponse(BaseModel):
+    answer: str
+    sources: list[ProjectChatSource]
+    model_name: str
+    review_notice: str = (
+        "Jawaban AI perlu diverifikasi kembali terhadap evidence dan PDF sumber."
+    )
+
+
+class ProjectChatMessageRead(BaseModel):
+    id: UUID
+    turn_id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    sources: list[ProjectChatSource] = Field(default_factory=list)
+    model_name: str | None = None
+    review_notice: str | None = None
+    created_at: datetime
 
 
 class HealthRead(BaseModel):

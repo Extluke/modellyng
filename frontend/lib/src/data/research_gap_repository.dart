@@ -13,6 +13,45 @@ final researchGapMapProvider = FutureProvider.autoDispose
       return ref.watch(researchGapRepositoryProvider).getMap(projectId);
     });
 
+final researchGapDecisionsProvider = FutureProvider.autoDispose
+    .family<List<ResearchGapDecision>, String>((ref, projectId) {
+      return ref.watch(researchGapRepositoryProvider).getDecisions(projectId);
+    });
+
+enum GapDecision { accepted, rejected }
+
+class ResearchGapDecision {
+  const ResearchGapDecision({
+    required this.id,
+    required this.projectId,
+    required this.paperId,
+    required this.parameter,
+    required this.decision,
+    required this.note,
+  });
+
+  final String id;
+  final String projectId;
+  final String paperId;
+  final String parameter;
+  final GapDecision decision;
+  final String? note;
+
+  String get candidateKey => '$paperId:$parameter';
+
+  factory ResearchGapDecision.fromJson(Map<String, dynamic> json) =>
+      ResearchGapDecision(
+        id: json['id'].toString(),
+        projectId: json['project_id'].toString(),
+        paperId: json['paper_id'].toString(),
+        parameter: json['parameter']?.toString() ?? '',
+        decision: json['decision'] == 'accepted'
+            ? GapDecision.accepted
+            : GapDecision.rejected,
+        note: json['note']?.toString(),
+      );
+}
+
 class ResearchGapMap {
   const ResearchGapMap({
     required this.projectId,
@@ -52,5 +91,28 @@ class ResearchGapRepository {
       '/api/v1/projects/$projectId/research-gap-map',
     );
     return ResearchGapMap.fromJson(response.data!);
+  }
+
+  Future<List<ResearchGapDecision>> getDecisions(String projectId) async {
+    final response = await _dio.get<List<dynamic>>(
+      '/api/v1/projects/$projectId/research-gap-decisions',
+    );
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ResearchGapDecision.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<ResearchGapDecision> saveDecision({
+    required String projectId,
+    required String paperId,
+    required String parameter,
+    required GapDecision decision,
+  }) async {
+    final response = await _dio.put<Map<String, dynamic>>(
+      '/api/v1/projects/$projectId/research-gaps/$paperId/$parameter/decision',
+      data: {'decision': decision.name},
+    );
+    return ResearchGapDecision.fromJson(response.data!);
   }
 }

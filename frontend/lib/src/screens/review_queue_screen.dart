@@ -11,7 +11,9 @@ String? validateRequiredReviewText(String value, String label) =>
     value.trim().isEmpty ? '$label tidak boleh kosong.' : null;
 
 class ReviewQueueScreen extends ConsumerStatefulWidget {
-  const ReviewQueueScreen({super.key});
+  const ReviewQueueScreen({super.key, this.userId});
+
+  final String? userId;
 
   @override
   ConsumerState<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
@@ -19,10 +21,70 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
 
 class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
   String? _projectFilter;
+  bool _acceptingAll = false;
+
+  Future<void> _acceptAllVisible(
+    List<ReviewQueueItem> items,
+    String userId,
+  ) async {
+    if (items.isEmpty || _acceptingAll) return;
+    final scope = _projectFilter == null
+        ? 'semua proyek yang sedang tampil'
+        : items.first.projectTitle;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Terima semua ${items.length} hasil?'),
+        content: Text(
+          'Semua hasil pada $scope akan dijadikan final tanpa diperiksa satu per satu. '
+          'Sitasi dan riwayat keputusan tetap tersimpan untuk audit.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton.icon(
+            key: const Key('confirm-accept-all-reviews'),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.done_all_rounded),
+            label: const Text('Ya, terima semua'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _acceptingAll = true);
+    try {
+      final accepted = await ref
+          .read(reviewRepositoryProvider)
+          .acceptAll(items.map((item) => item.componentId).toList());
+      ref.invalidate(reviewQueueProvider(userId));
+      ref.invalidate(reviewHistoryProvider(userId));
+      ref.invalidate(projectsProvider(userId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$accepted hasil berhasil diterima.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Terima semua gagal. Tidak ada hasil yang diubah sebagian.',
+          ),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _acceptingAll = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final userId = ref.watch(authRepositoryProvider).currentUser?.id;
+    final userId =
+        widget.userId ?? ref.watch(authRepositoryProvider).currentUser?.id;
     final queue = userId == null
         ? const AsyncValue<List<ReviewQueueItem>>.data([])
         : ref.watch(reviewQueueProvider(userId));
@@ -153,6 +215,23 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
               ),
           ],
           onChanged: (value) => setState(() => _projectFilter = value),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            key: const Key('accept-all-visible-reviews'),
+            onPressed: _acceptingAll
+                ? null
+                : () => _acceptAllVisible(visible, userId),
+            icon: _acceptingAll
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.done_all_rounded),
+            label: Text('Terima semua (${visible.length})'),
+          ),
         ),
         const SizedBox(height: 18),
         for (final group in groups.values) ...[

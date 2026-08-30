@@ -1,3 +1,4 @@
+import asyncio
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -19,11 +20,20 @@ from .schemas import (
     ComparativeMatrixRead,
     ConceptEvidenceMapRead,
     ResearchGapMapRead,
+    ResearchGapDecisionCreate,
+    ResearchGapDecisionRead,
     ReviewHistoryItemRead,
     ReviewRecordCreate,
     ReviewRecordRead,
     ReviewerAction,
+    ProjectChatMessageRead,
+    ProjectChatRequest,
+    ProjectChatResponse,
+    BulkReviewAcceptRequest,
+    BulkReviewAcceptResponse,
 )
+from .structured_results import build_structured_tables
+from .chat_service import ProjectChatBlock, ProjectChatContext, ProjectChatDocument
 
 
 class EntityNotFoundError(LookupError):
@@ -81,6 +91,7 @@ class SupabaseProjectRepository:
                 1
                 for paper in paper_relation
                 for component in paper.get("extracted_components", [])
+                if component.get("is_active", True)
                 if component.get("status") in {"verified", "edited"}
             )
         return ProjectRead.model_validate(
@@ -121,7 +132,7 @@ class SupabaseProjectRepository:
     def _project_select() -> str:
         return (
             "id,title,description,status,created_at,updated_at,"
-            "papers(id,status,extracted_components(id,status))"
+            "papers(id,status,extracted_components(id,status,is_active))"
         )
 
     async def create_project(
@@ -394,13 +405,14 @@ class SupabaseProjectRepository:
                 params={
                     "select": (
                         "id,paper_id,parameter,ai_value,final_value,status,confidence,"
-                        "model_name,prompt_version,created_at,"
+                        "model_name,prompt_version,created_at,is_active,"
                         "papers(id,project_id,title,original_filename,"
                         "projects(id,title)),"
                         "evidence_spans(quote,page_number,section,subsection,"
                         "paper_blocks(id,bounding_box))"
                     ),
                     "status": "eq.needs_review",
+                    "is_active": "eq.true",
                     "order": "created_at.desc",
                 },
             )
@@ -459,11 +471,12 @@ class SupabaseProjectRepository:
                 params={
                     "select": (
                         "id,paper_id,parameter,ai_value,final_value,status,confidence,"
-                        "model_name,prompt_version,created_at,"
+                        "model_name,prompt_version,created_at,is_active,"
                         "evidence_spans(quote,page_number,section,subsection,"
                         "paper_blocks(id,bounding_box))"
                     ),
                     "paper_id": f"eq.{paper_id}",
+                    "is_active": "eq.true",
                     "order": "created_at.desc",
                 },
             )
@@ -487,7 +500,11 @@ class SupabaseProjectRepository:
                     "bounding_box": block.get("bounding_box"),
                 })
             components.append(ExtractedComponentRead.model_validate({**row, "evidence": evidence}))
-        return PaperResultRead(paper=paper, components=components)
+        return PaperResultRead(
+            paper=paper,
+            components=components,
+            structured_tables=build_structured_tables(components),
+        )
 
     async def get_comparative_matrix(
         self, user: AuthenticatedUser, project_id: UUID
@@ -501,7 +518,7 @@ class SupabaseProjectRepository:
                     "select": (
                         "id,title,original_filename,created_at,"
                         "extracted_components(id,parameter,ai_value,final_value,status,"
-                        "confidence,created_at,evidence_spans(quote,page_number,section,"
+                        "confidence,created_at,is_active,evidence_spans(quote,page_number,section,"
                         "subsection,paper_blocks(id,bounding_box)))"
                     ),
                     "project_id": f"eq.{project_id}",
@@ -532,6 +549,10 @@ class SupabaseProjectRepository:
             )
             for component in components:
                 parameter = str(component.get("parameter") or "")
+                if not component.get("is_active", True):
+                    continue
+                if component.get("status") not in {"verified", "edited"}:
+                    continue
                 if parameter in latest or parameter not in row_cells:
                     continue
                 latest[parameter] = component
@@ -695,6 +716,198 @@ class SupabaseProjectRepository:
             "candidate_count": candidate_count,
         })
 
+    async def get_project_chat_context(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ProjectChatContext:
+        """Load searchable PDF text through the caller's RLS-scoped token."""
+        project = await self.get_project(user, project_id)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/papers",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,title,original_filename,status,"
+                        "paper_blocks(id,block_index,page_number,section,subsection,content)"
+                    ),
+                    "project_id": f"eq.{project_id}",
+                    "order": "created_at.asc",
+                    "paper_blocks.order": "block_index.asc",
+                },
+            )
+        self._raise_for_repository_error(response)
+        documents: list[ProjectChatDocument] = []
+        for row in response.json():
+            blocks = tuple(
+                ProjectChatBlock(
+                    id=str(block["id"]),
+                    page_number=int(block["page_number"]),
+                    content=str(block["content"]),
+                    section=str(block["section"]) if block.get("section") else None,
+                    subsection=(
+                        str(block["subsection"])
+                        if block.get("subsection")
+                        else None
+                    ),
+                )
+                for block in row.get("paper_blocks") or []
+                if str(block.get("content") or "").strip()
+            )
+            documents.append(
+                ProjectChatDocument(
+                    id=UUID(str(row["id"])),
+                    title=str(
+                        row.get("title")
+                        or row.get("original_filename")
+                        or "Paper"
+                    ),
+                    original_filename=str(row.get("original_filename") or "paper.pdf"),
+                    status=str(row.get("status") or "uploaded"),
+                    blocks=blocks,
+                )
+            )
+        return ProjectChatContext(
+            project_id=project.id,
+            project_title=project.title,
+            documents=tuple(documents),
+        )
+
+    async def list_project_chat_messages(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> list[ProjectChatMessageRead]:
+        await self.get_project(user, project_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/project_chat_messages",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,turn_id,role,content,sources,model_name,"
+                        "review_notice,created_at,position"
+                    ),
+                    "project_id": f"eq.{project_id}",
+                    "owner_id": f"eq.{user.id}",
+                    "order": "created_at.desc,position.desc",
+                    "limit": "200",
+                },
+            )
+        self._raise_for_repository_error(response)
+        rows = response.json()
+        return [ProjectChatMessageRead.model_validate(row) for row in reversed(rows)]
+
+    async def save_project_chat_exchange(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        request: ProjectChatRequest,
+        answer: ProjectChatResponse,
+    ) -> None:
+        await self.get_project(user, project_id)
+        turn_id = uuid4()
+        rows = [
+            {
+                "owner_id": str(user.id),
+                "project_id": str(project_id),
+                "turn_id": str(turn_id),
+                "position": 0,
+                "role": "user",
+                "content": request.question,
+                "sources": [],
+                "model_name": None,
+                "review_notice": None,
+            },
+            {
+                "owner_id": str(user.id),
+                "project_id": str(project_id),
+                "turn_id": str(turn_id),
+                "position": 1,
+                "role": "assistant",
+                "content": answer.answer,
+                "sources": [
+                    source.model_dump(mode="json") for source in answer.sources
+                ],
+                "model_name": answer.model_name,
+                "review_notice": answer.review_notice,
+            },
+        ]
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self._rest_url}/project_chat_messages",
+                headers=self._headers(user),
+                json=rows,
+            )
+        self._raise_for_repository_error(response)
+
+    async def list_research_gap_decisions(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> list[ResearchGapDecisionRead]:
+        await self.get_project(user, project_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/research_gap_decisions",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "id,project_id,paper_id,parameter,decision,note,reviewer_id,"
+                        "created_at,updated_at"
+                    ),
+                    "project_id": f"eq.{project_id}",
+                    "reviewer_id": f"eq.{user.id}",
+                    "order": "updated_at.desc",
+                },
+            )
+        self._raise_for_repository_error(response)
+        return [ResearchGapDecisionRead.model_validate(row) for row in response.json()]
+
+    async def save_research_gap_decision(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        paper_id: UUID,
+        parameter: ExtractionParameter,
+        payload: ResearchGapDecisionCreate,
+    ) -> ResearchGapDecisionRead:
+        if parameter not in {
+            ExtractionParameter.LIMITATIONS,
+            ExtractionParameter.FUTURE_WORK,
+        }:
+            raise InvalidReviewError(
+                "Keputusan gap hanya berlaku untuk keterbatasan atau future work"
+            )
+        await self.get_paper(user, project_id, paper_id)
+        matrix = await self.get_comparative_matrix(user, project_id)
+        has_candidate = any(
+            row.parameter == parameter
+            and any(cell.paper_id == paper_id for cell in row.cells)
+            for row in matrix.rows
+        )
+        if not has_candidate:
+            raise InvalidReviewError(
+                "Kandidat gap aktif dan terverifikasi tidak ditemukan"
+            )
+        row = {
+            "project_id": str(project_id),
+            "paper_id": str(paper_id),
+            "parameter": parameter.value,
+            "decision": payload.decision.value,
+            "note": payload.note,
+            "reviewer_id": str(user.id),
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self._rest_url}/research_gap_decisions",
+                headers={
+                    **self._headers(user, return_representation=True),
+                    "Prefer": "resolution=merge-duplicates,return=representation",
+                },
+                params={
+                    "on_conflict": "project_id,paper_id,parameter,reviewer_id"
+                },
+                json=row,
+            )
+        self._raise_for_repository_error(response)
+        return ResearchGapDecisionRead.model_validate(response.json()[0])
+
     async def download_private_pdf(
         self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
     ) -> tuple[bytes, str]:
@@ -709,6 +922,48 @@ class SupabaseProjectRepository:
             )
         self._raise_for_repository_error(response)
         return response.content, paper.original_filename or "paper.pdf"
+
+    async def get_evidence_preview_data(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        paper_id: UUID,
+        block_id: UUID,
+    ) -> tuple[bytes, int, str]:
+        # Authorize once, then fetch the private object and its RLS-scoped block
+        # concurrently to keep the evidence click path near one network round trip.
+        paper = await self.get_paper(user, project_id, paper_id)
+        if not paper.storage_key:
+            raise EntityNotFoundError("Paper ini tidak memiliki PDF")
+        encoded_path = quote(paper.storage_key, safe="/")
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            block_response, pdf_response = await asyncio.gather(
+                client.get(
+                    f"{self._rest_url}/paper_blocks",
+                    headers=self._headers(user),
+                    params={
+                        "select": "id,paper_id,page_number,content",
+                        "id": f"eq.{block_id}",
+                        "paper_id": f"eq.{paper_id}",
+                        "limit": "1",
+                    },
+                ),
+                client.get(
+                    f"{self._storage_url}/object/authenticated/"
+                    f"{self._storage_bucket}/{encoded_path}",
+                    headers=self._headers(user),
+                ),
+            )
+        self._raise_for_repository_error(block_response)
+        self._raise_for_repository_error(pdf_response)
+        rows = block_response.json()
+        if not rows:
+            raise EntityNotFoundError("Evidence tidak ditemukan")
+        return (
+            pdf_response.content,
+            int(rows[0]["page_number"]),
+            str(rows[0]["content"]),
+        )
 
     async def list_review_history(
         self, user: AuthenticatedUser
@@ -750,7 +1005,7 @@ class SupabaseProjectRepository:
                 f"{self._rest_url}/extracted_components",
                 headers=self._headers(user),
                 params={
-                    "select": "id,paper_id,ai_value,status,papers(project_id)",
+                    "select": "id,paper_id,ai_value,status,is_active,papers(project_id)",
                     "id": f"eq.{component_id}",
                     "limit": "1",
                 },
@@ -762,6 +1017,8 @@ class SupabaseProjectRepository:
         component = rows[0]
         if component["status"] != "needs_review":
             raise InvalidReviewError("Komponen ini sudah selesai ditinjau")
+        if not component.get("is_active", True):
+            raise InvalidReviewError("Komponen ini berasal dari versi analisis lama")
 
         component_status = {
             ReviewerAction.ACCEPT: "verified",
@@ -822,6 +1079,27 @@ class SupabaseProjectRepository:
             }
         )
 
+    async def accept_review_components(
+        self,
+        user: AuthenticatedUser,
+        payload: BulkReviewAcceptRequest,
+    ) -> BulkReviewAcceptResponse:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._rest_url}/rpc/accept_review_components",
+                headers=self._headers(user),
+                json={
+                    "p_component_ids": [
+                        str(component_id) for component_id in payload.component_ids
+                    ]
+                },
+            )
+        self._raise_for_repository_error(response)
+        rows = response.json()
+        if not rows:
+            raise RepositoryError("Aksi terima semua tidak mengembalikan hasil")
+        return BulkReviewAcceptResponse.model_validate(rows[0])
+
     async def _refresh_review_status(
         self,
         user: AuthenticatedUser,
@@ -838,6 +1116,7 @@ class SupabaseProjectRepository:
                     "select": "id",
                     "paper_id": f"eq.{paper_id}",
                     "status": "eq.needs_review",
+                    "is_active": "eq.true",
                     "limit": "1",
                 },
             )

@@ -19,7 +19,6 @@ class ComparativeMatrixScreen extends ConsumerStatefulWidget {
 class _ComparativeMatrixScreenState
     extends ConsumerState<ComparativeMatrixScreen> {
   String? _projectId;
-  String? _mobilePaperId;
 
   static const labels = <String, String>{
     'research_problem': 'Masalah penelitian',
@@ -83,7 +82,6 @@ class _ComparativeMatrixScreenState
                     ],
                     onChanged: (value) => setState(() {
                       _projectId = value;
-                      _mobilePaperId = null;
                     }),
                   ),
                   const SizedBox(height: 20),
@@ -125,104 +123,87 @@ class _ComparativeMatrixScreenState
       }
       return LayoutBuilder(
         builder: (context, constraints) {
-          return constraints.maxWidth >= 900
-              ? _desktopMatrix(value)
-              : _mobileMatrix(value);
+          final compact = constraints.maxWidth < 900;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (compact) ...[
+                const _MatrixSwipeNotice(),
+                const SizedBox(height: 10),
+              ],
+              _combinedMatrix(value, compact: compact),
+            ],
+          );
         },
       );
     },
   );
 
-  Widget _desktopMatrix(ComparativeMatrix matrix) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        dataRowMinHeight: 96,
-        dataRowMaxHeight: 180,
-        headingRowColor: WidgetStateProperty.all(AppColors.primarySoft),
-        columns: [
-          const DataColumn(
-            label: SizedBox(width: 170, child: Text('Parameter')),
-          ),
-          for (final paper in matrix.papers)
-            DataColumn(
-              label: SizedBox(
-                width: 260,
-                child: Text(
-                  paper.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+  Widget _combinedMatrix(ComparativeMatrix matrix, {required bool compact}) =>
+      Card(
+        key: const Key('combined-matrix-table'),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            dataRowMinHeight: 96,
+            dataRowMaxHeight: 180,
+            headingRowColor: WidgetStateProperty.all(AppColors.primarySoft),
+            columns: [
+              const DataColumn(
+                label: SizedBox(width: 170, child: Text('Parameter')),
               ),
-            ),
-        ],
-        rows: [
-          for (final row in matrix.rows)
-            DataRow(
-              cells: [
-                DataCell(
-                  Text(
-                    labels[row.parameter] ?? row.parameter,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+              for (final paper in matrix.papers)
+                DataColumn(
+                  label: SizedBox(
+                    width: compact ? 220 : 260,
+                    child: Text(
+                      paper.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
-                for (final paper in matrix.papers)
-                  DataCell(_cell(matrix, paper, row.cellFor(paper.id))),
-              ],
-            ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _mobileMatrix(ComparativeMatrix matrix) {
-    _mobilePaperId ??= matrix.papers.first.id;
-    final paper = matrix.papers.firstWhere((item) => item.id == _mobilePaperId);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: paper.id,
-          decoration: const InputDecoration(
-            labelText: 'Paper yang ditampilkan',
+            ],
+            rows: [
+              for (final row in matrix.rows)
+                DataRow(
+                  cells: [
+                    DataCell(
+                      Text(
+                        labels[row.parameter] ?? row.parameter,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    for (final paper in matrix.papers)
+                      DataCell(
+                        _cell(
+                          matrix,
+                          paper,
+                          row.cellFor(paper.id),
+                          width: compact ? 220 : 260,
+                        ),
+                      ),
+                  ],
+                ),
+            ],
           ),
-          items: [
-            for (final item in matrix.papers)
-              DropdownMenuItem(value: item.id, child: Text(item.title)),
-          ],
-          onChanged: (value) => setState(() => _mobilePaperId = value),
         ),
-        const SizedBox(height: 12),
-        for (final row in matrix.rows)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    labels[row.parameter] ?? row.parameter,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  _cell(matrix, paper, row.cellFor(paper.id)),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
+      );
 
-  Widget _cell(ComparativeMatrix matrix, MatrixPaper paper, MatrixCell? cell) {
+  Widget _cell(
+    ComparativeMatrix matrix,
+    MatrixPaper paper,
+    MatrixCell? cell, {
+    required double width,
+  }) {
     if (cell == null)
       return const Text(
         'Tidak tersedia',
         style: TextStyle(color: AppColors.muted),
       );
     return SizedBox(
-      width: 260,
+      width: width,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -257,6 +238,30 @@ class _ComparativeMatrixScreenState
       ),
     );
   }
+}
+
+class _MatrixSwipeNotice extends StatelessWidget {
+  const _MatrixSwipeNotice();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.primarySoft,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Row(
+      children: [
+        Icon(Icons.swipe_rounded, color: AppColors.primary),
+        SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Semua paper sudah digabung dalam satu matrix. Geser tabel ke samping untuk membandingkan kolom paper.',
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _MatrixMessage extends StatelessWidget {

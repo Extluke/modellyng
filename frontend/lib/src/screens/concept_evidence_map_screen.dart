@@ -49,6 +49,7 @@ class _ConceptEvidenceMapScreenState
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: _projectId,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Pilih proyek',
                     ),
@@ -56,7 +57,11 @@ class _ConceptEvidenceMapScreenState
                       for (final project in items)
                         DropdownMenuItem(
                           value: project.id,
-                          child: Text(project.title),
+                          child: Text(
+                            project.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                     ],
                     onChanged: (value) => setState(() {
@@ -104,12 +109,17 @@ class _ConceptEvidenceMapScreenState
         children: [
           DropdownButtonFormField<String>(
             initialValue: _paperId,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Fokus paper'),
             items: [
               for (final paper in papers)
                 DropdownMenuItem(
                   value: paper.paperId,
-                  child: Text(paper.label),
+                  child: Text(
+                    paper.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: (value) => setState(() => _paperId = value),

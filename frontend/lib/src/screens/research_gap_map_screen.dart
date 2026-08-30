@@ -20,6 +20,7 @@ class ResearchGapMapScreen extends ConsumerStatefulWidget {
 class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
   String? _projectId;
   String _source = 'all';
+  String? _savingCandidateKey;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +84,10 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                         setState(() => _source = value.first),
                   ),
                   const SizedBox(height: 18),
-                  _map(ref.watch(researchGapMapProvider(_projectId!))),
+                  _map(
+                    ref.watch(researchGapMapProvider(_projectId!)),
+                    ref.watch(researchGapDecisionsProvider(_projectId!)),
+                  ),
                 ],
               );
             },
@@ -93,7 +97,10 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
     );
   }
 
-  Widget _map(AsyncValue<ResearchGapMap> value) => value.when(
+  Widget _map(
+    AsyncValue<ResearchGapMap> value,
+    AsyncValue<List<ResearchGapDecision>> decisions,
+  ) => value.when(
     loading: () => const Center(
       child: Padding(
         padding: EdgeInsets.all(36),
@@ -103,6 +110,10 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
     error: (error, _) =>
         const _GapMessage('Research gap map belum dapat dimuat.'),
     data: (graph) {
+      final decisionByKey = {
+        for (final decision in decisions.value ?? const <ResearchGapDecision>[])
+          decision.candidateKey: decision,
+      };
       final gaps = graph.nodes
           .where(
             (node) =>
@@ -130,7 +141,12 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                   child: _GapChainCard(
                     graph: graph,
                     gap: gap,
+                    decision: decisionByKey['${gap.paperId}:${gap.parameter}'],
+                    saving:
+                        _savingCandidateKey ==
+                        '${gap.paperId}:${gap.parameter}',
                     onOpen: _openNode,
+                    onDecision: (decision) => _saveDecision(gap, decision),
                   ),
                 ),
             ],
@@ -151,17 +167,62 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
       ),
     );
   }
+
+  Future<void> _saveDecision(ConceptMapNode gap, GapDecision decision) async {
+    final projectId = _projectId;
+    final parameter = gap.parameter;
+    if (projectId == null || parameter == null) return;
+    final candidateKey = '${gap.paperId}:$parameter';
+    setState(() => _savingCandidateKey = candidateKey);
+    try {
+      await ref
+          .read(researchGapRepositoryProvider)
+          .saveDecision(
+            projectId: projectId,
+            paperId: gap.paperId,
+            parameter: parameter,
+            decision: decision,
+          );
+      ref.invalidate(researchGapDecisionsProvider(projectId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            decision == GapDecision.accepted
+                ? 'Kandidat gap dipilih untuk proses rumusan penelitian.'
+                : 'Kandidat dilewati. Lanjutkan ke kandidat berikutnya.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Keputusan gap belum dapat disimpan.'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingCandidateKey = null);
+    }
+  }
 }
 
 class _GapChainCard extends StatelessWidget {
   const _GapChainCard({
     required this.graph,
     required this.gap,
+    required this.decision,
+    required this.saving,
     required this.onOpen,
+    required this.onDecision,
   });
   final ResearchGapMap graph;
   final ConceptMapNode gap;
+  final ResearchGapDecision? decision;
+  final bool saving;
   final void Function(ResearchGapMap, ConceptMapNode) onOpen;
+  final ValueChanged<GapDecision> onDecision;
 
   @override
   Widget build(BuildContext context) {
@@ -186,9 +247,22 @@ class _GapChainCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Chip(
-                  avatar: Icon(Icons.lightbulb_outline_rounded, size: 16),
-                  label: Text('Kandidat · perlu ditinjau'),
+                Chip(
+                  avatar: Icon(
+                    decision == null
+                        ? Icons.help_outline_rounded
+                        : decision!.decision == GapDecision.accepted
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.skip_next_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    decision == null
+                        ? 'Belum diputuskan'
+                        : decision!.decision == GapDecision.accepted
+                        ? 'Dipilih'
+                        : 'Dilewati',
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -201,38 +275,91 @@ class _GapChainCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            Text(
-              gap.detail,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
             _MapStep(
               icon: Icons.description_outlined,
+              eyebrow: '1 · SUMBER PAPER',
               title: paper.label,
               subtitle: paper.detail,
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 17),
-              child: SizedBox(
-                height: 20,
-                child: VerticalDivider(width: 1, thickness: 2),
-              ),
+            const _FlowConnector(),
+            _MapStep(
+              icon: Icons.lightbulb_outline_rounded,
+              eyebrow: '2 · KANDIDAT GAP',
+              title: sourceLabel,
+              subtitle: gap.detail,
             ),
+            const _FlowConnector(),
             if (evidence.isEmpty)
               const _MapStep(
                 icon: Icons.warning_amber_rounded,
+                eyebrow: '3 · VALIDASI EVIDENCE',
                 title: 'Evidence belum tersedia',
                 subtitle: 'Kandidat tidak boleh dianggap sebagai gap final.',
               )
             else
-              for (final item in evidence)
+              for (var index = 0; index < evidence.length; index++)
                 _MapStep(
                   icon: Icons.fact_check_outlined,
-                  title: item.label,
-                  subtitle: item.detail,
+                  eyebrow: index == 0 ? '3 · VALIDASI EVIDENCE' : null,
+                  title: evidence[index].label,
+                  subtitle: evidence[index].detail,
                   action: 'Buka evidence PDF',
-                  onTap: () => onOpen(graph, item),
+                  onTap: () => onOpen(graph, evidence[index]),
                 ),
+            const _FlowConnector(),
+            const Text(
+              '4 · AMBIL KANDIDAT GAP INI?',
+              style: TextStyle(
+                color: AppColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    key: Key('accept-gap-${gap.paperId}-${gap.parameter}'),
+                    onPressed: saving
+                        ? null
+                        : () => onDecision(GapDecision.accepted),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Yes, gunakan'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: Key('reject-gap-${gap.paperId}-${gap.parameter}'),
+                    onPressed: saving
+                        ? null
+                        : () => onDecision(GapDecision.rejected),
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('No, lewati'),
+                  ),
+                ),
+              ],
+            ),
+            if (saving) ...[
+              const SizedBox(height: 10),
+              const LinearProgressIndicator(),
+            ],
+            if (decision != null) ...[
+              const _FlowConnector(),
+              _MapStep(
+                icon: decision!.decision == GapDecision.accepted
+                    ? Icons.edit_note_rounded
+                    : Icons.navigate_next_rounded,
+                eyebrow: '5 · PROSES BERIKUTNYA',
+                title: decision!.decision == GapDecision.accepted
+                    ? 'Susun rumusan penelitian'
+                    : 'Lanjut ke kandidat berikutnya',
+                subtitle: decision!.decision == GapDecision.accepted
+                    ? 'Kandidat masuk daftar gap terpilih dan siap menjadi dasar pertanyaan/tujuan baru.'
+                    : 'Kandidat tetap tersimpan sebagai riwayat keputusan, tetapi tidak dipakai.',
+              ),
+            ],
           ],
         ),
       ),
@@ -243,12 +370,14 @@ class _GapChainCard extends StatelessWidget {
 class _MapStep extends StatelessWidget {
   const _MapStep({
     required this.icon,
+    this.eyebrow,
     required this.title,
     required this.subtitle,
     this.action,
     this.onTap,
   });
   final IconData icon;
+  final String? eyebrow;
   final String title;
   final String subtitle;
   final String? action;
@@ -273,6 +402,17 @@ class _MapStep extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (eyebrow != null) ...[
+                  Text(
+                    eyebrow!,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 Text(
                   title,
                   style: const TextStyle(fontWeight: FontWeight.w800),
@@ -292,6 +432,19 @@ class _MapStep extends StatelessWidget {
           ),
         ],
       ),
+    ),
+  );
+}
+
+class _FlowConnector extends StatelessWidget {
+  const _FlowConnector();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(left: 10, top: 3, bottom: 3),
+    child: Icon(
+      Icons.arrow_downward_rounded,
+      size: 20,
+      color: AppColors.primary,
     ),
   );
 }

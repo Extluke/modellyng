@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,14 +9,17 @@ import 'package:modellyng/src/data/comparative_matrix_repository.dart';
 import 'package:modellyng/src/data/concept_map_repository.dart';
 import 'package:modellyng/src/data/export_repository.dart';
 import 'package:modellyng/src/data/paper_result_repository.dart';
+import 'package:modellyng/src/data/project_chat_repository.dart';
 import 'package:modellyng/src/data/project_repository.dart';
 import 'package:modellyng/src/data/research_gap_repository.dart';
+import 'package:modellyng/src/data/review_repository.dart';
 import 'package:modellyng/src/models/research_models.dart';
 import 'package:modellyng/src/screens/comparative_matrix_screen.dart';
 import 'package:modellyng/src/screens/concept_evidence_map_screen.dart';
 import 'package:modellyng/src/screens/dashboard_screen.dart';
 import 'package:modellyng/src/screens/export_results_screen.dart';
 import 'package:modellyng/src/screens/paper_result_screen.dart';
+import 'package:modellyng/src/screens/project_chat_screen.dart';
 import 'package:modellyng/src/screens/research_gap_map_screen.dart';
 import 'package:modellyng/src/screens/review_queue_screen.dart';
 import 'package:modellyng/src/screens/welcome_screen.dart';
@@ -31,6 +35,77 @@ void main() {
       validateRequiredReviewText('Perlu kutipan sumber', 'Alasan wajib'),
       isNull,
     );
+  });
+
+  testWidgets('review queue can confirm accepting every visible result', (
+    tester,
+  ) async {
+    final repository = _FakeReviewRepository();
+    const items = [
+      ReviewQueueItem(
+        componentId: 'component-1',
+        paperId: 'paper-1',
+        projectId: 'project-1',
+        projectTitle: 'Proyek A',
+        paperTitle: 'Paper A',
+        originalFilename: 'paper-a.pdf',
+        parameter: 'contribution',
+        aiValue: 'Kontribusi A',
+        confidence: 1,
+        evidence: [],
+        modelName: 'Gemini',
+      ),
+      ReviewQueueItem(
+        componentId: 'component-2',
+        paperId: 'paper-1',
+        projectId: 'project-1',
+        projectTitle: 'Proyek A',
+        paperTitle: 'Paper A',
+        originalFilename: 'paper-a.pdf',
+        parameter: 'limitations',
+        aiValue: 'Keterbatasan A',
+        confidence: 1,
+        evidence: [],
+        modelName: 'Gemini',
+      ),
+    ];
+    tester.view.physicalSize = const Size(540, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          reviewRepositoryProvider.overrideWithValue(repository),
+          reviewQueueProvider('test-user').overrideWith((ref) async => items),
+          reviewHistoryProvider(
+            'test-user',
+          ).overrideWith((ref) async => const []),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: ReviewQueueScreen(userId: 'test-user')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final acceptAll = find.byKey(const Key('accept-all-visible-reviews'));
+    expect(find.text('Terima semua (2)'), findsOneWidget);
+    await tester.ensureVisible(acceptAll);
+    await tester.tap(acceptAll);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Terima semua 2 hasil?'), findsOneWidget);
+    expect(
+      find.textContaining('semua proyek yang sedang tampil'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('confirm-accept-all-reviews')));
+    await tester.pumpAndSettle();
+
+    expect(repository.acceptedIds, ['component-1', 'component-2']);
+    expect(find.text('2 hasil berhasil diterima.'), findsOneWidget);
   });
 
   testWidgets('export screen downloads every evidence-preserving format', (
@@ -248,6 +323,10 @@ void main() {
         createdAt: null,
       ),
       components: [],
+      structuredTables: StructuredPaperTables(
+        researchQuestions: [],
+        methodology: [],
+      ),
     );
     await tester.pumpWidget(
       ProviderScope(
@@ -297,6 +376,10 @@ void main() {
             evidence: [ResultEvidence(quote: 'Verified quote', pageNumber: 3)],
           ),
         ],
+        structuredTables: StructuredPaperTables(
+          researchQuestions: [],
+          methodology: [],
+        ),
       );
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -316,6 +399,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('1/11 komponen tersedia'), findsOneWidget);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Halaman 3'));
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
@@ -393,6 +478,77 @@ void main() {
     expect(find.text('Reviewed A'), findsOneWidget);
     expect(find.text('Reviewed B'), findsOneWidget);
     expect(find.text('Evidence · hal. 4'), findsOneWidget);
+    expect(find.byKey(const Key('combined-matrix-table')), findsOneWidget);
+  });
+
+  testWidgets('mobile matrix keeps all papers in one scrollable table', (
+    tester,
+  ) async {
+    const project = ResearchProject(
+      id: 'project-mobile-matrix',
+      title: 'Mobile Matrix',
+      description: '',
+      paperCount: 2,
+      reviewCount: 0,
+      progress: 1,
+      status: ProjectStatus.ready,
+      updatedLabel: 'Baru saja',
+      accent: Colors.indigo,
+    );
+    const matrix = ComparativeMatrix(
+      projectId: 'project-mobile-matrix',
+      projectTitle: 'Mobile Matrix',
+      papers: [
+        MatrixPaper(id: 'paper-a', title: 'Paper A', originalFilename: 'a.pdf'),
+        MatrixPaper(id: 'paper-b', title: 'Paper B', originalFilename: 'b.pdf'),
+      ],
+      rows: [
+        MatrixRow(
+          parameter: 'methodology',
+          cells: [
+            MatrixCell(
+              paperId: 'paper-a',
+              aiValue: 'Method A',
+              finalValue: null,
+              status: VerificationStatus.verified,
+              confidence: .8,
+              evidence: [],
+            ),
+            MatrixCell(
+              paperId: 'paper-b',
+              aiValue: 'Method B',
+              finalValue: null,
+              status: VerificationStatus.verified,
+              confidence: .8,
+              evidence: [],
+            ),
+          ],
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider(
+            'matrix-user',
+          ).overrideWith((ref) async => [project]),
+          comparativeMatrixProvider(
+            'project-mobile-matrix',
+          ).overrideWith((ref) async => matrix),
+        ],
+        child: const MaterialApp(
+          home: ComparativeMatrixScreen(userId: 'matrix-user'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('combined-matrix-table')), findsOneWidget);
+    expect(find.text('Paper yang ditampilkan'), findsNothing);
+    expect(find.textContaining('Semua paper sudah digabung'), findsOneWidget);
   });
 
   testWidgets(
@@ -446,7 +602,7 @@ void main() {
   ) async {
     const project = ResearchProject(
       id: 'project-map',
-      title: 'Map Project',
+      title: 'Map Project With A Very Long Responsive Project Title',
       description: '',
       paperCount: 1,
       reviewCount: 0,
@@ -462,7 +618,8 @@ void main() {
         ConceptMapNode(
           id: 'paper:paper-a',
           kind: 'paper',
-          label: 'Paper A',
+          label:
+              'How to Optimize SQL Queries? A Comparison Between Split, Holistic, and Hybrid Approaches',
           detail: 'a.pdf',
           paperId: 'paper-a',
           parameter: null,
@@ -500,6 +657,10 @@ void main() {
         ),
       ],
     );
+    tester.view.physicalSize = const Size(420, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -512,10 +673,16 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Paper A'), findsWidgets);
+    expect(
+      find.text(
+        'How to Optimize SQL Queries? A Comparison Between Split, Holistic, and Hybrid Approaches',
+      ),
+      findsWidgets,
+    );
     expect(find.text('Metodologi'), findsOneWidget);
     expect(find.text('Verified quote'), findsOneWidget);
     expect(find.text('Buka halaman PDF'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('research gap map labels candidates and preserves PDF evidence', (
@@ -578,24 +745,371 @@ void main() {
         ),
       ],
     );
+    final repository = _FakeGapRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          researchGapRepositoryProvider.overrideWithValue(repository),
           projectsProvider('gap-user').overrideWith((ref) async => [project]),
           researchGapMapProvider(
             'project-gap',
           ).overrideWith((ref) async => graph),
         ],
         child: const MaterialApp(
-          home: ResearchGapMapScreen(userId: 'gap-user'),
+          home: Scaffold(body: ResearchGapMapScreen(userId: 'gap-user')),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Kandidat · perlu ditinjau'), findsOneWidget);
+    expect(find.text('Belum diputuskan'), findsOneWidget);
     expect(find.text('The sample only covered one city.'), findsOneWidget);
     expect(find.text('Paper A'), findsOneWidget);
     expect(find.text('Halaman 9'), findsOneWidget);
     expect(find.text('Buka evidence PDF'), findsOneWidget);
+    expect(find.text('Yes, gunakan'), findsOneWidget);
+    expect(find.text('No, lewati'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yes, gunakan'));
+    await tester.pumpAndSettle();
+    expect(repository.saved, [GapDecision.accepted]);
+    expect(find.text('Susun rumusan penelitian'), findsOneWidget);
   });
+
+  testWidgets('structured result renders both requested tables', (
+    tester,
+  ) async {
+    const query = (projectId: 'project-table', paperId: 'paper-table');
+    const result = PaperResult(
+      paper: ProjectPaper(
+        id: 'paper-table',
+        projectId: 'project-table',
+        originalFilename: 'table.pdf',
+        storageKey: 'owner/project/table.pdf',
+        fileSizeBytes: 2048,
+        status: PaperStatus.ready,
+        pageCount: 5,
+        languageCode: 'en',
+        title: 'Structured paper',
+        authors: [],
+        jobStatus: PaperJobStatus.completed,
+        processingStage: 'ai_extraction_complete',
+        processingProgress: 1,
+        processingError: null,
+        createdAt: null,
+      ),
+      components: [],
+      structuredTables: StructuredPaperTables(
+        researchQuestions: [
+          ResearchQuestionTableRow(
+            number: 1,
+            question: 'Which index is fastest?',
+            relatedObject: 'B-tree index',
+            discussionDirection: 'Measure latency',
+            evidencePage: 3,
+            evidenceQuote: 'Which index is fastest?',
+          ),
+        ],
+        methodology: [
+          MethodologyTableRow(
+            content: 'Quantitative experiment',
+            form: 'Eksperimen / Kuantitatif',
+            mainActivity: 'TPC-H benchmark',
+            activityDirection: 'Compare indexes',
+            finalGoal: 'Measure latency',
+          ),
+        ],
+      ),
+    );
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          paperResultProvider(query).overrideWith((ref) async => result),
+        ],
+        child: const MaterialApp(
+          home: PaperResultScreen(
+            projectId: 'project-table',
+            paperId: 'paper-table',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('research-question-table')), findsOneWidget);
+    expect(find.byKey(const Key('methodology-table')), findsOneWidget);
+    expect(find.text('Which index is fastest?'), findsOneWidget);
+    expect(find.text('B-tree index'), findsOneWidget);
+    expect(
+      find.byKey(const Key('download-structured-tables-pdf')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('project chatbot displays answer and evidence source', (
+    tester,
+  ) async {
+    const project = ResearchProject(
+      id: 'project-chat',
+      title: 'Chat Project',
+      description: '',
+      paperCount: 2,
+      reviewCount: 0,
+      progress: 1,
+      status: ProjectStatus.ready,
+      updatedLabel: 'Baru saja',
+      accent: Colors.indigo,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectChatRepositoryProvider.overrideWithValue(
+            _FakeChatRepository(),
+          ),
+          paperPdfProvider((
+            projectId: 'project-chat',
+            paperId: 'paper-a',
+          )).overrideWith((ref) async => Uint8List(0)),
+        ],
+        child: const MaterialApp(home: ProjectChatScreen(project: project)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apa perbedaan metodologi antar paper?'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Paper A memakai survei; Paper B memakai eksperimen.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('S1 · Paper A · hal. 4'), findsOneWidget);
+    expect(find.textContaining('perlu diverifikasi'), findsOneWidget);
+
+    final sourceButton = find.byKey(const Key('chat-source-S1'));
+    await tester.ensureVisible(sourceButton);
+    tester.widget<TextButton>(sourceButton).onPressed!();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    final viewer = tester.widget<PaperResultScreen>(
+      find.byType(PaperResultScreen),
+    );
+    expect(viewer.paperId, 'paper-a');
+    expect(viewer.initialPage, 4);
+    expect(viewer.initialHighlightText, 'We conducted a survey.');
+    expect(viewer.initialBlockId, '00000000-0000-0000-0000-000000000099');
+  });
+
+  testWidgets('project chatbot restores permanent history with citations', (
+    tester,
+  ) async {
+    const project = ResearchProject(
+      id: 'project-history',
+      title: 'History Project',
+      description: '',
+      paperCount: 1,
+      reviewCount: 0,
+      progress: 1,
+      status: ProjectStatus.ready,
+      updatedLabel: 'Baru saja',
+      accent: Colors.indigo,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectChatRepositoryProvider.overrideWithValue(
+            _HistoryChatRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: ProjectChatScreen(project: project)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pertanyaan tersimpan'), findsOneWidget);
+    expect(find.text('Jawaban tersimpan dari PDF.'), findsOneWidget);
+    expect(
+      find.textContaining('S1 · Paper Persisten · hal. 7'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('perlu diverifikasi'), findsOneWidget);
+  });
+
+  testWidgets('citation navigation opens the PDF evidence tab immediately', (
+    tester,
+  ) async {
+    const query = (projectId: 'project-citation', paperId: 'paper-citation');
+    const result = PaperResult(
+      paper: ProjectPaper(
+        id: 'paper-citation',
+        projectId: 'project-citation',
+        originalFilename: 'citation.pdf',
+        storageKey: 'owner/project/citation.pdf',
+        fileSizeBytes: 1024,
+        status: PaperStatus.ready,
+        pageCount: 4,
+        languageCode: 'en',
+        title: 'Citation paper',
+        authors: [],
+        jobStatus: PaperJobStatus.completed,
+        processingStage: 'ai_extraction_complete',
+        processingProgress: 1,
+        processingError: null,
+        createdAt: null,
+      ),
+      components: [],
+      structuredTables: StructuredPaperTables(
+        researchQuestions: [],
+        methodology: [],
+      ),
+    );
+    tester.view.physicalSize = const Size(540, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          paperResultProvider(query).overrideWith((ref) async => result),
+          paperPdfProvider(
+            query,
+          ).overrideWith((ref) => Completer<Uint8List>().future),
+        ],
+        child: const MaterialApp(
+          home: PaperResultScreen(
+            projectId: 'project-citation',
+            paperId: 'paper-citation',
+            initialPage: 4,
+            initialHighlightText: 'The supporting paragraph.',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final tabBar = tester.widget<TabBar>(find.byType(TabBar));
+    expect(tabBar.controller!.index, 1);
+    expect(find.text('Mengunduh PDF privat…'), findsOneWidget);
+  });
+
+  test('PDF citation highlight tolerates line breaks and punctuation', () {
+    final pattern = buildPdfHighlightPattern(
+      'We conducted a\nsurvey, across multiple organizations.',
+      'We conducted a survey across multiple organizations.',
+    );
+    expect(pattern, isNotNull);
+    expect(
+      pattern!.hasMatch(
+        'We conducted a\nsurvey, across multiple organizations.',
+      ),
+      isTrue,
+    );
+    expect(buildPdfHighlightPattern('unrelated page', 'missing quote'), isNull);
+  });
+}
+
+class _FakeGapRepository extends ResearchGapRepository {
+  _FakeGapRepository() : super(Dio());
+  final saved = <GapDecision>[];
+  final decisions = <ResearchGapDecision>[];
+
+  @override
+  Future<List<ResearchGapDecision>> getDecisions(String projectId) async =>
+      List.unmodifiable(decisions);
+
+  @override
+  Future<ResearchGapDecision> saveDecision({
+    required String projectId,
+    required String paperId,
+    required String parameter,
+    required GapDecision decision,
+  }) async {
+    saved.add(decision);
+    final value = ResearchGapDecision(
+      id: 'decision-1',
+      projectId: projectId,
+      paperId: paperId,
+      parameter: parameter,
+      decision: decision,
+      note: null,
+    );
+    decisions
+      ..clear()
+      ..add(value);
+    return value;
+  }
+}
+
+class _FakeReviewRepository extends ReviewRepository {
+  _FakeReviewRepository() : super(Dio());
+
+  List<String> acceptedIds = [];
+
+  @override
+  Future<int> acceptAll(List<String> componentIds) async {
+    acceptedIds = List.of(componentIds);
+    return componentIds.length;
+  }
+}
+
+class _FakeChatRepository extends ProjectChatRepository {
+  _FakeChatRepository() : super(Dio());
+
+  @override
+  Future<List<StoredProjectChatMessage>> getHistory(String projectId) async =>
+      const [];
+
+  @override
+  Future<ProjectChatAnswer> ask({
+    required String projectId,
+    required String question,
+    required List<ChatHistoryMessage> history,
+  }) async => const ProjectChatAnswer(
+    answer: 'Paper A memakai survei; Paper B memakai eksperimen.',
+    sources: [
+      ProjectChatSource(
+        sourceId: 'S1',
+        paperId: 'paper-a',
+        paperTitle: 'Paper A',
+        parameter: 'methodology',
+        quote: 'We conducted a survey.',
+        pageNumber: 4,
+        blockId: '00000000-0000-0000-0000-000000000099',
+      ),
+    ],
+    modelName: 'gemini-test',
+    reviewNotice: 'Jawaban AI perlu diverifikasi kembali terhadap evidence.',
+  );
+}
+
+class _HistoryChatRepository extends ProjectChatRepository {
+  _HistoryChatRepository() : super(Dio());
+
+  @override
+  Future<List<StoredProjectChatMessage>> getHistory(
+    String projectId,
+  ) async => const [
+    StoredProjectChatMessage(
+      role: 'user',
+      content: 'Pertanyaan tersimpan',
+      sources: [],
+      reviewNotice: null,
+    ),
+    StoredProjectChatMessage(
+      role: 'assistant',
+      content: 'Jawaban tersimpan dari PDF.',
+      sources: [
+        ProjectChatSource(
+          sourceId: 'S1',
+          paperId: 'paper-persisted',
+          paperTitle: 'Paper Persisten',
+          parameter: '',
+          quote: 'Evidence persisted.',
+          pageNumber: 7,
+          blockId: '00000000-0000-0000-0000-000000000099',
+        ),
+      ],
+      reviewNotice: 'Jawaban AI perlu diverifikasi kembali terhadap evidence.',
+    ),
+  ];
 }

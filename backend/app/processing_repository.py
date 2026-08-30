@@ -175,6 +175,7 @@ class PdfProcessingRepository:
                 "confidence": component.confidence,
                 "model_name": extraction.model_name,
                 "prompt_version": extraction.prompt_version,
+                "is_active": False,
             }
             for component in extraction.components
         ]
@@ -216,6 +217,17 @@ class PdfProcessingRepository:
                     json=evidence_rows,
                 )
             self._raise_for_error(response)
+
+        # Activate the complete new result only after both components and
+        # evidence have been persisted. The database function switches the
+        # version atomically while retaining older rows for audit history.
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{self._rest_url}/rpc/activate_analysis_components",
+                headers={**self._headers, "Prefer": "return=minimal"},
+                json={"p_job_id": str(job_id), "p_paper_id": str(paper_id)},
+            )
+        self._raise_for_error(response)
 
         metadata = extraction.metadata
         paper_update: dict[str, object] = {"status": "needs_review"}

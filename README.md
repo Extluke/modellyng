@@ -10,12 +10,13 @@ hasil AI -> kutipan evidence -> blok/halaman sumber -> PDF privat asli
 AI tidak pernah dianggap final otomatis. Semua komponen harus tetap dapat
 ditinjau manusia melalui tindakan Accept, Edit, Reject, atau re-analysis.
 
-> Status snapshot: 23 Agustus 2026. Ini adalah MVP lokal yang sudah dapat
+> Status snapshot: 30 Agustus 2026. Ini adalah MVP lokal yang sudah dapat
 > didemonstrasikan end-to-end, tetapi **belum siap untuk deployment publik atau
-> dipakai sebagai sumber sintesis final**. QA langsung menemukan dua defect P1
-> pada versioning re-analysis dan penyaringan hasil rejected/unsupported. Baca
-> `docs/QA_REPORT_2026-08-23.md` sebelum mengubah fitur Review, Matrix, Maps,
-> atau Export.
+> dipakai sebagai sumber sintesis final**. Dua defect integritas P1 yang
+> ditemukan pada QA 23 Agustus sudah diperbaiki dan dilindungi regression test.
+> Baca `docs/QA_REPORT_2026-08-23.md`, `docs/QA_REPORT_2026-08-25.md`, dan
+> `docs/PROJECT_STATUS.md` sebelum mengubah Review, Matrix, Maps, Chat, atau
+> Export.
 
 ## Baca ini dahulu jika Anda AI/coding agent baru
 
@@ -34,9 +35,10 @@ Supabase, atau Gemini tanpa architecture decision yang disetujui tim. Jangan
 menonaktifkan RLS, membuat bucket PDF publik, memasukkan service-role/Gemini
 key ke Flutter, atau menganggap output AI sebagai kebenaran final.
 
-Snapshot ini disusun dari branch `codex/review-reanalysis`. Kondisi working
-tree dapat berubah setelah handoff, jadi selalu jalankan `git status` sendiri
-dan jangan menghapus atau menimpa perubahan lokal yang bukan bagian task Anda.
+Snapshot ini disusun dari branch `codex/visual-research-workflow`. Kondisi
+working tree dapat berubah setelah handoff, jadi selalu jalankan `git status`
+sendiri dan jangan menghapus atau menimpa perubahan lokal yang bukan bagian
+task Anda.
 
 ## Arsitektur yang dikunci
 
@@ -51,7 +53,7 @@ dan jangan menghapus atau menimpa perubahan lokal yang bukan bagian task Anda.
 | Background job | Celery + Redis | Pemrosesan PDF dan Gemini di luar API process |
 | PDF parsing | PyMuPDF | Teks per halaman dan metadata lokal |
 | AI | Gemini via backend | Ekstraksi JSON 11 komponen akademik |
-| PDF viewer | `pdfrx` | Menampilkan byte PDF privat yang sudah diotorisasi |
+| PDF/evidence viewer | `pdfrx` + preview PyMuPDF | Menampilkan PDF privat atau preview halaman evidence ter-highlight setelah otorisasi |
 
 Trust boundary:
 
@@ -75,7 +77,8 @@ frontend/
     data/                   # Dio/Supabase repositories + Riverpod providers
     models/                 # project, paper, status, stage
     routing/                # /welcome, /auth, /app + auth guard
-    screens/                # dashboard, projects, review, matrix, maps, account
+    screens/                # dashboard, projects, review, matrix, maps, chat,
+                            # result, dan account
     theme/ dan widgets/     # design tokens dan reusable widgets
   test/widget_test.dart
 
@@ -86,6 +89,10 @@ backend/
   app/tasks.py              # Celery PDF/Gemini pipeline + retry
   app/pdf_processing.py     # PyMuPDF extraction
   app/ai_extraction.py      # prompt/schema/evidence verification/fallback
+  app/chat_service.py       # grounded project chat + citation validation
+  app/evidence_preview.py   # highlighted private-page PNG preview
+  app/structured_results.py # table derivation for structured paper results
+  app/structured_pdf.py     # authenticated structured-table PDF generation
   app/schemas.py            # explicit API models dan status enums
   tests/
 
@@ -99,6 +106,8 @@ docs/
   CONTRIBUTING.md
   AI_HANDOFF_PROMPT.md
   QA_REPORT_2026-08-23.md
+  QA_REPORT_2026-08-25.md
+  decisions/                # accepted architecture decision records
 ```
 
 `frontend/lib/src/screens/project_workspace_screen.dart` dan
@@ -109,10 +118,11 @@ sudah production-backed. Flow aktif masuk melalui `AppShell`.
 ## Status fitur: implementasi vs hasil QA
 
 `Selesai implementasi` berarti UI/API/alur dasarnya sudah ada. Status tersebut
-tidak otomatis berarti fitur bebas defect atau aman untuk data riset. Kolom QA
-di bawah adalah sumber kebenaran snapshot ini.
+tidak otomatis berarti fitur bebas defect atau aman untuk data riset. Status QA
+di bawah menggabungkan bukti browser, live API, dan regression test yang dirinci
+di dua laporan QA serta `docs/PROJECT_STATUS.md`.
 
-| Area | Implementasi | QA langsung | Catatan nyata |
+| Area | Implementasi | Status QA | Catatan nyata |
 |---|---|---|---|
 | Auth | Selesai | PASS | Register, login, logout, session guard Supabase |
 | Project | Selesai | PASS | Create/list/open project dan dashboard owner-scoped |
@@ -120,15 +130,16 @@ di bawah adalah sumber kebenaran snapshot ini.
 | PDF processing | Selesai | PASS dengan syarat | Celery worker wajib aktif; tanpa worker paper berhenti pada 0% |
 | Gemini extraction | Selesai | PASS dengan fallback | Tepat 11 parameter; model primer sempat 503 dan fallback berhasil |
 | Evidence verification | Selesai | PASS | Quote hanya disimpan bila cocok dengan blok pada halaman yang diklaim |
-| Human Review Accept/Edit/Reject | Selesai | PASS | Alasan Reject wajib; keputusan dan nilai AI lama tetap dapat diaudit |
-| Re-analysis | Ada, belum benar | **FAIL / P1** | Job baru berjalan, tetapi komponen job lama tetap aktif sehingga antrean terduplikasi dan progres dapat negatif |
+| Human Review Accept/Edit/Reject/Bulk Accept | Selesai | PASS | Alasan Reject wajib; “Terima semua” memakai konfirmasi, transaksi owner-scoped, dan audit trail |
+| Re-analysis | Selesai | PASS | Riwayat lama dipertahankan; hasil job lengkap dipromosikan atomik sebagai satu versi aktif sehingga queue/progress tidak bercampur |
 | Review history | Selesai terbatas | PASS | Read-only, maksimum 100 keputusan terbaru; akses dari Account belum langsung ke history |
-| Structured Paper Result | Selesai | PASS | 11/11 nilai AI/final, confidence, status, evidence, metadata |
-| Private Evidence PDF Viewer | Selesai | PASS dengan catatan | Owner-scoped dan navigasi halaman benar; initial render mobile sekitar 15–20 detik |
-| Comparative Paper Matrix | Ada, integrity-blocked | **FAIL / P1** | Backend masih memasukkan rejected/unsupported; UI melabeli semua non-edited sebagai “Terverifikasi” |
-| Concept/Evidence Map | Ada, integrity-blocked | **FAIL / P1** | Rantai dan link PDF bekerja, tetapi node rejected/unsupported masih ikut dibuat |
-| Research Gap Map | Ada, integrity-blocked | **FAIL / P1** | Filter/candidate UI bekerja, tetapi sumber rejected/unsupported masih dapat menjadi kandidat |
-| Ekspor hasil | Selesai secara mekanis | PASS dengan batasan integritas | DOCX/XLSX/CSV/PPTX valid dan terunduh, tetapi mengikuti dataset Matrix saat ini; status harus diperiksa sampai DEF-002 diperbaiki |
+| Structured Paper Result | Selesai | PASS | 11/11 nilai AI/final, tabel pertanyaan penelitian, tabel metodologi lima kolom, evidence, dan PDF tabel terautentikasi |
+| Private Evidence PDF Viewer | Selesai | PASS dengan catatan | Viewer penuh tetap owner-scoped; citation chat memakai preview satu halaman ter-highlight dan jalur cepat terautentikasi |
+| Comparative Paper Matrix | Selesai | PASS | Semua paper ready digabung dalam satu tabel responsif; hanya versi aktif `verified`/`edited` yang masuk |
+| Concept/Evidence Map | Selesai | PASS | Rantai paper→concept→evidence memakai knowledge result aktif dan link PDF privat |
+| Research Gap Map | Selesai | PASS | Flow paper→candidate→evidence→Yes/No→aksi berikutnya; keputusan owner-scoped tersimpan |
+| Chatbot proyek | Selesai | PASS dengan ketergantungan provider | RAG memakai blok PDF owner-scoped, menolak pertanyaan tak ter-grounding, memvalidasi citation, dan memulihkan history permanen |
+| Ekspor hasil | Selesai | PASS | DOCX/XLSX/CSV/PPTX valid; PDF tambahan tersedia untuk tabel pertanyaan/metodologi dan synthesis export hanya memakai data aktif terreview |
 | Responsive UI | Selesai untuk flow aktif | PASS | Alur utama dipakai pada viewport mobile dan desktop tanpa overflow fatal |
 
 Sebelas parameter ekstraksi:
@@ -193,14 +204,21 @@ GET  /api/v1/projects/{project_id}/papers
 POST /api/v1/projects/{project_id}/papers/{paper_id}/process
 GET  /api/v1/projects/{project_id}/papers/{paper_id}/result
 GET  /api/v1/projects/{project_id}/papers/{paper_id}/pdf
+GET  /api/v1/projects/{project_id}/papers/{paper_id}/evidence/{block_id}/preview.png
+GET  /api/v1/projects/{project_id}/papers/{paper_id}/structured-tables.pdf
 
 GET  /api/v1/projects/{project_id}/comparative-matrix
 GET  /api/v1/projects/{project_id}/concept-evidence-map
 GET  /api/v1/projects/{project_id}/research-gap-map
+GET  /api/v1/projects/{project_id}/research-gap-decisions
+PUT  /api/v1/projects/{project_id}/research-gaps/{paper_id}/{parameter}/decision
+POST /api/v1/projects/{project_id}/chat
+GET  /api/v1/projects/{project_id}/chat/messages
 GET  /api/v1/projects/{project_id}/export/{docx|xlsx|csv|pptx}
 
 GET  /api/v1/reviews
 GET  /api/v1/reviews/history
+POST /api/v1/reviews/accept-all
 POST /api/v1/reviews/{component_id}
 ```
 
@@ -219,6 +237,8 @@ Migration yang sudah ada membentuk:
 - `extracted_components`
 - `evidence_spans`
 - `review_actions`
+- `research_gap_decisions`
+- `project_chat_messages`
 - private bucket `private-papers`
 
 RLS aktif untuk seluruh tabel product. Storage policy terbaru memverifikasi
@@ -262,6 +282,7 @@ GEMINI_API_KEY=
 MODELLYNG_GEMINI_MODEL=gemini-flash-latest
 MODELLYNG_GEMINI_FALLBACK_MODEL=gemini-flash-lite-latest
 MODELLYNG_GEMINI_MAX_INPUT_CHARS=400000
+MODELLYNG_GEMINI_CHAT_TIMEOUT_MS=12000
 ```
 
 Jangan menaruh nilai key sebenarnya di README, Git, Flutter, test, screenshot,
@@ -310,19 +331,26 @@ desktop. Build web tidak bergantung pada konfigurasi tersebut.
 
 Baseline terakhir yang benar-benar dijalankan:
 
-- Backend: **39 tests passed**.
+- Backend: **62 tests passed**.
 - Flutter: **static analysis clean**.
-- Flutter: **12 widget tests passed**.
+- Flutter: **19 widget tests passed**.
 - Flutter web release: **build succeeded**.
 - Redis dan local Supabase: healthy.
 - Runtime recovery test: dua PDF masing-masing menghasilkan 11 komponen dan
   berpindah ke `needs_review`.
-- Manual browser QA nyata (bukan hanya membaca kode): login, membuat project,
+- Manual browser QA nyata pada iterasi 2026-08-23: login, membuat project,
   mengunggah dua PDF, menunggu worker/Gemini, Structured Result, viewer PDF,
   Accept/Edit/Reject/re-analysis, history, Matrix, kedua Maps, empat format
   export, search/filter, Account/privacy, logout, serta layout mobile/desktop.
 - Project QA: `243ba792-bd27-43ba-926b-45a19ae7b0cb`; detail langkah, bukti,
   defect, dan kondisi akhir ada di `docs/QA_REPORT_2026-08-23.md`.
+- Authenticated live smoke pada 2026-08-25: login akun QA, tabel terstruktur,
+  Matrix gabungan dengan status aktif terreview, flow gap No→Yes, chatbot
+  evidence-linked, dan PDF 2 halaman. Detail ada di
+  `docs/QA_REPORT_2026-08-25.md`.
+- Regression 2026-08-30 mencakup grounded-chat refusal, citation guards,
+  penyimpanan history chat owner-scoped, preview evidence satu halaman, dan
+  validasi transaksional “Terima semua”.
 
 Perintah wajib sebelum handoff:
 
@@ -341,93 +369,74 @@ Untuk perubahan web, uji flow yang berubah pada lebar mobile dan desktop.
 
 ## Known issues dan keterbatasan nyata
 
-1. **P1 — Re-analysis tidak memiliki konsep versi aktif/superseded.** Job baru
-   menambah 11 row `extracted_components`, sementara row job lama yang masih
-   `needs_review` tetap masuk antrean dan perhitungan readiness. Reproduksi QA
-   menghasilkan `20 tersisa` dan `-9/11 selesai ditinjau`. History lama harus
-   dipertahankan, tetapi hanya komponen dari job aktif terbaru yang boleh masuk
-   queue/progress/result/readiness.
-2. **P1 — Matrix/Concept Map/Research Gap Map masih mempublikasikan komponen
-   `rejected`/`unsupported`.** `get_comparative_matrix()` mengambil komponen
-   terbaru per parameter tanpa filter status; Matrix UI memberi label hijau
-   “Terverifikasi” pada semua status selain `edited`; kedua Map mengonsumsi cell
-   tersebut. Hanya `verified` dan `edited` yang boleh menjadi knowledge result.
-   Export saat ini juga mengikuti dataset Matrix, sehingga status dalam artifact
-   harus dianggap wajib sampai defect ini diperbaiki.
-3. **P2 — Kuota masih presentasional.** Setelah dua PDF diproses, Dashboard dan
+1. **P2 — Kuota masih presentasional.** Setelah dua PDF diproses, Dashboard dan
    Account tetap menampilkan `0 / 5 paper hari ini`.
-4. **P3 — Initial render PDF mobile lambat.** Byte PDF berhasil diunduh, tetapi
-   renderer dapat menampilkan “Menyiapkan PDF privat…” selama 15–20 detik tanpa
-   persentase atau timeout.
-5. **P3 — Audit log sulit ditemukan pada antrean panjang.** Aksi Account hanya
+2. **P3 — Initial render PDF penuh pada mobile dapat lambat.** Jalur citation
+   chat sudah memakai preview satu halaman dan cache byte berbatas waktu, tetapi
+   viewer dokumen penuh masih dapat menampilkan “Menyiapkan PDF privat…” selama
+   15–20 detik tanpa persentase atau timeout.
+3. **P3 — Audit log sulit ditemukan pada antrean panjang.** Aksi Account hanya
    membuka halaman Review; pengguna tetap harus menggulir ke expansion history.
-6. Hanya PDF dengan searchable text yang didukung. Scanned/image-only PDF belum
+4. Hanya PDF dengan searchable text yang didukung. Scanned/image-only PDF belum
    memiliki OCR.
-7. PDF viewer baru menavigasi ke halaman evidence; exact quote highlighting
-   atau bounding-box overlay belum diterapkan.
-8. Gemini masih dapat mengalami quota/high demand. Retry dan fallback sudah
-   tersedia, tetapi provider eksternal tidak dapat dijamin selalu berhasil.
-9. Project Overview melakukan polling hanya ketika job yang sedang tersimpan
+5. Citation chat mencoba menyorot kutipan pada preview/halaman sumber dan tetap
+   jujur bila pencocokan teks gagal. Evidence non-chat masih mengutamakan
+   navigasi halaman; bounding-box presisi lintas semua jalur belum tersedia.
+6. Gemini masih dapat mengalami quota/high demand. Ekstraksi memakai retry dan
+   fallback terikat; chat memakai dua percobaan singkat dengan timeout dan gagal
+   secara eksplisit, tetapi provider eksternal tetap tidak dapat dijamin.
+7. Project Overview melakukan polling hanya ketika job yang sedang tersimpan
    masih `queued/processing`. Bila status database diubah dari luar flow UI
    (misalnya manual recovery), kartu dapat stale sampai provider di-invalidasi,
    halaman dibuka ulang, atau browser direload.
-10. Review history read-only dan hanya 100 keputusan terbaru; belum ada pagination.
-11. Belum ada filter Review berdasarkan parameter/status dan belum ada safe bulk
-    accept dengan konfirmasi eksplisit.
-12. Comparative Matrix dan maps hanya memakai paper `ready`; paper yang masih
+8. Review history read-only dan hanya 100 keputusan terbaru; belum ada pagination.
+9. Belum ada filter Review berdasarkan parameter/status. Bulk accept
+   terkonfirmasi sudah tersedia untuk filter proyek yang sedang terlihat.
+10. Comparative Matrix dan maps hanya memakai paper `ready`; paper yang masih
     `needs_review` sengaja tidak ikut.
-13. Concept Map belum melakukan semantic merging untuk konsep ekuivalen dengan
+11. Concept Map belum melakukan semantic merging untuk konsep ekuivalen dengan
     wording berbeda antar-paper.
-14. Research Gap Map bukan generator kesimpulan lintas-paper. Setelah filter
-    status diperbaiki, fitur ini tetap hanya boleh menampilkan
-    `verified`/`edited` limitations/future work sebagai kandidat yang harus
-    divalidasi manusia; bukan kesimpulan otomatis.
-15. `ProjectWorkspaceScreen`/`DemoData` adalah prototype mati yang belum
+12. Research Gap Map bukan generator kesimpulan lintas-paper. Fitur ini hanya
+    menampilkan `verified`/`edited` limitations/future work sebagai kandidat
+    yang harus divalidasi manusia; bukan kesimpulan otomatis.
+13. `ProjectWorkspaceScreen`/`DemoData` adalah prototype mati yang belum
     dipisahkan atau dihapus dari source.
-16. Belum ada production domain, HTTPS deployment, monitoring, backups,
+14. Belum ada production domain, HTTPS deployment, monitoring, backups,
     retention/deletion workflow, atau production privacy operations.
-17. `backend/.env.example` belum tersedia; onboarding environment masih harus
+15. `backend/.env.example` belum tersedia; onboarding environment masih harus
     mengikuti daftar variabel di README ini tanpa menyalin nilai secret.
 
 ## Yang belum dikerjakan / backlog berikutnya
 
 Urutan yang disarankan:
 
-1. **P0 untuk iterasi berikutnya:** perbaiki versioning re-analysis tanpa
-   menghapus history. Tambahkan migration baru untuk menandai/memilih analysis
-   job aktif atau superseded; review queue, paper result, progress, readiness,
-   Matrix, dan Maps harus memakai satu set aktif berisi tepat 11 parameter.
-2. **P0 untuk iterasi berikutnya:** hanya `verified`/`edited` yang boleh masuk
-   Matrix/Concept Map/Research Gap Map sebagai knowledge result. UI harus
-   menampilkan status sebenarnya, dan semantic export harus eksplisit terhadap
-   row rejected/unsupported.
-3. Tambahkan regression test wajib: dua re-analysis berurutan tetap menghasilkan
-   11 komponen aktif; progress selalu 0–11; rejected/unsupported tidak muncul
-   sebagai claim Matrix/Map; historical rows dan review action tetap tersimpan.
-4. Perbaiki refresh terminal-state Project Overview agar manual/external retry
+1. Ulangi direct browser QA visual workflow 2026-08-25 ketika tersedia tab
+   browser segar yang dapat dikontrol; runtime browser saat implementasi terkunci
+   pada URL error internal dan menolak navigasi sesuai security policy.
+2. Perbaiki refresh terminal-state Project Overview agar manual/external retry
    tidak meninggalkan kartu stale; tambahkan regression test latest-job/history.
-5. Review UX lanjutan: parameter/status filters, paginated history, safe bulk
-   actions dengan confirmation dan audit trail.
-6. Hubungkan plan/quota UI ke usage backend atau tandai jelas sebagai belum aktif.
-7. Perbaiki PDF render feedback/timeout dan deep-link Audit log.
-8. Human-curated cross-paper gap synthesis serta keputusan eksplisit atas
-   kandidat gap; jangan otomatis menjadikannya final.
-9. OCR untuk scanned PDF beserta review kualitas OCR.
-10. Exact quote highlighting/bounding-box overlay pada viewer PDF.
-11. Production hardening: HTTPS, secret management, rate limiting, monitoring,
+3. Review UX lanjutan: parameter/status filters dan paginated history.
+4. Hubungkan plan/quota UI ke usage backend atau tandai jelas sebagai belum aktif.
+5. Perbaiki PDF render feedback/timeout dan deep-link Audit log.
+6. Human-curated synthesis lintas kandidat gap yang sudah dipilih; jangan
+   otomatis menjadikannya final.
+7. OCR untuk scanned PDF beserta review kualitas OCR.
+8. Bounding-box presisi untuk evidence non-chat dan fallback highlight yang
+   lebih informatif ketika kutipan tidak cocok persis.
+9. Production hardening: HTTPS, secret management, rate limiting, monitoring,
     backup/restore, deletion/retention policy, dan privacy review.
-12. Hapus atau isolasi prototype `ProjectWorkspaceScreen` dan `DemoData` setelah
+10. Hapus atau isolasi prototype `ProjectWorkspaceScreen` dan `DemoData` setelah
     memastikan tidak ada desain yang masih ingin dipertahankan.
-13. Tambahkan `backend/.env.example` tanpa nilai secret dan validasi startup
+11. Tambahkan `backend/.env.example` tanpa nilai secret dan validasi startup
     dependency yang lebih eksplisit untuk onboarding developer baru.
 
 ## Checklist handoff untuk AI berikutnya
 
 - Jangan menganggap screenshot/demo data sebagai database-backed behavior.
-- Jangan menganggap label `ready` pada paper sebagai bukti seluruh komponennya
-  layak disintesis; audit status aktif per parameter sampai DEF-001/002 selesai.
-- Mulai dari `docs/QA_REPORT_2026-08-23.md` dan reproduksi DEF-001/002 sebelum
-  mengerjakan fitur baru.
+- Synthesis view wajib tetap memakai satu versi aktif dan hanya status
+  `verified`/`edited`; jangan menghapus filter tersebut saat refactor.
+- Baca `docs/QA_REPORT_2026-08-23.md` untuk defect asal dan
+  `docs/QA_REPORT_2026-08-25.md` untuk bukti perbaikan serta visual workflow.
 - Jangan mengubah applied migrations; buat migration baru.
 - Jangan mematikan RLS untuk menyelesaikan authorization bug.
 - Jangan memakai service-role key dari Flutter.

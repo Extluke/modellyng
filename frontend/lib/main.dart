@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'src/app.dart';
@@ -12,6 +15,9 @@ void main() {
     url: AppConfig.supabaseUrl,
     publishableKey: AppConfig.supabasePublishableKey,
   );
+  // Warm the PDFium web worker/WASM while authentication initializes so the
+  // first evidence click does not pay the full renderer startup cost.
+  unawaited(pdfrxFlutterInitialize().catchError((Object _) {}));
   runApp(
     ProviderScope(child: _ModellyngBootstrap(initialization: initialization)),
   );

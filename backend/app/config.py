@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-flash-latest"
     gemini_fallback_model: str = "gemini-flash-lite-latest"
     gemini_max_input_chars: int = 400_000
+    gemini_chat_timeout_ms: int = 12_000
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

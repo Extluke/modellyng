@@ -12,10 +12,76 @@ from app.repository import (
     RepositoryError,
     SupabaseProjectRepository,
 )
-from app.schemas import ComparativeMatrixRead, ReviewRecordCreate
+from app.schemas import (
+    ComparativeMatrixRead,
+    ProjectChatRequest,
+    ProjectChatResponse,
+    ProjectChatSource,
+    ReviewRecordCreate,
+    BulkReviewAcceptRequest,
+)
 
 
 client = TestClient(app)
+
+
+@pytest.mark.anyio
+async def test_project_chat_exchange_persists_question_answer_and_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SupabaseProjectRepository()
+    project_id = UUID("00000000-0000-0000-0000-000000000010")
+    paper_id = UUID("00000000-0000-0000-0000-000000000020")
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="account-a",
+    )
+    writes: list[list[dict[str, object]]] = []
+
+    async def allow_project(*args, **kwargs):
+        return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            writes.append(kwargs["json"])
+            return httpx.Response(201, json=[], request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(repository, "get_project", allow_project)
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+    request = ProjectChatRequest(question="Apa metodenya?", history=[])
+    answer = ProjectChatResponse(
+        answer="Metode eksperimen [S1].",
+        sources=[
+            ProjectChatSource(
+                source_id="S1",
+                paper_id=paper_id,
+                paper_title="Paper A",
+                quote="We conducted an experiment.",
+                page_number=4,
+                block_id="00000000-0000-0000-0000-000000000099",
+            )
+        ],
+        model_name="gemini-test",
+    )
+
+    await repository.save_project_chat_exchange(user, project_id, request, answer)
+
+    assert len(writes) == 1
+    assert [row["role"] for row in writes[0]] == ["user", "assistant"]
+    assert writes[0][0]["content"] == "Apa metodenya?"
+    assert writes[0][1]["sources"][0]["page_number"] == 4
+    assert writes[0][1]["sources"][0]["block_id"].endswith("0099")
+    assert writes[0][0]["turn_id"] == writes[0][1]["turn_id"]
+    assert set(writes[0][0]) == set(writes[0][1])
 
 
 def test_projects_require_authentication() -> None:
@@ -71,7 +137,75 @@ def test_review_submission_requires_authentication() -> None:
     assert response.json() == {"detail": "Authentication is required"}
 
 
-@pytest.mark.parametrize("suffix", ["result", "pdf"])
+def test_bulk_review_submission_requires_authentication() -> None:
+    response = client.post(
+        "/api/v1/reviews/accept-all",
+        json={"component_ids": ["00000000-0000-0000-0000-000000000001"]},
+    )
+    assert response.status_code == 401
+
+
+def test_bulk_review_rejects_duplicate_components() -> None:
+    component_id = UUID("00000000-0000-0000-0000-000000000001")
+    with pytest.raises(ValidationError):
+        BulkReviewAcceptRequest(component_ids=[component_id, component_id])
+
+
+@pytest.mark.anyio
+async def test_bulk_review_accept_uses_single_atomic_rpc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SupabaseProjectRepository()
+    component_ids = [
+        UUID("00000000-0000-0000-0000-000000000011"),
+        UUID("00000000-0000-0000-0000-000000000012"),
+    ]
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="account-a",
+    )
+    requests: list[tuple[str, dict[str, object]]] = []
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            requests.append((url, kwargs["json"]))
+            return httpx.Response(
+                200,
+                json=[{"accepted_count": 2}],
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+    result = await repository.accept_review_components(
+        user,
+        BulkReviewAcceptRequest(component_ids=component_ids),
+    )
+
+    assert result.accepted_count == 2
+    assert len(requests) == 1
+    assert requests[0][0].endswith("/rpc/accept_review_components")
+    assert requests[0][1] == {
+        "p_component_ids": [str(component_id) for component_id in component_ids]
+    }
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "result",
+        "pdf",
+        "evidence/00000000-0000-0000-0000-000000000003/preview.png",
+    ],
+)
 def test_private_paper_result_routes_require_authentication(suffix: str) -> None:
     response = client.get(
         "/api/v1/projects/00000000-0000-0000-0000-000000000001/"
@@ -102,6 +236,37 @@ def test_research_gap_map_requires_authentication() -> None:
     response = client.get(
         "/api/v1/projects/00000000-0000-0000-0000-000000000001/research-gap-map"
     )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "path,method",
+    [
+        (
+            "/api/v1/projects/00000000-0000-0000-0000-000000000001/"
+            "papers/00000000-0000-0000-0000-000000000002/structured-tables.pdf",
+            "get",
+        ),
+        (
+            "/api/v1/projects/00000000-0000-0000-0000-000000000001/"
+            "research-gap-decisions",
+            "get",
+        ),
+        (
+            "/api/v1/projects/00000000-0000-0000-0000-000000000001/"
+            "chat/messages",
+            "get",
+        ),
+        (
+            "/api/v1/projects/00000000-0000-0000-0000-000000000001/chat",
+            "post",
+        ),
+    ],
+)
+def test_new_research_workflow_routes_require_authentication(
+    path: str, method: str
+) -> None:
+    response = client.request(method.upper(), path, json={"question": "Apa temuannya?"})
     assert response.status_code == 401
 
 
@@ -287,6 +452,7 @@ async def test_comparative_matrix_uses_latest_reviewed_values_and_evidence(
                     "status": "edited",
                     "confidence": 0.8,
                     "created_at": "2026-08-22T02:00:00Z",
+                    "is_active": True,
                     "evidence_spans": [
                         {
                             "quote": "Verified method quote",
@@ -305,6 +471,18 @@ async def test_comparative_matrix_uses_latest_reviewed_values_and_evidence(
                     "status": "verified",
                     "confidence": 0.7,
                     "created_at": "2026-08-22T01:00:00Z",
+                    "is_active": False,
+                    "evidence_spans": [],
+                },
+                {
+                    "id": "rejected",
+                    "parameter": "limitations",
+                    "ai_value": "Rejected limitation",
+                    "final_value": None,
+                    "status": "rejected",
+                    "confidence": 0.4,
+                    "created_at": "2026-08-22T03:00:00Z",
+                    "is_active": True,
                     "evidence_spans": [],
                 },
             ],
@@ -328,6 +506,10 @@ async def test_comparative_matrix_uses_latest_reviewed_values_and_evidence(
     assert methodology.cells[0].final_value == "Human method"
     assert methodology.cells[0].ai_value == "AI method"
     assert methodology.cells[0].evidence[0].page_number == 4
+    limitations = next(
+        row for row in matrix.rows if row.parameter.value == "limitations"
+    )
+    assert limitations.cells == []
 
 
 @pytest.mark.anyio
@@ -437,6 +619,7 @@ def test_project_summary_counts_review_papers_and_verified_nodes() -> None:
                         {"id": "c1", "status": "verified"},
                         {"id": "c2", "status": "edited"},
                         {"id": "c3", "status": "needs_review"},
+                        {"id": "c4", "status": "verified", "is_active": False},
                     ],
                 }
             ],
@@ -446,3 +629,36 @@ def test_project_summary_counts_review_papers_and_verified_nodes() -> None:
     assert project.paper_count == 1
     assert project.review_count == 1
     assert project.knowledge_node_count == 2
+
+
+@pytest.mark.anyio
+async def test_review_queue_queries_only_active_components(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SupabaseProjectRepository()
+    captured_params: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url, **kwargs):
+            captured_params.update(kwargs["params"])
+            return httpx.Response(
+                200, json=[], request=httpx.Request("GET", url)
+            )
+
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="account-a",
+    )
+    assert await repository.list_review_queue(user) == []
+    assert captured_params["status"] == "eq.needs_review"
+    assert captured_params["is_active"] == "eq.true"

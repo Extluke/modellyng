@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, status
@@ -6,7 +7,9 @@ from fastapi.responses import JSONResponse, Response
 
 from .auth import CurrentUser
 from .config import get_settings
+from .chat_service import ChatUnavailableError, answer_project_question
 from .export_service import ExportUnavailableError, build_project_export
+from .evidence_preview import build_evidence_page_preview
 from .health import dependency_health
 from .repository import (
     EntityNotFoundError,
@@ -30,7 +33,16 @@ from .schemas import (
     ComparativeMatrixRead,
     ConceptEvidenceMapRead,
     ResearchGapMapRead,
+    ResearchGapDecisionCreate,
+    ResearchGapDecisionRead,
+    ExtractionParameter,
+    ProjectChatRequest,
+    ProjectChatResponse,
+    ProjectChatMessageRead,
+    BulkReviewAcceptRequest,
+    BulkReviewAcceptResponse,
 )
+from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
 
 settings = get_settings()
 MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
@@ -74,6 +86,11 @@ async def invalid_review_handler(_, exc: InvalidReviewError) -> JSONResponse:
 @app.exception_handler(ExportUnavailableError)
 async def export_unavailable_handler(_, exc: ExportUnavailableError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(ChatUnavailableError)
+async def chat_unavailable_handler(_, exc: ChatUnavailableError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.get("/health", response_model=HealthRead, tags=["system"])
@@ -234,6 +251,55 @@ async def get_private_pdf(
 
 
 @api.get(
+    "/projects/{project_id}/papers/{paper_id}/evidence/{block_id}/preview.png",
+    response_class=Response,
+    tags=["papers"],
+)
+async def get_evidence_page_preview(
+    project_id: UUID,
+    paper_id: UUID,
+    block_id: UUID,
+    current_user: CurrentUser,
+) -> Response:
+    content, page_number, evidence_text = (
+        await project_repository.get_evidence_preview_data(
+            current_user, project_id, paper_id, block_id
+        )
+    )
+    preview = await asyncio.to_thread(
+        build_evidence_page_preview, content, page_number, evidence_text
+    )
+    return Response(
+        content=preview,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=600"},
+    )
+
+
+@api.get(
+    "/projects/{project_id}/papers/{paper_id}/structured-tables.pdf",
+    response_class=Response,
+    tags=["papers"],
+)
+async def export_structured_paper_tables(
+    project_id: UUID, paper_id: UUID, current_user: CurrentUser
+) -> Response:
+    result = await project_repository.get_paper_result(
+        current_user, project_id, paper_id
+    )
+    content = build_structured_tables_pdf(result)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{structured_pdf_filename(paper_id)}"'
+            )
+        },
+    )
+
+
+@api.get(
     "/projects/{project_id}/comparative-matrix",
     response_model=ComparativeMatrixRead,
     tags=["projects"],
@@ -264,6 +330,67 @@ async def get_research_gap_map(
     project_id: UUID, current_user: CurrentUser
 ) -> ResearchGapMapRead:
     return await project_repository.get_research_gap_map(current_user, project_id)
+
+
+@api.get(
+    "/projects/{project_id}/research-gap-decisions",
+    response_model=list[ResearchGapDecisionRead],
+    tags=["projects"],
+)
+async def list_research_gap_decisions(
+    project_id: UUID, current_user: CurrentUser
+) -> list[ResearchGapDecisionRead]:
+    return await project_repository.list_research_gap_decisions(
+        current_user, project_id
+    )
+
+
+@api.put(
+    "/projects/{project_id}/research-gaps/{paper_id}/{parameter}/decision",
+    response_model=ResearchGapDecisionRead,
+    tags=["projects"],
+)
+async def save_research_gap_decision(
+    project_id: UUID,
+    paper_id: UUID,
+    parameter: ExtractionParameter,
+    payload: ResearchGapDecisionCreate,
+    current_user: CurrentUser,
+) -> ResearchGapDecisionRead:
+    return await project_repository.save_research_gap_decision(
+        current_user, project_id, paper_id, parameter, payload
+    )
+
+
+@api.post(
+    "/projects/{project_id}/chat",
+    response_model=ProjectChatResponse,
+    tags=["projects"],
+)
+async def chat_with_project(
+    project_id: UUID,
+    payload: ProjectChatRequest,
+    current_user: CurrentUser,
+) -> ProjectChatResponse:
+    context = await project_repository.get_project_chat_context(current_user, project_id)
+    answer = await asyncio.to_thread(answer_project_question, context, payload)
+    await project_repository.save_project_chat_exchange(
+        current_user, project_id, payload, answer
+    )
+    return answer
+
+
+@api.get(
+    "/projects/{project_id}/chat/messages",
+    response_model=list[ProjectChatMessageRead],
+    tags=["projects"],
+)
+async def get_project_chat_messages(
+    project_id: UUID, current_user: CurrentUser
+) -> list[ProjectChatMessageRead]:
+    return await project_repository.list_project_chat_messages(
+        current_user, project_id
+    )
 
 
 @api.get(
@@ -306,6 +433,18 @@ async def list_review_history(
     current_user: CurrentUser,
 ) -> list[ReviewHistoryItemRead]:
     return await project_repository.list_review_history(current_user)
+
+
+@api.post(
+    "/reviews/accept-all",
+    response_model=BulkReviewAcceptResponse,
+    tags=["reviews"],
+)
+async def accept_all_reviews(
+    payload: BulkReviewAcceptRequest,
+    current_user: CurrentUser,
+) -> BulkReviewAcceptResponse:
+    return await project_repository.accept_review_components(current_user, payload)
 
 
 @api.post(
