@@ -136,7 +136,7 @@ di dua laporan QA serta `docs/PROJECT_STATUS.md`.
 | Structured Paper Result | Selesai | PASS | 11/11 nilai AI/final, tabel pertanyaan penelitian, tabel metodologi lima kolom, evidence, dan PDF tabel terautentikasi |
 | Private Evidence PDF Viewer | Selesai | PASS dengan catatan | Viewer penuh tetap owner-scoped; citation chat memakai preview satu halaman ter-highlight dan jalur cepat terautentikasi |
 | Comparative Paper Matrix | Selesai | PASS | Semua paper ready digabung dalam satu tabel responsif; hanya versi aktif `verified`/`edited` yang masuk |
-| Concept/Evidence Map | Selesai | PASS | Rantai paper→concept→evidence memakai knowledge result aktif dan link PDF privat |
+| Concept/Evidence Map | Selesai | PASS | Graph JSON terreview dirender seketika sebagai Mermaid Flutter native; pan/zoom dan klik node mempertahankan link hasil/PDF privat |
 | Research Gap Map | Selesai | PASS | Flow paper→candidate→evidence→Yes/No→aksi berikutnya; keputusan owner-scoped tersimpan |
 | Chatbot proyek | Selesai | PASS dengan ketergantungan provider | RAG memakai blok PDF owner-scoped, menolak pertanyaan tak ter-grounding, memvalidasi citation, dan memulihkan history permanen |
 | Ekspor hasil | Selesai | PASS | DOCX/XLSX/CSV/PPTX valid; PDF tambahan tersedia untuk tabel pertanyaan/metodologi dan synthesis export hanya memakai data aktif terreview |

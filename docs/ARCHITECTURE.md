@@ -24,6 +24,7 @@ analysis, a migration/rollback plan, and a new decision record.
 | Data/Auth | Supabase local | PostgreSQL, Auth, Storage, and RLS |
 | PDF parsing | PyMuPDF | Local searchable-text/page extraction |
 | AI | Gemini API via `google-genai` | Structured academic extraction |
+| Graph rendering | `flutter_mermaid` | Native Flutter flowchart painting from reviewed graph JSON |
 | Repository | Monorepo | `frontend/`, `backend/`, `supabase/` |
 
 ## Trust boundaries
@@ -64,6 +65,23 @@ The primary product promise is traceability:
 ```text
 Result -> Evidence quote -> Source page/block -> Original private PDF
 ```
+
+The Concept / Evidence Map keeps the same evidence chain while adding a local
+visualization boundary:
+
+```text
+Gemini structured result (backend only)
+  -> verified/edited active components
+  -> owner-scoped FastAPI graph JSON
+  -> sanitized Mermaid syntax in Flutter
+  -> native Flutter Mermaid painter
+  -> node tap -> structured result / authenticated PDF page
+```
+
+Document text never becomes a Mermaid identifier. Flutter assigns generated
+node IDs, bounds and sanitizes labels, ignores edges with unknown endpoints,
+and maps taps back to the original typed graph model. No AI credential, service
+role, public PDF URL, WebView, or extra provider request is introduced.
 
 ## Processing lifecycle
 

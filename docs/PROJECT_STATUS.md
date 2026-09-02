@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-08-30
+Last updated: 2026-09-02
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -56,6 +56,11 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
 - Comparative Paper Matrix, Concept / Evidence Map, and Research Gap Map use
   only active `verified`/`edited` components. Matrix displays every ready paper
   in one horizontally scrollable comparison table on desktop and mobile.
+- Concept / Evidence Map converts its owner-scoped graph JSON into sanitized
+  Mermaid flowchart syntax in Flutter and renders it immediately with the
+  native `flutter_mermaid` painter. Paper, concept, and evidence nodes are
+  visually distinct; the diagram supports pan/zoom, and concept/evidence taps
+  preserve navigation to the structured result or authenticated PDF page.
 - Structured Paper Result adds a research-question table that aligns each
   question with its object/concept and discussion direction, plus a five-column
   methodology table (`isi`, `bentuk`, `kegiatan utama`, `arah kegiatan`, and
@@ -98,7 +103,7 @@ The last verified automated baseline was (2026-08-30):
 
 - Backend: 62 tests passing, including grounded-chat refusal, citation guards,
   and transactional bulk-review validation.
-- Flutter: static analysis clean and 19 widget tests passing.
+- Flutter: static analysis clean and 23 widget/unit tests passing.
 - Flutter web release build passing.
 - Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 
@@ -112,6 +117,15 @@ download, and an evidence-linked chatbot response. Browser-control QA for this
 iteration could not be repeated because the in-app browser was locked on its
 internal connection-error URL and its security policy rejected navigation;
 responsive click behavior is covered by 15 Flutter widget tests instead.
+
+On 2026-09-02, direct browser QA rendered the production Mermaid flowchart
+widget with representative graph JSON at desktop and 390 px mobile widths.
+Styled paper/concept/evidence nodes, responsive compact labels, pan, wheel
+zoom, and node-tap callbacks all worked without overflow or console errors.
+An authenticated full-stack replay could not run because Docker Desktop failed
+before local Supabase/API startup on a stale Windows AF_UNIX runtime socket;
+the renderer itself was exercised through a temporary QA entrypoint that was
+removed immediately after testing.
 
 ## Current limitations
 
@@ -186,9 +200,13 @@ pixel-perfect highlighting.
 
 The comparative matrix and evidence map are implemented as evidence-preserving
 read views. Matrix cells show values with their supporting evidence.
-The map exposes paper -> concept -> evidence chains, and evidence actions open
-the authenticated paper result/PDF viewer on the claimed page. Both features
-provide responsive mobile and desktop layouts and explicit empty states.
+The map exposes paper -> concept -> evidence chains as a responsive Mermaid
+flowchart generated from backend JSON. Rendering stays in Flutter without a
+WebView or a second AI call; generated node IDs and sanitized bounded labels
+prevent paper text from becoming Mermaid instructions. Pan/zoom is available,
+and evidence actions open the authenticated paper result/PDF viewer on the
+claimed page. Both features provide responsive mobile and desktop layouts and
+explicit empty states.
 Research Gap Map adds filterable candidate chains sourced from `limitations`
 and `future_work` components. Each supported candidate retains
 its link to the source paper, evidence quote, and authenticated PDF page, and

@@ -677,11 +677,12 @@ void main() {
       find.text(
         'How to Optimize SQL Queries? A Comparison Between Split, Holistic, and Hybrid Approaches',
       ),
-      findsWidgets,
+      findsOneWidget,
     );
-    expect(find.text('Metodologi'), findsOneWidget);
-    expect(find.text('Verified quote'), findsOneWidget);
-    expect(find.text('Buka halaman PDF'), findsOneWidget);
+    expect(find.text('Flowchart evidence'), findsOneWidget);
+    expect(find.text('MERMAID'), findsOneWidget);
+    expect(find.byKey(const Key('research-flowchart-mermaid')), findsOneWidget);
+    expect(find.textContaining('Ketuk node konsep'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
