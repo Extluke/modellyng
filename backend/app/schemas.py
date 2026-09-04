@@ -206,12 +206,18 @@ class ReviewRecordCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_correction_for_edit(self) -> "ReviewRecordCreate":
-        if self.action == ReviewerAction.EDIT and not self.corrected_value:
+        corrected_value = (self.corrected_value or "").strip()
+        note = (self.note or "").strip()
+        if self.corrected_value is not None:
+            self.corrected_value = corrected_value
+        if self.note is not None:
+            self.note = note
+        if self.action == ReviewerAction.EDIT and not corrected_value:
             raise ValueError("corrected_value is required for edit actions")
         if self.action in {
             ReviewerAction.REJECT,
             ReviewerAction.REQUEST_REANALYSIS,
-        } and not (self.note or "").strip():
+        } and not note:
             raise ValueError("note is required for reject and re-analysis actions")
         return self
 

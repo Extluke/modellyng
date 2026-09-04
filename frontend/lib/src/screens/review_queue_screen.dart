@@ -11,9 +11,16 @@ String? validateRequiredReviewText(String value, String label) =>
     value.trim().isEmpty ? '$label tidak boleh kosong.' : null;
 
 class ReviewQueueScreen extends ConsumerStatefulWidget {
-  const ReviewQueueScreen({super.key, this.userId});
+  const ReviewQueueScreen({
+    super.key,
+    this.userId,
+    this.active = true,
+    this.historyExpansionRequest = 0,
+  });
 
   final String? userId;
+  final bool active;
+  final int historyExpansionRequest;
 
   @override
   ConsumerState<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
@@ -22,6 +29,23 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
 class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
   String? _projectFilter;
   bool _acceptingAll = false;
+
+  @override
+  void didUpdateWidget(covariant ReviewQueueScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    }
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    final userId =
+        widget.userId ?? ref.read(authRepositoryProvider).currentUser?.id;
+    if (userId == null) return;
+    ref.invalidate(reviewQueueProvider(userId));
+    ref.invalidate(reviewHistoryProvider(userId));
+  }
 
   Future<void> _acceptAllVisible(
     List<ReviewQueueItem> items,
@@ -97,10 +121,16 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeading(
+              PageHeading(
                 title: 'Antrean verifikasi',
                 subtitle:
                     'Periksa hasil Gemini dan kutipan sumber sebelum data menjadi final.',
+                action: OutlinedButton.icon(
+                  key: const Key('refresh-review-queue'),
+                  onPressed: userId == null ? null : _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Segarkan'),
+                ),
               ),
               const SizedBox(height: 24),
               queue.when(
@@ -138,6 +168,10 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
               if (userId != null) ...[
                 const SizedBox(height: 28),
                 ExpansionTile(
+                  key: ValueKey(
+                    'review-history-${widget.historyExpansionRequest}',
+                  ),
+                  initiallyExpanded: widget.historyExpansionRequest > 0,
                   title: const Text('Riwayat keputusan review'),
                   subtitle: const Text(
                     '100 keputusan terbaru tetap dapat diaudit.',

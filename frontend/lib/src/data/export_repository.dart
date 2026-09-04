@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -49,15 +50,35 @@ class ExportRepository {
 
   static String readableError(Object error) {
     if (error is DioException) {
-      final data = error.response?.data;
-      if (data is Map<String, dynamic> && data['detail'] != null) {
-        return data['detail'].toString();
-      }
+      final detail = _responseDetail(error.response?.data);
+      if (detail != null) return detail;
       if (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout) {
         return 'FastAPI belum dapat dihubungi. Pastikan server lokal berjalan.';
       }
     }
     return 'File ekspor belum dapat dibuat. Silakan coba kembali.';
+  }
+
+  static String? _responseDetail(Object? data) {
+    Object? decoded = data;
+    if (data is List<int>) {
+      try {
+        decoded = jsonDecode(utf8.decode(data));
+      } on FormatException {
+        return null;
+      }
+    } else if (data is String) {
+      try {
+        decoded = jsonDecode(data);
+      } on FormatException {
+        return null;
+      }
+    }
+    if (decoded is! Map) return null;
+    final detail = decoded['detail'];
+    return detail == null || detail.toString().trim().isEmpty
+        ? null
+        : detail.toString();
   }
 }

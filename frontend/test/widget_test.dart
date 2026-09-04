@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -14,6 +15,7 @@ import 'package:modellyng/src/data/project_repository.dart';
 import 'package:modellyng/src/data/research_gap_repository.dart';
 import 'package:modellyng/src/data/review_repository.dart';
 import 'package:modellyng/src/models/research_models.dart';
+import 'package:modellyng/src/screens/auth_screen.dart';
 import 'package:modellyng/src/screens/comparative_matrix_screen.dart';
 import 'package:modellyng/src/screens/concept_evidence_map_screen.dart';
 import 'package:modellyng/src/screens/dashboard_screen.dart';
@@ -35,6 +37,113 @@ void main() {
       validateRequiredReviewText('Perlu kutipan sumber', 'Alasan wajib'),
       isNull,
     );
+  });
+
+  test('export errors preserve JSON detail returned as response bytes', () {
+    final request = RequestOptions(path: '/export/docx');
+    final error = DioException(
+      requestOptions: request,
+      response: Response<List<int>>(
+        requestOptions: request,
+        statusCode: 409,
+        data: utf8.encode(
+          '{"detail":"Belum ada paper siap yang dapat diekspor."}',
+        ),
+      ),
+    );
+
+    expect(
+      ExportRepository.readableError(error),
+      'Belum ada paper siap yang dapat diekspor.',
+    );
+  });
+
+  testWidgets('password visibility control has a changing accessible label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AuthScreen())),
+    );
+
+    expect(find.byTooltip('Tampilkan password'), findsOneWidget);
+    await tester.tap(find.byTooltip('Tampilkan password'));
+    await tester.pump();
+    expect(find.byTooltip('Sembunyikan password'), findsOneWidget);
+  });
+
+  testWidgets('review queue refreshes when its tab becomes active', (
+    tester,
+  ) async {
+    var active = false;
+    var queueLoads = 0;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          reviewQueueProvider('test-user').overrideWith((ref) async {
+            queueLoads++;
+            return const [];
+          }),
+          reviewHistoryProvider(
+            'test-user',
+          ).overrideWith((ref) async => const []),
+        ],
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              updateHost = setState;
+              return Scaffold(
+                body: ReviewQueueScreen(userId: 'test-user', active: active),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(queueLoads, 1);
+
+    updateHost(() => active = true);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(queueLoads, 2);
+  });
+
+  testWidgets('audit shortcut request opens review history immediately', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          reviewQueueProvider(
+            'test-user',
+          ).overrideWith((ref) async => const []),
+          reviewHistoryProvider('test-user').overrideWith(
+            (ref) async => [
+              ReviewHistoryItem(
+                action: 'accept',
+                paperTitle: 'Paper Audit',
+                parameter: 'methodology',
+                note: null,
+                createdAt: DateTime(2026),
+              ),
+            ],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ReviewQueueScreen(
+              userId: 'test-user',
+              historyExpansionRequest: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paper Audit · accept'), findsOneWidget);
   });
 
   testWidgets('review queue can confirm accepting every visible result', (

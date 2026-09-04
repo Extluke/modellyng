@@ -24,6 +24,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
+  int _reviewHistoryExpansionRequest = 0;
 
   static const _destinations = <_Destination>[
     _Destination(
@@ -107,19 +108,19 @@ class _AppShellState extends ConsumerState<AppShell> {
             onNewProject: _createProject,
             onOpenProject: _openProject,
           ),
-          const ReviewQueueScreen(),
+          ReviewQueueScreen(
+            userId: user.id,
+            active: _selectedIndex == 2,
+            historyExpansionRequest: _reviewHistoryExpansionRequest,
+          ),
           ComparativeMatrixScreen(userId: user.id),
           MapsScreen(userId: user.id),
           AccountScreen(
             onOpenAuditLog: () {
-              setState(() => _selectedIndex = 2);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Buka “Riwayat keputusan review” untuk melihat audit log.',
-                  ),
-                ),
-              );
+              setState(() {
+                _selectedIndex = 2;
+                _reviewHistoryExpansionRequest++;
+              });
             },
           ),
         ];

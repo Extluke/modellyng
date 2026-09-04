@@ -292,6 +292,26 @@ def test_reject_and_reanalysis_require_a_reason(action: str) -> None:
         ReviewRecordCreate.model_validate({"action": action})
 
 
+def test_edit_requires_non_whitespace_corrected_value() -> None:
+    with pytest.raises(ValidationError):
+        ReviewRecordCreate.model_validate(
+            {"action": "edit", "corrected_value": "   \t"}
+        )
+
+
+def test_review_text_is_normalized_before_persistence() -> None:
+    payload = ReviewRecordCreate.model_validate(
+        {
+            "action": "edit",
+            "corrected_value": "  Reviewed method  ",
+            "note": "  reviewer note  ",
+        }
+    )
+
+    assert payload.corrected_value == "Reviewed method"
+    assert payload.note == "reviewer note"
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("operation", ["result", "pdf"])
 async def test_private_paper_reads_stop_when_owner_lookup_fails(

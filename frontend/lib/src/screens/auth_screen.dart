@@ -210,6 +210,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                   Icons.lock_outline_rounded,
                                 ),
                                 suffixIcon: IconButton(
+                                  tooltip: _obscurePassword
+                                      ? 'Tampilkan password'
+                                      : 'Sembunyikan password',
                                   onPressed: () => setState(
                                     () => _obscurePassword = !_obscurePassword,
                                   ),
