@@ -207,6 +207,10 @@ class PdfProcessingRepository:
                         "paper_block_id": str(evidence.paper_block_id),
                         "quote": evidence.quote,
                         "page_number": evidence.page_number,
+                        "evidence_kind": evidence.evidence_kind.value,
+                        "source_label": evidence.source_label,
+                        "section": evidence.section,
+                        "subsection": evidence.subsection,
                     }
                 )
         if evidence_rows:
@@ -241,6 +245,10 @@ class PdfProcessingRepository:
             paper_update["journal"] = metadata.journal
         if metadata.doi:
             paper_update["doi"] = metadata.doi
+        for field in ("publisher", "volume", "issue", "pages", "publication_status"):
+            # New analysis may honestly find no value; never retain stale metadata.
+            paper_update[field] = getattr(metadata, field)
+        paper_update["metadata_verified"] = False
         self._patch("papers", paper_id, paper_update)
 
     def mark_failure(

@@ -7,7 +7,7 @@ celery_app = Celery(
     "modellyng",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks"],
+    include=["app.tasks", "app.comparison_tasks"],
 )
 celery_app.conf.update(
     task_serializer="json",

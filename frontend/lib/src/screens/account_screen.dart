@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/account_settings_card.dart';
 import '../widgets/common_widgets.dart';
 
 class AccountScreen extends ConsumerWidget {
@@ -15,7 +16,7 @@ class AccountScreen extends ConsumerWidget {
     builder: (context) => AlertDialog(
       title: const Text('Privasi dokumen'),
       content: const Text(
-        'PDF disimpan di bucket privat. Akses dibatasi untuk pemilik melalui autentikasi, API FastAPI, dan Row Level Security Supabase.',
+        'PDF disimpan privat dan akses aplikasi dibatasi untuk pemilik. Teks dokumen dan pertanyaan dikirim ke Gemini untuk analisis. Pada layanan Gemini gratis, input dan output dapat digunakan untuk pengembangan produk dan ditinjau manusia. Beta ini hanya untuk dokumen publik yang boleh diproses; jangan unggah informasi pribadi atau rahasia. Server beta bergantung pada komputer pengelola yang tetap menyala.',
       ),
       actions: [
         FilledButton(
@@ -98,6 +99,8 @@ class AccountScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              const AccountSettingsCard(),
+              const SizedBox(height: 16),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -121,25 +124,11 @@ class AccountScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Pada campus pilot, akun Free dapat menganalisis maksimal 5 paper per 24 jam.',
+                        'Beta memakai kuota bersama: maksimal 20 permintaan analisis dan 50 pesan chat per hari (reset UTC). Kuota Gemini dapat habis lebih dahulu.',
                       ),
                       const SizedBox(height: 18),
-                      const Row(
-                        children: [
-                          Expanded(
-                            child: Text('Belum ada penggunaan hari ini'),
-                          ),
-                          Text(
-                            '0 / 5',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const LinearProgressIndicator(
-                        value: 0,
-                        minHeight: 8,
-                        borderRadius: BorderRadius.all(Radius.circular(99)),
+                      const Text(
+                        'Sisa kuota belum ditampilkan. Aplikasi akan memberi tahu saat batas tercapai.',
                       ),
                     ],
                   ),

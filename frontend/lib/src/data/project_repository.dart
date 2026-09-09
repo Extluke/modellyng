@@ -55,7 +55,7 @@ class ProjectRepository {
       }
       if (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout) {
-        return 'FastAPI belum dapat dihubungi. Pastikan server lokal berjalan.';
+        return 'Server belum dapat dihubungi. Periksa internet atau coba lagi ketika server beta aktif.';
       }
     }
     return 'Proyek belum dapat disimpan. Silakan coba kembali.';

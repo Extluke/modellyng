@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-09-02
+Last updated: 2026-09-09
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -127,9 +127,47 @@ before local Supabase/API startup on a stale Windows AF_UNIX runtime socket;
 the renderer itself was exercised through a temporary QA entrypoint that was
 removed immediately after testing.
 
+## Completed — Signed Android build for supervised beta (2026-09-08)
+
+- Signed universal release APK build 2: `output/beta/modellyng-0.1.0-beta.1-2.apk`,
+  application ID `id.modellyng.beta`, Android 7.0+, version `0.1.0-beta.1` (1).
+- Flutter connects through a temporary HTTPS tunnel to a restricted FastAPI
+  gateway on this computer. Supabase, private storage, Redis/Celery and backend
+  Gemini integration remain in the existing architecture. Native exports use
+  the Android document picker; the signing key is kept outside the repository.
+- Verification: 102 backend tests, 36 Flutter tests, clean Flutter analysis,
+  release web build, signed APK validation and 16 KB native alignment passed.
+  Public HTTPS two-account isolation and the real worker/Gemini extraction flow
+  passed; browser login layouts were checked at mobile and desktop widths.
+- No configured Gemini/service-role credential or private signing/config file
+  was found in the decompressed APK. Generated artifacts and local runtime
+  configuration remain ignored by Git. See `docs/BETA_ANDROID.md` for operation,
+  exact artifact checks and the remaining pilot limits.
+
 ## Current limitations
 
-- Daily plan/quota values are static (`0 / 5`) rather than backend usage data.
+- iOS beta preparation (2026-09-08): the existing Runner project now uses the
+  proposed `id.modellyng.beta` identifier and `Modellyng Beta` display name.
+  The build attempt is blocked by the Windows-only host; no IPA, Apple signing
+  configuration or iPhone validation exists. See `docs/BETA_IOS.md` for the Mac
+  handoff, required numeric version, remaining icon work and signing steps.
+
+- Android supervised beta work is described in `docs/BETA_ANDROID.md`. Public
+  HTTPS login, private uploads/downloads, two-account isolation, Celery/Gemini
+  extraction into 11 review components, and logout passed a live synthetic
+  fixture test. This is a temporary computer-hosted beta, not a permanent public
+  service. Quick Tunnel URLs can expire and require a rebuilt APK. Native-device
+  testing and the previously required Gemini key rotation remain pending.
+
+- The 2026-09-07 source-traceability migration
+  `20260907090000_source_traceability.sql` was applied on 2026-09-08. Live
+  two-account RLS verification passed. Docker recovered after preserving stale
+  socket directories; Windows-reserved ports required moving local Supabase to
+  ports 18021–18027. See
+  `docs/SOURCE_TRACEABILITY_AUDIT.md` for the six-diagram audit and test evidence.
+
+- The beta gateway enforces shared request quotas. The UI no longer presents a
+  fabricated `0 / 5` counter; live remaining-quota display is still pending.
 - Initial private-PDF rendering on mobile can take roughly 15–20 seconds after
   the authenticated download completes.
 - Account's Audit log shortcut opens Review but does not jump to history, which
@@ -143,12 +181,13 @@ removed immediately after testing.
   monitoring, automated backups, or production privacy workflow yet.
 - The Gemini key previously used during development must be rotated before a
   public demonstration. Never copy a key into this document or Git.
-- Exact quote highlighting inside the PDF is not implemented; navigation is
-  currently page-level.
+- Result evidence clicks now request quote highlighting on the verified PDF
+  page. Text matching is best-effort; the viewer reports when it cannot locate
+  the quote and retains page-level navigation.
 - Review history is read-only and limited to the latest 100 decisions.
 - Matrix and map currently include ready papers only. The map reflects the
-  reviewed academic components; semantic merging of equivalent concepts across
-  differently worded papers is not implemented yet.
+  reviewed academic components; cross-paper comparison now uses the ordered
+  workflow described below and does not claim a confirmed novel gap.
 - Research Gap Map deliberately does not invent or automatically finalize a
   cross-paper gap. It maps reviewed limitations/future work verbatim as
   candidates; researchers must validate and synthesize them.
@@ -226,6 +265,59 @@ searches extracted private-PDF text and returns source links to the supporting
 pages. Human review remains required for structured extraction outputs, while
 chat explicitly refuses questions whose terms cannot be grounded in the PDFs.
 
+## Completed — Ordered cross-paper comparison and research-gap candidates (2026-09-09)
+
+Ready papers in one project can now be compared as independent unordered pairs.
+Each pair follows the same auditable order: concept, variables, data/object,
+method, then research problem. A `Yes` advances the pair; the first `No`
+stops that pair and creates a candidate only for a later aspect. A concept `No`
+is classified as unrelated, while missing or invalid evidence is classified as
+insufficient and never becomes a gap. Other pairs continue independently.
+
+The backend builds each source snapshot from active `verified`/`edited`
+components and evidence whose quote and page still match the private PDF block.
+Gemini may propose a prefix of decisions, but deterministic validation owns the
+order, stopping rule, allowed evidence references, and outcome. The worker only
+writes through service-role paths; the authenticated API can schedule and read
+owner-scoped work but cannot forge results. Input hashes preserve completed
+results for unchanged pairs and invalidate only pairs touching changed sources.
+
+The Flutter Maps and Comparative Matrix screens share the same pair result.
+The flowchart displays `Yes`, `No`, and stopped branches; the matrix provides a
+compact cross-paper view. Each step expands to both paper evidence and opens the
+authenticated PDF page. Candidates require a reviewer decision and a mandatory
+explanation; the UI states that acceptance means “layak ditelusuri”, not proof of
+novelty. The old single-paper limitations/future-work map remains available as
+an additional evidence view.
+
+Migration: `supabase/migrations/20260909090000_cross_paper_comparisons.sql`.
+The migration includes owner RLS, service-role worker leases, stale-result
+invalidation, append-only review history, and a two-account SQL isolation test.
+The feature was verified with synthetic private PDFs through the real FastAPI,
+Celery, Redis, local Supabase, and Gemini path: the household example reached
+`concept=yes`, `variables=yes`, `data_object=no`, stopped before method, and
+blocked the second account from reading/reviewing the pair or its PDF.
+
+## Completed — Intelligence report, references, and personalization (2026-09-09)
+
+The Matrix now exposes an owner-scoped intelligence report that combines the
+existing reviewed values and evidence chain without inventing metadata. It
+provides APA 7, IEEE, Harvard, Vancouver, and Chicago bibliography entries,
+paper identity plus compressed research structure, relationship edges from
+paper to component/result/evidence, deterministic topic/concept/method
+clusters, explicit unsupported-claim items, comparison/gap counts, and a
+candidate-only synthesis. Unsupported or evidence-less active components stay
+visible for human review instead of being silently included in the matrix.
+
+The report is available at `GET /api/v1/projects/{project_id}/intelligence-report`
+and as an evidence-preserving JSON download at
+`GET /api/v1/projects/{project_id}/intelligence-report.json`; its citation style
+is selectable in the Matrix UI. Account preferences are
+persisted in the owner profile through `GET/PUT /api/v1/account/settings`;
+the migration is `20260909120000_account_preferences.sql`. This completes the
+requested reference, traceability-report, structural-analysis, cluster, and
+personalization layer while preserving RLS and private-PDF provenance.
+
 ## Completed feature — Evidence-preserving result export
 
 Users can open a project and export all ready-paper results as `.docx`, `.xlsx`,
@@ -238,6 +330,34 @@ Package generation and download passed direct QA, but the exported dataset
 now inherits the Matrix active-version and `verified`/`edited` filters, so
 rejected, unsupported, and superseded components are excluded.
 
+## Implemented — Paper/source verification and typed evidence (2026-09-07)
+
+The result screen now includes a bibliographic validation panel with a manual
+DOI check against Crossref and a DataCite fallback. Every metadata field retains
+separate paper and registry values, provider URLs, unavailable/mismatch states,
+and a timestamped snapshot. Authenticated reviewers append Accept/Reject
+decisions with required notes. These decisions do not automatically finalize AI
+claims or change paper/project readiness. Reports and reviews use owner-scoped
+RLS tables; only the DOI is sent to the public registries.
+
+Publisher, volume, issue, publication pages and publication status are carried
+through the worker, API and Flutter models. Evidence supports text, table,
+figure, equation and result kinds, literal object labels and section/subsection
+locations derived from searchable source text. Unsupported labels are dropped;
+unsupported quotes are still discarded. All eleven result components now retain
+their own evidence cards, including question and methodology alongside their
+existing tables. Existing evidence remains readable without fabricated backfill.
+
+This is bibliographic/source traceability with human review, not an automatic
+authenticity, journal-quality, image-understanding or retraction certification.
+Initial verification: 95 backend tests and 31 Flutter tests passed; Flutter
+analysis was clean and the main web release build succeeded. The new panel also
+passed browser QA with synthetic fixtures at desktop/mobile widths. The Docker
+startup blocker was resolved on 2026-09-08: the live migration and transactional
+two-account RLS tests passed. Updated beta verification is recorded above.
+The full mapping, remaining limits and migration steps are maintained in
+`docs/SOURCE_TRACEABILITY_AUDIT.md`.
+
 ## Planned backlog
 
 1. Direct browser regression of the 2026-08-25 visual workflow once a fresh
@@ -246,7 +366,8 @@ rejected, unsupported, and superseded components are excluded.
    bulk actions.
 3. Real plan/quota enforcement and usage reporting.
 4. PDF render feedback/timeout and direct Audit log navigation.
-5. Human-curated synthesis across accepted gap candidates.
+5. Human-curated synthesis across accepted gap candidates (the current report
+   remains deterministic and candidate-only).
 6. OCR for scanned PDFs with an explicit OCR-quality review step.
 7. Production privacy, deletion/retention policy, monitoring, backups,
    rate-limiting, and public pilot deployment.
@@ -258,7 +379,7 @@ rejected, unsupported, and superseded components are excluded.
 | Flutter web | `http://127.0.0.1:3000` (recommended QA port; 8082 is also allowed) |
 | FastAPI | `http://127.0.0.1:8000` |
 | FastAPI health | `http://127.0.0.1:8000/health/dependencies` |
-| Supabase API | `http://127.0.0.1:54321` |
+| Supabase API | `http://127.0.0.1:18021` |
 | Redis | `127.0.0.1:6380` |
 
 Operational startup instructions are maintained in the root `README.md`.

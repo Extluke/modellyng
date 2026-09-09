@@ -49,13 +49,44 @@ final evidencePreviewProvider = FutureProvider.autoDispose
     });
 
 class ResultEvidence {
-  const ResultEvidence({required this.quote, required this.pageNumber});
+  const ResultEvidence({
+    required this.quote,
+    required this.pageNumber,
+    this.blockId = '',
+    this.section,
+    this.subsection,
+    this.evidenceKind = 'text',
+    this.sourceLabel,
+  });
   final String quote;
   final int pageNumber;
+  final String blockId;
+  final String? section;
+  final String? subsection;
+  final String evidenceKind;
+  final String? sourceLabel;
+  String get kindLabel => switch (evidenceKind) {
+    'table' => 'Tabel',
+    'figure' => 'Gambar',
+    'equation' => 'Persamaan',
+    'result' => 'Hasil',
+    _ => 'Teks persis',
+  };
+  String get locationLabel => [
+    'Halaman $pageNumber',
+    if (section != null) section!,
+    if (subsection != null) subsection!,
+    if (sourceLabel != null) sourceLabel!,
+  ].join(' · ');
 
   factory ResultEvidence.fromJson(Map<String, dynamic> json) => ResultEvidence(
     quote: json['quote']?.toString() ?? '',
     pageNumber: (json['page_number'] as num?)?.toInt() ?? 1,
+    blockId: json['block_id']?.toString() ?? '',
+    section: json['section'] as String?,
+    subsection: json['subsection'] as String?,
+    evidenceKind: json['evidence_kind']?.toString() ?? 'text',
+    sourceLabel: json['source_label'] as String?,
   );
 }
 

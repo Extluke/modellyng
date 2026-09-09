@@ -1,7 +1,8 @@
 import asyncio
+import json
 from uuid import UUID
 
-from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
@@ -41,8 +42,16 @@ from .schemas import (
     ProjectChatMessageRead,
     BulkReviewAcceptRequest,
     BulkReviewAcceptResponse,
+    CitationStyle,
+    IntelligenceReportRead,
+    AccountSettingsRead,
+    AccountSettingsUpdate,
 )
 from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
+from .source_verification import VerificationRequest, SourceVerificationRead, SourceReviewCreate, SourceReviewRead
+from .comparison_routes import router as comparison_router
+from .comparison_repository import queue_reviewed_comparisons
+from .intelligence_service import get_project_intelligence_report
 
 settings = get_settings()
 MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
@@ -110,6 +119,7 @@ async def health_dependencies() -> DependencyHealthRead:
 
 
 api = APIRouter(prefix=settings.api_prefix)
+api.include_router(comparison_router)
 
 
 @api.post(
@@ -333,6 +343,42 @@ async def get_research_gap_map(
 
 
 @api.get(
+    "/projects/{project_id}/intelligence-report",
+    response_model=IntelligenceReportRead,
+    tags=["projects"],
+)
+async def get_intelligence_report(
+    project_id: UUID,
+    current_user: CurrentUser,
+    citation_style: CitationStyle = CitationStyle.APA7,
+) -> IntelligenceReportRead:
+    """Return references, traceability, clusters, gaps, and synthesis together."""
+    return await get_project_intelligence_report(current_user, project_id, citation_style)
+
+
+@api.get(
+    "/projects/{project_id}/intelligence-report.json",
+    response_class=Response,
+    tags=["projects"],
+)
+async def export_intelligence_report(
+    project_id: UUID,
+    current_user: CurrentUser,
+    citation_style: CitationStyle = CitationStyle.APA7,
+) -> Response:
+    report = await get_project_intelligence_report(current_user, project_id, citation_style)
+    return Response(
+        content=json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="modellyng-intelligence-{project_id}.json"'
+            )
+        },
+    )
+
+
+@api.get(
     "/projects/{project_id}/research-gap-decisions",
     response_model=list[ResearchGapDecisionRead],
     tags=["projects"],
@@ -443,8 +489,11 @@ async def list_review_history(
 async def accept_all_reviews(
     payload: BulkReviewAcceptRequest,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> BulkReviewAcceptResponse:
-    return await project_repository.accept_review_components(current_user, payload)
+    result = await project_repository.accept_review_components(current_user, payload)
+    background_tasks.add_task(queue_reviewed_comparisons, current_user, payload.component_ids)
+    return result
 
 
 @api.post(
@@ -457,12 +506,42 @@ async def review_component(
     component_id: UUID,
     payload: ReviewRecordCreate,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> ReviewRecordRead:
-    return await project_repository.review_component(
+    result = await project_repository.review_component(
         current_user,
         component_id,
         payload,
     )
+
+
+@api.get("/account/settings", response_model=AccountSettingsRead, tags=["account"])
+async def get_account_settings(current_user: CurrentUser) -> AccountSettingsRead:
+    return await project_repository.get_account_settings(current_user)
+
+
+@api.put("/account/settings", response_model=AccountSettingsRead, tags=["account"])
+async def update_account_settings(
+    payload: AccountSettingsUpdate, current_user: CurrentUser
+) -> AccountSettingsRead:
+    return await project_repository.update_account_settings(current_user, payload)
+    background_tasks.add_task(queue_reviewed_comparisons, current_user, [component_id])
+    return result
+
+
+@api.get("/projects/{project_id}/papers/{paper_id}/source-verifications", response_model=list[SourceVerificationRead], tags=["papers"])
+async def list_source_verifications(project_id: UUID, paper_id: UUID, current_user: CurrentUser) -> list[SourceVerificationRead]:
+    return await project_repository.list_source_verifications(current_user, project_id, paper_id)
+
+
+@api.post("/projects/{project_id}/papers/{paper_id}/source-verifications", response_model=SourceVerificationRead, status_code=201, tags=["papers"])
+async def create_source_verification(project_id: UUID, paper_id: UUID, payload: VerificationRequest, current_user: CurrentUser) -> SourceVerificationRead:
+    return await project_repository.create_source_verification(current_user, project_id, paper_id, payload)
+
+
+@api.post("/projects/{project_id}/papers/{paper_id}/source-verifications/{verification_id}/reviews", response_model=SourceReviewRead, status_code=201, tags=["papers"])
+async def review_source_verification(project_id: UUID, paper_id: UUID, verification_id: UUID, payload: SourceReviewCreate, current_user: CurrentUser) -> SourceReviewRead:
+    return await project_repository.review_source_verification(current_user, project_id, paper_id, verification_id, payload)
 
 
 app.include_router(api)

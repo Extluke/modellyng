@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_client.dart';
 import 'auth_repository.dart';
+import 'paper_result_repository.dart';
 
 final reviewRepositoryProvider = Provider<ReviewRepository>((ref) {
   return ReviewRepository(ref.watch(dioProvider));
@@ -28,19 +29,8 @@ final reviewHistoryProvider = FutureProvider.autoDispose
 
 enum ReviewDecision { accept, edit, reject, requestReanalysis }
 
-class ReviewEvidence {
-  const ReviewEvidence({required this.quote, required this.pageNumber});
-
-  final String quote;
-  final int pageNumber;
-
-  factory ReviewEvidence.fromJson(Map<String, dynamic> json) {
-    return ReviewEvidence(
-      quote: json['quote']?.toString() ?? '',
-      pageNumber: (json['page_number'] as num?)?.toInt() ?? 1,
-    );
-  }
-}
+// Share the evidence contract with the result and PDF viewer.
+typedef ReviewEvidence = ResultEvidence;
 
 class ReviewQueueItem {
   const ReviewQueueItem({

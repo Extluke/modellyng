@@ -8,6 +8,7 @@ import '../data/paper_result_repository.dart';
 import '../models/research_models.dart';
 import '../platform/download_file.dart';
 import '../theme/app_theme.dart';
+import '../widgets/source_verification_card.dart';
 
 class PaperResultScreen extends ConsumerStatefulWidget {
   const PaperResultScreen({
@@ -33,12 +34,16 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
   final _pdfController = PdfViewerController();
   late final TabController _tabController;
   late int _targetPage;
+  String? _targetHighlightText;
+  String? _targetBlockId;
   bool _downloadingTables = false;
 
   @override
   void initState() {
     super.initState();
     _targetPage = widget.initialPage;
+    _targetHighlightText = widget.initialHighlightText;
+    _targetBlockId = widget.initialBlockId;
     _tabController = TabController(
       length: 2,
       initialIndex: widget.initialHighlightText?.trim().isNotEmpty == true
@@ -58,11 +63,24 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
       (projectId: widget.projectId, paperId: widget.paperId);
 
   void _showPage(int page) {
-    setState(() => _targetPage = page);
+    setState(() {
+      _targetPage = page;
+      _targetHighlightText = null;
+      _targetBlockId = null;
+    });
     _tabController.animateTo(1);
     if (_pdfController.isReady) {
       _pdfController.goToPage(pageNumber: page);
     }
+  }
+
+  void _showEvidence(ResultEvidence evidence) {
+    setState(() {
+      _targetPage = evidence.pageNumber;
+      _targetHighlightText = evidence.quote;
+      _targetBlockId = null;
+    });
+    _tabController.animateTo(1);
   }
 
   Future<void> _downloadStructuredTables() async {
@@ -72,8 +90,12 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
       final artifact = await ref
           .read(paperResultRepositoryProvider)
           .downloadStructuredTables(widget.projectId, widget.paperId);
-      downloadFile(artifact.bytes, artifact.filename, 'application/pdf');
-      if (!mounted) return;
+      final saved = await downloadFile(
+        artifact.bytes,
+        artifact.filename,
+        'application/pdf',
+      );
+      if (!mounted || !saved) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PDF tabel terstruktur berhasil dibuat.')),
       );
@@ -119,6 +141,7 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
           final resultPane = _ResultPane(
             result: value,
             onEvidence: _showPage,
+            onCitation: _showEvidence,
             onDownloadTables: _downloadStructuredTables,
             downloadingTables: _downloadingTables,
           );
@@ -126,8 +149,8 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
             query: _query,
             controller: _pdfController,
             initialPage: _targetPage,
-            highlightText: widget.initialHighlightText,
-            blockId: widget.initialBlockId,
+            highlightText: _targetHighlightText,
+            blockId: _targetBlockId,
           );
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -171,11 +194,13 @@ class _ResultPane extends StatelessWidget {
   const _ResultPane({
     required this.result,
     required this.onEvidence,
+    required this.onCitation,
     required this.onDownloadTables,
     required this.downloadingTables,
   });
   final PaperResult result;
   final ValueChanged<int> onEvidence;
+  final ValueChanged<ResultEvidence> onCitation;
   final VoidCallback onDownloadTables;
   final bool downloadingTables;
 
@@ -198,9 +223,7 @@ class _ResultPane extends StatelessWidget {
     final byParameter = {
       for (final item in result.components) item.parameter: item,
     };
-    final narrativeParameters = parameters.entries.where(
-      (entry) => entry.key != 'research_question' && entry.key != 'methodology',
-    );
+    final narrativeParameters = parameters.entries;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -242,6 +265,8 @@ class _ResultPane extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
+        SourceVerificationCard(paper: result.paper),
+        const SizedBox(height: 12),
         _ResearchQuestionTable(
           rows: result.structuredTables.researchQuestions,
           onEvidence: onEvidence,
@@ -259,7 +284,7 @@ class _ResultPane extends StatelessWidget {
             parameter: entry.key,
             label: entry.value,
             component: byParameter[entry.key],
-            onEvidence: onEvidence,
+            onEvidence: onCitation,
           ),
       ],
     );
@@ -276,7 +301,7 @@ class _ComponentCard extends StatelessWidget {
   final String parameter;
   final String label;
   final PaperComponentResult? component;
-  final ValueChanged<int> onEvidence;
+  final ValueChanged<ResultEvidence> onEvidence;
 
   @override
   Widget build(BuildContext context) {
@@ -333,9 +358,11 @@ class _ComponentCard extends StatelessWidget {
                     Icons.link_rounded,
                     color: AppColors.primary,
                   ),
-                  title: Text('Halaman ${evidence.pageNumber}'),
+                  title: Text(
+                    '${evidence.kindLabel} · ${evidence.locationLabel}',
+                  ),
                   subtitle: Text('“${evidence.quote}”'),
-                  onTap: () => onEvidence(evidence.pageNumber),
+                  onTap: () => onEvidence(evidence),
                 ),
             ],
           ],
@@ -606,6 +633,7 @@ class _PdfPane extends ConsumerWidget {
           error: (error, _) =>
               _Failure(onRetry: () => ref.invalidate(paperPdfProvider(query))),
           data: (bytes) => _PdfDocumentViewer(
+            key: ValueKey('$initialPage:$highlightText'),
             bytes: bytes,
             paperId: query.paperId,
             controller: controller,
@@ -618,6 +646,7 @@ class _PdfPane extends ConsumerWidget {
 
 class _PdfDocumentViewer extends StatefulWidget {
   const _PdfDocumentViewer({
+    super.key,
     required this.bytes,
     required this.paperId,
     required this.controller,

@@ -11,6 +11,25 @@ import 'src/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  if (AppConfig.betaBuild && !AppConfig.validForBeta) {
+    runApp(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'Konfigurasi server beta belum valid. Hubungi pengelola untuk APK terbaru.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
   final initialization = Supabase.initialize(
     url: AppConfig.supabaseUrl,
     publishableKey: AppConfig.supabasePublishableKey,
@@ -47,7 +66,7 @@ class _ModellyngBootstrap extends StatelessWidget {
                         Icon(Icons.cloud_off_outlined, size: 48),
                         SizedBox(height: 16),
                         Text(
-                          'Layanan lokal belum dapat dihubungkan. Muat ulang setelah Supabase berjalan.',
+                          'Layanan belum dapat dihubungkan. Periksa koneksi internet lalu buka kembali aplikasi.',
                           textAlign: TextAlign.center,
                         ),
                       ],

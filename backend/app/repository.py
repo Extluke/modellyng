@@ -31,8 +31,14 @@ from .schemas import (
     ProjectChatResponse,
     BulkReviewAcceptRequest,
     BulkReviewAcceptResponse,
+    AccountSettingsRead,
+    AccountSettingsUpdate,
 )
 from .structured_results import build_structured_tables
+from .source_verification import (
+    BibliographicMetadata, SourceVerificationRead, SourceReviewCreate,
+    SourceReviewRead, VerificationRequest, verify_source,
+)
 from .chat_service import ProjectChatBlock, ProjectChatContext, ProjectChatDocument
 
 
@@ -124,7 +130,7 @@ class SupabaseProjectRepository:
         return (
             "id,project_id,storage_key,original_filename,mime_type,"
             "file_size_bytes,page_count,language_code,doi,status,title,authors,"
-            "publication_year,journal,created_at,updated_at,"
+            "publication_year,journal,publisher,volume,issue,pages,publication_status,created_at,updated_at,"
             "analysis_jobs(id,status,stage,progress,error_message,created_at,updated_at)"
         )
 
@@ -148,6 +154,34 @@ class SupabaseProjectRepository:
             )
         self._raise_for_repository_error(response)
         return self._to_project(response.json()[0])
+
+    async def get_account_settings(self, user: AuthenticatedUser) -> AccountSettingsRead:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/profiles",
+                headers=self._headers(user),
+                params={"select": "preferences", "id": f"eq.{user.id}", "limit": 1},
+            )
+        self._raise_for_repository_error(response)
+        rows = response.json()
+        preferences = rows[0].get("preferences") if rows else None
+        return AccountSettingsRead.model_validate(preferences or {})
+
+    async def update_account_settings(
+        self, user: AuthenticatedUser, payload: AccountSettingsUpdate
+    ) -> AccountSettingsRead:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(
+                f"{self._rest_url}/profiles",
+                headers=self._headers(user, return_representation=True),
+                params={"id": f"eq.{user.id}"},
+                json={"preferences": payload.model_dump(mode="json")},
+            )
+        self._raise_for_repository_error(response)
+        rows = response.json()
+        return AccountSettingsRead.model_validate(
+            (rows[0].get("preferences") if rows else payload.model_dump())
+        )
 
     async def list_projects(
         self,
@@ -408,7 +442,7 @@ class SupabaseProjectRepository:
                         "model_name,prompt_version,created_at,is_active,"
                         "papers(id,project_id,title,original_filename,"
                         "projects(id,title)),"
-                        "evidence_spans(quote,page_number,section,subsection,"
+                        "evidence_spans(quote,page_number,section,subsection,evidence_kind,source_label,"
                         "paper_blocks(id,bounding_box))"
                     ),
                     "status": "eq.needs_review",
@@ -430,6 +464,8 @@ class SupabaseProjectRepository:
                         "page_number": span["page_number"],
                         "section": span.get("section"),
                         "subsection": span.get("subsection"),
+                        "evidence_kind": span.get("evidence_kind", "text"),
+                        "source_label": span.get("source_label"),
                         "block_id": str(block.get("id") or ""),
                         "bounding_box": block.get("bounding_box"),
                     }
@@ -460,6 +496,59 @@ class SupabaseProjectRepository:
             )
         return items
 
+    async def list_source_verifications(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
+    ) -> list[SourceVerificationRead]:
+        await self.get_paper(user, project_id, paper_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/paper_source_verifications", headers=self._headers(user),
+                params={"select": "id,paper_id,report,created_at,reviews:paper_source_reviews(id,reviewer_id,decision,note,created_at)",
+                        "paper_id": f"eq.{paper_id}", "order": "created_at.desc", "limit": "20"},
+            )
+        self._raise_for_repository_error(response)
+        return [SourceVerificationRead.model_validate(row) for row in response.json()]
+
+    async def create_source_verification(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID,
+        payload: VerificationRequest,
+    ) -> SourceVerificationRead:
+        # Ownership must be established before any external registry request.
+        paper = await self.get_paper(user, project_id, paper_id)
+        local = BibliographicMetadata.model_validate(paper.model_dump())
+        report = await verify_source(local, payload.doi)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self._rest_url}/paper_source_verifications",
+                headers=self._headers(user, return_representation=True),
+                json={"paper_id": str(paper_id), "report": report.model_dump(mode="json")},
+            )
+        self._raise_for_repository_error(response)
+        return SourceVerificationRead.model_validate(response.json()[0])
+
+    async def review_source_verification(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID,
+        verification_id: UUID, payload: SourceReviewCreate,
+    ) -> SourceReviewRead:
+        await self.get_paper(user, project_id, paper_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/paper_source_verifications", headers=self._headers(user),
+                params={"select": "id", "paper_id": f"eq.{paper_id}", "id": f"eq.{verification_id}", "limit": "1"},
+            )
+            self._raise_for_repository_error(response)
+            if not response.json():
+                raise EntityNotFoundError("Laporan verifikasi tidak ditemukan")
+            response = await client.post(
+                f"{self._rest_url}/paper_source_reviews",
+                headers=self._headers(user, return_representation=True),
+                json={"verification_id": str(verification_id), "reviewer_id": str(user.id), **payload.model_dump()},
+            )
+        self._raise_for_repository_error(response)
+        # The decision applies to this immutable snapshot, not later extractions.
+        # Do not alter component review, paper readiness, or registry findings.
+        return SourceReviewRead.model_validate(response.json()[0])
+
     async def get_paper_result(
         self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
     ) -> PaperResultRead:
@@ -472,7 +561,7 @@ class SupabaseProjectRepository:
                     "select": (
                         "id,paper_id,parameter,ai_value,final_value,status,confidence,"
                         "model_name,prompt_version,created_at,is_active,"
-                        "evidence_spans(quote,page_number,section,subsection,"
+                        "evidence_spans(quote,page_number,section,subsection,evidence_kind,source_label,"
                         "paper_blocks(id,bounding_box))"
                     ),
                     "paper_id": f"eq.{paper_id}",
@@ -496,6 +585,8 @@ class SupabaseProjectRepository:
                     "page_number": span["page_number"],
                     "section": span.get("section"),
                     "subsection": span.get("subsection"),
+                    "evidence_kind": span.get("evidence_kind", "text"),
+                    "source_label": span.get("source_label"),
                     "block_id": str(block.get("id") or ""),
                     "bounding_box": block.get("bounding_box"),
                 })
@@ -516,10 +607,11 @@ class SupabaseProjectRepository:
                 headers=self._headers(user),
                 params={
                     "select": (
-                        "id,title,original_filename,created_at,"
+                        "id,title,original_filename,authors,publication_year,journal,publisher,"
+                        "volume,issue,pages,doi,publication_status,created_at,"
                         "extracted_components(id,parameter,ai_value,final_value,status,"
                         "confidence,created_at,is_active,evidence_spans(quote,page_number,section,"
-                        "subsection,paper_blocks(id,bounding_box)))"
+                        "subsection,evidence_kind,source_label,paper_blocks(id,bounding_box)))"
                     ),
                     "project_id": f"eq.{project_id}",
                     "status": "eq.ready",
@@ -533,6 +625,15 @@ class SupabaseProjectRepository:
                 "id": row["id"],
                 "title": row.get("title") or row.get("original_filename") or "Paper",
                 "original_filename": row.get("original_filename") or "paper.pdf",
+                "authors": row.get("authors") or [],
+                "publication_year": row.get("publication_year"),
+                "journal": row.get("journal"),
+                "publisher": row.get("publisher"),
+                "volume": row.get("volume"),
+                "issue": row.get("issue"),
+                "pages": row.get("pages"),
+                "doi": row.get("doi"),
+                "publication_status": row.get("publication_status"),
             }
             for row in paper_rows
         ]
@@ -565,6 +666,8 @@ class SupabaseProjectRepository:
                         "page_number": span["page_number"],
                         "section": span.get("section"),
                         "subsection": span.get("subsection"),
+                        "evidence_kind": span.get("evidence_kind", "text"),
+                        "source_label": span.get("source_label"),
                         "block_id": str(block.get("id") or ""),
                         "bounding_box": block.get("bounding_box"),
                     })

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +9,7 @@ import '../platform/download_file.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 
-typedef ExportFileSaver = void Function(ExportDownload download);
+typedef ExportFileSaver = FutureOr<void> Function(ExportDownload download);
 typedef ExportLoader = Future<ExportDownload> Function(String format);
 
 class ExportResultsScreen extends ConsumerStatefulWidget {
@@ -46,10 +48,16 @@ class _ExportResultsScreenState extends ConsumerState<ExportResultsScreen> {
       if (!mounted) return;
       final saver = widget.fileSaver;
       if (saver != null) {
-        saver(result);
+        await saver(result);
       } else {
-        downloadFile(result.bytes, result.filename, result.mediaType);
+        final saved = await downloadFile(
+          result.bytes,
+          result.filename,
+          result.mediaType,
+        );
+        if (!saved) return;
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.filename} berhasil diunduh.')),
       );

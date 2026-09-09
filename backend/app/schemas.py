@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -124,6 +124,11 @@ class PaperRead(PaperCreate):
     authors: list[str] = Field(default_factory=list)
     publication_year: int | None = None
     journal: str | None = None
+    publisher: str | None = None
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+    publication_status: str | None = None
     analysis_job: PaperProcessingRead | None = None
     created_at: datetime
     updated_at: datetime
@@ -154,11 +159,21 @@ class AnalysisJobRead(AnalysisJobCreate):
     updated_at: datetime
 
 
+class EvidenceKind(StrEnum):
+    TEXT = "text"
+    TABLE = "table"
+    FIGURE = "figure"
+    EQUATION = "equation"
+    RESULT = "result"
+
+
 class EvidenceSpan(BaseModel):
     quote: str = Field(min_length=1)
     page_number: int = Field(ge=1)
     section: str | None = None
     subsection: str | None = None
+    evidence_kind: EvidenceKind = EvidenceKind.TEXT
+    source_label: str | None = None
     block_id: str
     bounding_box: tuple[float, float, float, float] | None = None
 
@@ -263,6 +278,15 @@ class MatrixPaperRead(BaseModel):
     id: UUID
     title: str
     original_filename: str
+    authors: list[str] = Field(default_factory=list)
+    publication_year: int | None = None
+    journal: str | None = None
+    publisher: str | None = None
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+    doi: str | None = None
+    publication_status: str | None = None
 
 
 class MatrixCellRead(BaseModel):
@@ -284,6 +308,92 @@ class ComparativeMatrixRead(BaseModel):
     project_title: str
     papers: list[MatrixPaperRead]
     rows: list[MatrixRowRead]
+
+
+class CitationStyle(StrEnum):
+    APA7 = "apa7"
+    IEEE = "ieee"
+    HARVARD = "harvard"
+    VANCOUVER = "vancouver"
+    CHICAGO = "chicago"
+
+
+class ReferenceEntryRead(BaseModel):
+    paper_id: UUID
+    citation: str
+    in_text_citation: str
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    publication_year: int | None = None
+    journal: str | None = None
+    publisher: str | None = None
+    doi: str | None = None
+
+
+class UnsupportedClaimRead(BaseModel):
+    component_id: UUID
+    paper_id: UUID
+    paper_title: str
+    parameter: ExtractionParameter
+    claim: str
+    status: VerificationStatus
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence_count: int = Field(ge=0)
+    reason: str
+
+
+class StructuralPaperRead(BaseModel):
+    paper_id: UUID
+    title: str
+    identity: dict[str, Any]
+    research_structure: dict[str, Any]
+    evidence_count: int = Field(ge=0)
+
+
+class RelationshipRead(BaseModel):
+    source_id: str
+    target_id: str
+    relation: str
+    detail: str = ""
+    paper_ids: list[UUID] = Field(default_factory=list)
+
+
+class ResearchClusterRead(BaseModel):
+    id: str
+    kind: str
+    label: str
+    paper_ids: list[UUID]
+    shared_terms: list[str] = Field(default_factory=list)
+
+
+class IntelligenceReportRead(BaseModel):
+    project_id: UUID
+    project_title: str
+    citation_style: CitationStyle
+    references: list[ReferenceEntryRead] = Field(default_factory=list)
+    papers: list[StructuralPaperRead] = Field(default_factory=list)
+    relationships: list[RelationshipRead] = Field(default_factory=list)
+    relationship_count: int = Field(ge=0)
+    clusters: list[ResearchClusterRead] = Field(default_factory=list)
+    unsupported_claims: list[UnsupportedClaimRead] = Field(default_factory=list)
+    candidate_gap_count: int = Field(ge=0)
+    comparison_count: int = Field(ge=0)
+    candidate_comparison_count: int = Field(ge=0)
+    accepted_comparison_count: int = Field(ge=0)
+    synthesis: str
+    generated_at: datetime
+
+
+class AccountSettingsRead(BaseModel):
+    citation_style: CitationStyle = CitationStyle.APA7
+    locale: str = Field(default="id", pattern=r"^(id|en)$")
+    show_confidence: bool = True
+
+
+class AccountSettingsUpdate(BaseModel):
+    citation_style: CitationStyle = CitationStyle.APA7
+    locale: str = Field(default="id", pattern=r"^(id|en)$")
+    show_confidence: bool = True
 
 
 class ConceptMapNodeRead(BaseModel):

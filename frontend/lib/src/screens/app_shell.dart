@@ -253,21 +253,15 @@ class _DesktopSidebar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Student Pilot',
+                      'Beta terbatas',
                       style: TextStyle(
                         color: AppColors.primaryDark,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: 0,
-                      minHeight: 6,
-                      borderRadius: BorderRadius.all(Radius.circular(99)),
-                    ),
-                    SizedBox(height: 7),
                     Text(
-                      '0 / 5 paper hari ini',
+                      'Kuota bersama server. Detail di Akun.',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.primaryDark,

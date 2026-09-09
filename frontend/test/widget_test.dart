@@ -510,7 +510,7 @@ void main() {
       expect(find.text('1/11 komponen tersedia'), findsOneWidget);
       await tester.drag(find.byType(ListView).first, const Offset(0, -700));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Halaman 3'));
+      await tester.tap(find.textContaining('Teks persis · Halaman 3'));
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
       expect(tester.takeException(), isNull);
@@ -879,6 +879,8 @@ void main() {
     expect(find.text('Yes, gunakan'), findsOneWidget);
     expect(find.text('No, lewati'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Yes, gunakan'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Yes, gunakan'));
     await tester.pumpAndSettle();

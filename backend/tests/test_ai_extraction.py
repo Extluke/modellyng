@@ -10,8 +10,24 @@ from app.ai_extraction import (
     GeminiExtractionError,
     build_prompt,
     verify_extraction,
+    gemini_response_schema,
 )
 from app.schemas import ExtractionParameter
+
+
+def test_provider_schema_keeps_types_and_local_validation_keeps_bounds():
+    import json
+    schema = gemini_response_schema()
+    serialized = json.dumps(schema)
+    assert 'maxLength' not in serialized
+    assert 'maxItems' not in serialized
+    assert set(schema['$defs']['ExtractionParameter']['enum']) == {p.value for p in ExtractionParameter}
+    assert 'metadata' in schema['properties']
+    assert 'title' in schema['$defs']['AiPaperMetadata']['properties']
+    with pytest.raises(ValidationError):
+        AiEvidence(quote='short', page_number=0)
+    with pytest.raises(ValidationError):
+        AiEvidence(quote='x' * 1201, page_number=1)
 
 
 def _complete_extraction(*, evidence: list[AiEvidence]) -> AiPaperExtraction:

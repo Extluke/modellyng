@@ -6,6 +6,8 @@ import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/intelligence_report_card.dart';
+import '../widgets/paper_comparison_panel.dart';
 import 'paper_result_screen.dart';
 
 class ComparativeMatrixScreen extends ConsumerStatefulWidget {
@@ -70,6 +72,7 @@ class _ComparativeMatrixScreenState
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: _projectId,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Pilih proyek',
                     ),
@@ -85,6 +88,21 @@ class _ComparativeMatrixScreenState
                     }),
                   ),
                   const SizedBox(height: 20),
+                  if (_projectId != null) ...[
+                    PaperComparisonPanel(
+                      key: ValueKey('matrix-pairs-$_projectId'),
+                      projectId: _projectId!,
+                      initialMatrix: true,
+                    ),
+                    const SizedBox(height: 24),
+                    IntelligenceReportCard(projectId: _projectId!),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Ringkasan ekstraksi per paper',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (_projectId != null)
                     _matrix(ref.watch(comparativeMatrixProvider(_projectId!))),
                 ],

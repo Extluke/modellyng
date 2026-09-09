@@ -71,7 +71,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (mounted) {
         setState(() {
           _errorMessage =
-              'Tidak dapat terhubung ke layanan login. Pastikan Supabase lokal masih berjalan.';
+              'Tidak dapat terhubung ke layanan login. Periksa internet atau coba lagi ketika server beta aktif.';
         });
       }
     } finally {
@@ -268,7 +268,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'Data akun dan dokumen pada tahap ini tersimpan di Supabase lokal pada komputer pengembangan.',
+                              'Beta terbatas: layanan aktif selama server pengelola menyala. Gunakan hanya dokumen publik yang boleh diproses AI; jangan unggah data pribadi atau rahasia.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: AppColors.muted,

@@ -109,6 +109,14 @@ class ProjectPaper {
     required this.processingProgress,
     required this.processingError,
     required this.createdAt,
+    this.doi,
+    this.publicationYear,
+    this.journal,
+    this.publisher,
+    this.volume,
+    this.issue,
+    this.pages,
+    this.publicationStatus,
   });
 
   final String id;
@@ -126,6 +134,27 @@ class ProjectPaper {
   final double processingProgress;
   final String? processingError;
   final DateTime? createdAt;
+  final String? doi;
+  final int? publicationYear;
+  final String? journal;
+  final String? publisher;
+  final String? volume;
+  final String? issue;
+  final String? pages;
+  final String? publicationStatus;
+
+  Map<String, String?> get bibliographicValues => {
+    'title': title,
+    'authors': authors.isEmpty ? null : authors.join('; '),
+    'publication_year': publicationYear?.toString(),
+    'journal': journal,
+    'doi': doi,
+    'publisher': publisher,
+    'volume': volume,
+    'issue': issue,
+    'pages': pages,
+    'publication_status': publicationStatus,
+  };
 
   factory ProjectPaper.fromJson(Map<String, dynamic> json) {
     final rawJob = json['analysis_job'];
@@ -165,6 +194,14 @@ class ProjectPaper {
       ),
       processingError: job?['error_message']?.toString(),
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      doi: json['doi'] as String?,
+      publicationYear: (json['publication_year'] as num?)?.toInt(),
+      journal: json['journal'] as String?,
+      publisher: json['publisher'] as String?,
+      volume: json['volume'] as String?,
+      issue: json['issue'] as String?,
+      pages: json['pages'] as String?,
+      publicationStatus: json['publication_status'] as String?,
     );
   }
 

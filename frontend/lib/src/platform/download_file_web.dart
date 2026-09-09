@@ -3,7 +3,11 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-void downloadFile(Uint8List bytes, String filename, String mediaType) {
+Future<bool> downloadFile(
+  Uint8List bytes,
+  String filename,
+  String mediaType,
+) async {
   final blob = html.Blob(<Object>[bytes], mediaType);
   final url = html.Url.createObjectUrlFromBlob(blob);
   final anchor = html.AnchorElement(href: url)
@@ -13,4 +17,5 @@ void downloadFile(Uint8List bytes, String filename, String mediaType) {
   anchor.click();
   anchor.remove();
   html.Url.revokeObjectUrl(url);
+  return true;
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_repository.dart';
+import '../data/paper_comparison_repository.dart';
 import '../data/project_repository.dart';
 import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
@@ -86,6 +87,7 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
       ref.invalidate(reviewQueueProvider(userId));
       ref.invalidate(reviewHistoryProvider(userId));
       ref.invalidate(projectsProvider(userId));
+      ref.invalidate(paperComparisonsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$accepted hasil berhasil diterima.')),
@@ -318,6 +320,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
           );
       ref.invalidate(reviewQueueProvider(widget.userId));
       ref.invalidate(projectsProvider(widget.userId));
+      ref.invalidate(paperComparisonsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Keputusan review berhasil disimpan.')),
@@ -379,6 +382,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
             );
         ref.invalidate(reviewQueueProvider(widget.userId));
         ref.invalidate(projectsProvider(widget.userId));
+        ref.invalidate(paperComparisonsProvider);
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -469,7 +473,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'Halaman ${evidence.pageNumber}: “${evidence.quote}”',
+                    '${evidence.kindLabel} · ${evidence.locationLabel}: “${evidence.quote}”',
                     style: const TextStyle(height: 1.45),
                   ),
                 ),

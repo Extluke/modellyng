@@ -81,6 +81,11 @@ class PaperRepository {
       allowedExtensions: const ['pdf'],
       allowMultiple: false,
       withData: true,
+    ).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw const PaperUploadException(
+        'Pemilih file tidak merespons. Tutup dialog file lalu coba lagi.',
+      ),
     );
     if (result == null) return null;
 

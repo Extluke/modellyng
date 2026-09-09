@@ -1,5 +1,9 @@
 import 'dart:typed_data';
 
-void downloadFile(Uint8List bytes, String filename, String mediaType) {
-  throw UnsupportedError('Download file saat ini tersedia pada Flutter web.');
+Future<bool> downloadFile(
+  Uint8List bytes,
+  String filename,
+  String mediaType,
+) async {
+  throw UnsupportedError('Penyimpanan file tidak didukung pada perangkat ini.');
 }

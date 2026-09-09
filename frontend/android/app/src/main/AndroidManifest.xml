@@ -1,8 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="modellyng"
+        android:label="Modellyng Beta"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:icon="@drawable/modellyng_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"

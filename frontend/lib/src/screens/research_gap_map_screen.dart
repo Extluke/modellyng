@@ -6,6 +6,7 @@ import '../data/project_repository.dart';
 import '../data/research_gap_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/paper_comparison_panel.dart';
 import 'paper_result_screen.dart';
 
 class ResearchGapMapScreen extends ConsumerStatefulWidget {
@@ -33,7 +34,7 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
           const PageHeading(
             title: 'Research Gap Map',
             subtitle:
-                'Petakan kandidat gap dari keterbatasan dan future work yang sudah direview, lengkap dengan evidence asli.',
+                'Telusuri kesamaan dan perbedaan antar-paper hingga menemukan kandidat research gap dengan evidence asli.',
           ),
           const SizedBox(height: 10),
           const _HumanReviewNotice(),
@@ -54,6 +55,7 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: _projectId,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Pilih proyek',
                     ),
@@ -66,6 +68,12 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                     ],
                     onChanged: (value) => setState(() => _projectId = value),
                   ),
+                  const SizedBox(height: 14),
+                  PaperComparisonPanel(key: ValueKey('gap-pairs-$_projectId'), projectId: _projectId!),
+                  const SizedBox(height: 24),
+                  Text('Keterbatasan dari masing-masing paper', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  const Text('Sumber tambahan dari limitations dan future work yang sudah direview.'),
                   const SizedBox(height: 14),
                   SegmentedButton<String>(
                     segments: const [

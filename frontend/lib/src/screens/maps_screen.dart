@@ -12,7 +12,7 @@ class MapsScreen extends StatefulWidget {
 }
 
 class _MapsScreenState extends State<MapsScreen> {
-  int _selected = 0;
+  int _selected = 1;
 
   @override
   Widget build(BuildContext context) => Column(
