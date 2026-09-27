@@ -476,6 +476,19 @@ class GlobalChatRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=15)
 
 
+class ComponentReviseRequest(BaseModel):
+    parameter: ExtractionParameter
+    original_value: str
+    evidence_quotes: list[str] = Field(default_factory=list)
+    prompt: str = Field(min_length=2, max_length=2_000)
+    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=15)
+
+
+class ComponentReviseResponse(BaseModel):
+    revised_content: str
+    model_name: str
+
+
 class ProjectChatSource(BaseModel):
     source_id: str
     paper_id: UUID

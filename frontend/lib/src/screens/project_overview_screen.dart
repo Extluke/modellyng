@@ -11,7 +11,6 @@ import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import 'export_results_screen.dart';
 import 'paper_result_screen.dart';
-import 'project_chat_screen.dart';
 
 class ProjectOverviewScreen extends ConsumerStatefulWidget {
   const ProjectOverviewScreen({required this.project, super.key});

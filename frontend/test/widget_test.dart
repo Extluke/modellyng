@@ -477,6 +477,7 @@ void main() {
         ),
         components: [
           PaperComponentResult(
+            id: 'component-1',
             parameter: 'research_problem',
             aiValue: 'AI value',
             finalValue: null,

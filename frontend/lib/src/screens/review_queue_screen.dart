@@ -7,6 +7,7 @@ import '../data/project_repository.dart';
 import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import 'component_revision_screen.dart';
 
 String? validateRequiredReviewText(String value, String label) =>
     value.trim().isEmpty ? '$label tidak boleh kosong.' : null;
@@ -512,10 +513,23 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                 TextButton.icon(
                   onPressed: _submitting
                       ? null
-                      : () => _submitWithReason(ReviewDecision.reject),
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => ComponentRevisionScreen(
+                                projectId: item.projectId,
+                                component: item,
+                              ),
+                            ),
+                          ).then((success) {
+                            if (success == true) {
+                              ref.invalidate(reviewQueueProvider);
+                            }
+                          });
+                        },
                   icon: const Icon(Icons.close_rounded, color: AppColors.red),
                   label: const Text(
-                    'Tolak',
+                    'Tolak & Revisi',
                     style: TextStyle(color: AppColors.red),
                   ),
                 ),

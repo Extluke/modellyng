@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .schemas import (
+    ComponentReviseRequest,
+    ComponentReviseResponse,
     GlobalChatRequest,
     GlobalChatResponse,
     ProjectChatRequest,
@@ -204,6 +206,77 @@ PERTANYAAN USER:
         raise ChatUnavailableError("Chatbot belum dapat menjawab. Silakan coba lagi.") from last_error
 
     return GlobalChatResponse(answer=answer_text.strip(), model_name=used_model)
+
+
+def revise_component(request: ComponentReviseRequest) -> ComponentReviseResponse:
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        raise ChatUnavailableError("Gemini API key belum dikonfigurasi di backend")
+
+    history = "\n".join(f"{message.role.upper()}: {message.content}" for message in request.history[-6:])
+    evidence_text = "\n".join(f"- {quote}" for quote in request.evidence_quotes)
+    
+    prompt = f"""
+Anda adalah Asisten Peneliti Akademik (RAG). Tugas Anda adalah merevisi hasil ekstraksi teks (komponen) dari sebuah paper berdasarkan komentar/prompt dari pengguna.
+
+PARAMETER/BAGIAN YANG DIREVISI: {request.parameter.value}
+
+TEKS HASIL EKSTRAKSI ASLI:
+{request.original_value}
+
+KUTIPAN BUKTI DARI PDF (Jika ada):
+{evidence_text or '(tidak ada)'}
+
+RIWAYAT DISKUSI (Konteks jika ini adalah iterasi kesekian):
+{history or '(belum ada)'}
+
+INSTRUKSI REVISI DARI PENGGUNA:
+{request.prompt}
+
+TUGAS:
+Tulis ulang teks hasil ekstraksi tersebut agar sesuai dengan instruksi pengguna. 
+- PASTIKAN Anda MURNI mengembalikan teks hasil revisi saja (TIDAK BOLEH MENAMBAHKAN komentar pembuka seperti "Berikut adalah hasil revisinya:" atau penutup). 
+- Jangan menambah-nambahkan fakta yang tidak ada di "KUTIPAN BUKTI" atau "TEKS ASLI".
+- Gunakan bahasa akademik (Bahasa Indonesia) yang baik.
+""".strip()
+
+    client = genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(
+            timeout=settings.gemini_chat_timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    )
+    models = [settings.gemini_fallback_model or settings.gemini_model]
+    if settings.gemini_model not in models:
+        models.append(settings.gemini_model)
+
+    answer_text = ""
+    used_model = settings.gemini_model
+    last_error: Exception | None = None
+    for model in models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                ),
+            )
+            answer_text = response.text or ""
+            if answer_text:
+                used_model = model
+                break
+        except Exception as exc:
+            last_error = exc
+
+    if not answer_text:
+        message = str(last_error or "Gemini tidak mengembalikan jawaban").upper()
+        if any(code in message for code in ("429", "503", "504", "RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED")):
+            raise ChatUnavailableError("Gemini sedang sibuk atau kuotanya habis. Coba lagi beberapa saat.") from last_error
+        raise ChatUnavailableError("Chatbot belum dapat merevisi. Silakan coba lagi.") from last_error
+
+    return ComponentReviseResponse(revised_content=answer_text.strip(), model_name=used_model)
 
 
 def _answer_document_list(documents: list[ProjectChatDocument]) -> ProjectChatResponse:

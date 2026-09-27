@@ -9,10 +9,9 @@ import '../widgets/common_widgets.dart';
 import 'account_screen.dart';
 import 'comparative_matrix_screen.dart';
 import 'dashboard_screen.dart';
+import 'global_chat_screen.dart';
 import 'maps_screen.dart';
 import 'new_project_screen.dart';
-import 'global_chat_screen.dart';
-import 'project_chat_screen.dart';
 import 'project_overview_screen.dart';
 import 'projects_screen.dart';
 import 'review_queue_screen.dart';
@@ -26,7 +25,6 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
-  int _reviewHistoryExpansionRequest = 0;
 
   static const _destinations = <_Destination>[
     _Destination(

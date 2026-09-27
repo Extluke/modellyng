@@ -92,6 +92,7 @@ class ResultEvidence {
 
 class PaperComponentResult {
   const PaperComponentResult({
+    required this.id,
     required this.parameter,
     required this.aiValue,
     required this.finalValue,
@@ -99,6 +100,7 @@ class PaperComponentResult {
     required this.confidence,
     required this.evidence,
   });
+  final String id;
   final String parameter;
   final String aiValue;
   final String? finalValue;
@@ -108,6 +110,7 @@ class PaperComponentResult {
 
   factory PaperComponentResult.fromJson(Map<String, dynamic> json) =>
       PaperComponentResult(
+        id: json['id']?.toString() ?? '',
         parameter: json['parameter']?.toString() ?? '',
         aiValue: json['ai_value']?.toString() ?? '',
         finalValue: json['final_value']?.toString(),

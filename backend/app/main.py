@@ -37,6 +37,8 @@ from .schemas import (
     ResearchGapDecisionCreate,
     ResearchGapDecisionRead,
     ExtractionParameter,
+    ComponentReviseRequest,
+    ComponentReviseResponse,
     GlobalChatRequest,
     GlobalChatResponse,
     ProjectChatRequest,
@@ -452,6 +454,21 @@ async def chat_with_assistant(
 ) -> GlobalChatResponse:
     from .chat_service import answer_global_question
     return answer_global_question(payload)
+
+
+@api.post(
+    "/projects/{project_id}/components/{component_id}/revise",
+    response_model=ComponentReviseResponse,
+    tags=["chat", "reviews"],
+)
+async def revise_extracted_component(
+    project_id: UUID,
+    component_id: UUID,
+    payload: ComponentReviseRequest,
+    current_user: CurrentUser,
+) -> ComponentReviseResponse:
+    from .chat_service import revise_component
+    return revise_component(payload)
 
 
 @api.get(

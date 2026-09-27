@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/global_chat_repository.dart';
 import '../theme/app_theme.dart';
-import '../widgets/common_widgets.dart';
 
 class _ChatMessage {
   const _ChatMessage({
