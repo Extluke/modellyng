@@ -200,29 +200,29 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    SizedBox(
-                      width: 210,
-                      child: MetricCard(
-                        icon: Icons.description_outlined,
-                        label: 'Paper',
-                        value: '$paperCount',
-                        color: AppColors.blue,
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: MetricCard(
+                          icon: Icons.description_outlined,
+                          label: 'Paper',
+                          value: '$paperCount',
+                          color: AppColors.blue,
+                        ),
                       ),
-                    ),
-                    SizedBox(
-                      width: 210,
-                      child: MetricCard(
-                        icon: Icons.fact_check_outlined,
-                        label: 'Menunggu review',
-                        value: '$reviewCount',
-                        color: AppColors.orange,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: MetricCard(
+                          icon: Icons.fact_check_outlined,
+                          label: 'Menunggu review',
+                          value: '$reviewCount',
+                          color: AppColors.orange,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
                 _UploadGuidance(

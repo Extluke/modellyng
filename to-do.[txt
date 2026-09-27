@@ -1,0 +1,219 @@
+# 📋 MODELLYNG — DOKUMEN REVISI FITUR
+**Versi:** 1.0 | **Status:** Menunggu Implementasi
+
+---
+
+## 📁 PATH 1: Dashboard > Proyek > Halaman Unggah PDF
+
+### Revisi 1.1 — Upload PDF Multi-File
+**Kondisi saat ini:** Hanya bisa upload 1 PDF sekaligus.
+
+**Target:**
+| Tier | Batas Upload Sekaligus |
+|------|----------------------|
+| Free | Maksimal 5 PDF sekaligus. Upload ke-6 dan seterusnya harus berbayar. |
+| Paid | Maksimal 10–15 PDF sekaligus. |
+
+---
+
+### Revisi 1.2 — Fitur Hapus PDF
+**Tujuan:** Membantu user yang salah upload, tanpa membuka celah penyalahgunaan kuota gratis.
+
+**Permasalahan yang harus diselesaikan:**
+- ✅ User bisa menghapus PDF yang salah upload
+- ❌ User **tidak boleh** bisa memanipulasi kuota Free dengan cara hapus → upload → hapus → upload secara berulang (infinite loop gratis)
+
+**Solusi yang perlu dipikirkan saat implementasi:**
+- Kuota dihitung dari **total PDF yang pernah diproses**, bukan dari PDF yang sedang aktif
+- Menghapus PDF tidak mengembalikan kuota yang sudah terpakai
+
+> ⚠️ **Catatan untuk developer:** Logika anti-abuse kuota wajib dirancang sebelum fitur hapus diimplementasi.
+
+---
+
+## 📁 PATH 2: Review > Chatbot (Flow Revisi via AI)
+
+### Revisi 2.1 — Flow Chatbot Setelah User Menolak Komponen
+
+**Trigger:** User menekan tombol **Tolak** pada salah satu komponen di halaman Review.
+
+**Alur lengkap:**
+
+```
+User klik [TOLAK] pada komponen (contoh: Metodologi)
+        ↓
+Diarahkan otomatis ke halaman Chatbot
+        ↓
+Chatbot sudah terfokus pada komponen yang ditolak
+Chatbot membuka percakapan dengan pesan:
+"Silakan berikan komentar — hasil seperti apa yang Anda inginkan
+ untuk komponen [nama komponen] ini?"
+        ↓
+User mengetik prompt (contoh: "Gunakan bahasa yang lebih akademik")
+        ↓
+AI generate ulang komponen tersebut sesuai prompt user
+        ↓
+Muncul popup/card hasil dengan 2 pilihan:
+┌─────────────────────────────────────────┐
+│  [Hasil generate AI ditampilkan di sini]│
+│                                         │
+│  [✅ SETUJUI]        [❌ TOLAK LAGI]    │
+└─────────────────────────────────────────┘
+        ↓                    ↓
+  Komponen diperbarui   Flow diulang dari awal
+  User kembali ke       (user input prompt baru →
+  halaman Review        AI generate ulang → popup lagi)
+```
+
+> 🔁 Loop **Tolak → Prompt → Generate → Popup** terus berulang sampai user menekan **Setujui**.
+
+---
+
+## 📁 PATH 3: Dashboard (Halaman Utama)
+
+### Revisi 3.1 — Ubah Fungsi Dashboard
+**Kondisi saat ini:** Dashboard menampilkan daftar proyek.
+
+**Target:** Dashboard diubah menjadi **halaman promosi/landing** (bukan daftar proyek).
+
+> 📌 **Detail desain** (konten promosi, CTA, layout) perlu didiskusikan lebih lanjut sebelum implementasi.
+
+---
+
+## 📁 PATH 4: Proyek > Hasil & Evidence (Detail PDF)
+
+### BAGIAN A — Tabel Metodologi (5 Komponen Utama)
+
+---
+
+#### Revisi 4A.1 — Komponen: Pertanyaan Penelitian → Kolom "Objek/Konsep"
+**Kondisi saat ini:** Kolom berisi paragraf panjang.
+
+**Target:** Ubah menjadi **poin-poin ringkas**.
+
+---
+
+#### Revisi 4A.2 — Komponen: Kegiatan Utama
+**Kondisi saat ini:** Berisi paragraf panjang yang sulit dibaca.
+
+**Target:** Ubah menjadi format terstruktur yang menjawab 3 pertanyaan wajib:
+
+```
+- Populasi data dari paper ini adalah: .....
+- Tahap pengumpulan data penelitian ini adalah: .....
+- Teknik analisis data penelitian ini adalah: .....
+```
+
+**Kondisi khusus — jika PDF bukan paper penelitian:**
+
+Jika AI tidak menemukan ketiga parameter di atas (populasi data, tahap pengumpulan data, teknik analisis data), tampilkan pesan peringatan:
+
+> ⚠️ *"File yang diunggah tidak terdeteksi sebagai paper penelitian. Silakan unggah file lain yang merupakan jurnal atau paper ilmiah."*
+
+---
+
+#### Revisi 4A.3 — Komponen: Arah Kegiatan
+**Kondisi saat ini:** Hasil AI belum menjawab pertanyaan inti.
+
+**Target:** Hasil AI wajib menjawab 2 pertanyaan berikut:
+1. **Output penelitian ini apa?** (hasil konkret yang dihasilkan)
+2. **Ke arah mana penelitian ini bisa dikembangkan?** (potensi aplikasi/pengembangan lanjutan)
+
+---
+
+#### Revisi 4A.4 — Komponen: Bentuk (Jenis Metodologi)
+**Kondisi saat ini:** Berisi teks singkat yang tidak informatif.
+
+**Target:** Gunakan **if-condition** untuk mendeteksi jenis metodologi, lalu tampilkan format yang sesuai:
+
+**Jika Kuantitatif:**
+```
+Desain Riset     : Kuantitatif (Eksperimental / Survei)
+Variabel         : X = [nama variabel X], Y = [nama variabel Y]
+Hipotesis        : X berpengaruh terhadap Y
+Ukuran Sampel    : [jumlah] Responden
+Teknik Sampling  : [nama teknik]
+Instrumen        : [nama instrumen, contoh: Kuesioner Skala Likert 1–5]
+Teknik Analisis  : [nama uji statistik]
+```
+
+**Jika Kualitatif:**
+```
+Desain Riset         : Kualitatif (Studi Kasus / Fenomenologi / dll)
+Fokus Riset          : [pertanyaan/tujuan eksplorasi]
+Subjek / Informan    : [jumlah & deskripsi subjek]
+Teknik Pemilihan     : [contoh: Purposive Sampling]
+Instrumen            : [contoh: Pedoman Wawancara / Observasi]
+Teknik Analisis      : [contoh: Analisis Tematik]
+```
+
+**Jika Mixed Methods (Campuran):**
+```
+Desain Riset         : Mixed Methods
+Tahap Kuantitatif    : [deskripsi singkat — survei, jumlah sampel, instrumen]
+Tahap Kualitatif     : [deskripsi singkat — wawancara, jumlah informan]
+Integrasi Analisis   : [cara data kuant & kual digabungkan untuk kesimpulan]
+```
+
+---
+
+### BAGIAN B — Hasil Naratif & Evidence
+
+#### Revisi 4B.1 — Desain Confidence Score
+**Kondisi saat ini:** Confidence ditampilkan sebagai teks (contoh: "Confidence 95%").
+
+**Target:** Ubah menjadi **progress bar visual** agar lebih nyaman dilihat.
+
+---
+
+#### Revisi 4B.2 — Tambah Tab "Review" di Halaman Hasil
+**Kondisi saat ini:** Tab yang tersedia hanya:
+- Hasil
+- PDF Evidence
+
+**Target:** Tambah 1 tab baru:
+- Hasil
+- PDF Evidence
+- **Review** *(baru)*
+
+**Perubahan flow yang menyertai:**
+- Sebelumnya: untuk melakukan Review, user harus kembali ke Dashboard → klik navbar Review di bawah.
+- Sekarang: Tab Review langsung tersedia di halaman hasil, tanpa perlu keluar halaman.
+
+**Behavior tab Review:**
+- Card yang berstatus **"Needs Review"** ketika diklik → langsung masuk ke tab Review
+- Di dalam tab Review tersedia tombol: **Terima / Edit / Tolak / Analisis Ulang**
+- Jika user klik **Tolak** → otomatis diarahkan ke Chatbot (lihat Revisi 2.1)
+- Jika user klik **Edit** → *[detail behavior masih perlu didiskusikan]*
+
+---
+
+#### Revisi 4B.3 — Hapus Box "Metodologi Penelitian Berikutnya"
+**Target:** Hapus elemen box metodologi penelitian berikutnya yang ada di halaman ini.
+(Konten ini akan dipindahkan ke sub-menu baru — lihat Bagian C.)
+
+---
+
+### BAGIAN C — Sub-Menu Baru: "Penelitian Berikutnya"
+
+#### Revisi 4C.1 — Buat Sub-Menu Baru
+**Nama sub-menu:** Penelitian Berikutnya
+
+**Fungsi:** AI membuat sebuah artikel/paragraf yang berisi **rekomendasi peluang pengembangan** berdasarkan paper yang diunggah.
+
+**Konten yang dihasilkan AI:**
+- Analisis singkat tentang celah (gap) yang ditemukan dari paper ini
+- Rekomendasi topik/arah penelitian yang bisa diambil sebagai pengembangan lanjutan
+- Disajikan dalam bentuk narasi yang mudah dibaca, bukan poin teknis kering
+
+---
+
+## 📌 Catatan Umum untuk Developer
+
+| # | Hal yang Perlu Didiskusikan Lebih Lanjut |
+|---|------------------------------------------|
+| 1 | Desain & konten halaman Dashboard (promosi) |
+| 2 | Behavior tombol Edit di tab Review |
+| 3 | Batas kuota Paid tier (10 atau 15 PDF?) |
+| 4 | Desain visual progress bar confidence score |
+| 5 | Format dan panjang artikel "Penelitian Berikutnya" |

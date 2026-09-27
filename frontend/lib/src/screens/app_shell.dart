@@ -66,10 +66,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!mounted || created == null) return;
     final userId = ref.read(authRepositoryProvider).currentUser?.id;
     if (userId != null) ref.invalidate(projectsProvider(userId));
-    setState(() => _selectedIndex = 1);
+    _openProject(created);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Proyek berhasil disimpan di Supabase lokal.'),
+        content: Text('Proyek berhasil dibuat.'),
       ),
     );
   }
