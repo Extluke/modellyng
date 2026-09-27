@@ -17,11 +17,15 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
     this.userId,
     this.active = true,
     this.historyExpansionRequest = 0,
+    this.initialProjectId,
+    this.initialPaperId,
   });
 
   final String? userId;
   final bool active;
   final int historyExpansionRequest;
+  final String? initialProjectId;
+  final String? initialPaperId;
 
   @override
   ConsumerState<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
@@ -30,6 +34,12 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
 class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
   String? _projectFilter;
   bool _acceptingAll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectFilter = widget.initialProjectId;
+  }
 
   @override
   void didUpdateWidget(covariant ReviewQueueScreen oldWidget) {
@@ -226,9 +236,12 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
     final projects = {
       for (final item in items) item.projectId: item.projectTitle,
     };
-    final visible = _projectFilter == null
+    var visible = _projectFilter == null
         ? items
         : items.where((item) => item.projectId == _projectFilter).toList();
+    if (widget.initialPaperId != null) {
+      visible = visible.where((item) => item.paperId == widget.initialPaperId).toList();
+    }
     final groups = <String, List<ReviewQueueItem>>{};
     for (final item in visible) {
       groups.putIfAbsent(item.paperId, () => []).add(item);
@@ -236,23 +249,25 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String?>(
-          initialValue: _projectFilter,
-          decoration: const InputDecoration(labelText: 'Filter proyek'),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('Semua proyek'),
-            ),
-            for (final entry in projects.entries)
-              DropdownMenuItem<String?>(
-                value: entry.key,
-                child: Text(entry.value),
+        if (widget.initialProjectId == null) ...[
+          DropdownButtonFormField<String?>(
+            initialValue: _projectFilter,
+            decoration: const InputDecoration(labelText: 'Filter proyek'),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Semua proyek'),
               ),
-          ],
-          onChanged: (value) => setState(() => _projectFilter = value),
-        ),
-        const SizedBox(height: 12),
+              for (final entry in projects.entries)
+                DropdownMenuItem<String?>(
+                  value: entry.key,
+                  child: Text(entry.value),
+                ),
+            ],
+            onChanged: (value) => setState(() => _projectFilter = value),
+          ),
+          const SizedBox(height: 12),
+        ],
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(

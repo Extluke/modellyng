@@ -9,6 +9,7 @@ import '../models/research_models.dart';
 import '../platform/download_file.dart';
 import '../theme/app_theme.dart';
 import '../widgets/source_verification_card.dart';
+import 'review_queue_screen.dart';
 
 class PaperResultScreen extends ConsumerStatefulWidget {
   const PaperResultScreen({
@@ -30,9 +31,10 @@ class PaperResultScreen extends ConsumerStatefulWidget {
 }
 
 class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _pdfController = PdfViewerController();
   late final TabController _tabController;
+  late final TabController _leftTabController;
   late int _targetPage;
   String? _targetHighlightText;
   String? _targetBlockId;
@@ -45,17 +47,19 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
     _targetHighlightText = widget.initialHighlightText;
     _targetBlockId = widget.initialBlockId;
     _tabController = TabController(
-      length: 2,
+      length: 3,
       initialIndex: widget.initialHighlightText?.trim().isNotEmpty == true
           ? 1
           : 0,
       vsync: this,
     );
+    _leftTabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _leftTabController.dispose();
     super.dispose();
   }
 
@@ -144,6 +148,13 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
             onCitation: _showEvidence,
             onDownloadTables: _downloadStructuredTables,
             downloadingTables: _downloadingTables,
+            onReviewRequested: () {
+              if (MediaQuery.of(context).size.width >= 1050) {
+                _leftTabController.animateTo(1);
+              } else {
+                _tabController.animateTo(2);
+              }
+            },
           );
           final pdfPane = _PdfPane(
             query: _query,
@@ -157,30 +168,59 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
               if (constraints.maxWidth >= 1050) {
                 return Row(
                   children: [
-                    Expanded(child: resultPane),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          TabBar(
+                            controller: _leftTabController,
+                            tabs: const [
+                              Tab(text: 'Hasil'),
+                              Tab(text: 'Review'),
+                            ],
+                          ),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _leftTabController,
+                              children: [
+                                resultPane,
+                                ReviewQueueScreen(
+                                  initialProjectId: widget.projectId,
+                                  initialPaperId: widget.paperId,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     Expanded(child: pdfPane),
                   ],
                 );
               }
-              return DefaultTabController(
-                length: 2,
-                child: Column(
-                  children: [
-                    TabBar(
+              return Column(
+                children: [
+                  TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'Hasil'),
+                      Tab(text: 'PDF evidence'),
+                      Tab(text: 'Review'),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
                       controller: _tabController,
-                      tabs: const [
-                        Tab(text: 'Hasil'),
-                        Tab(text: 'PDF evidence'),
+                      children: [
+                        resultPane,
+                        pdfPane,
+                        ReviewQueueScreen(
+                          initialProjectId: widget.projectId,
+                          initialPaperId: widget.paperId,
+                        ),
                       ],
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [resultPane, pdfPane],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           );
@@ -197,12 +237,14 @@ class _ResultPane extends StatelessWidget {
     required this.onCitation,
     required this.onDownloadTables,
     required this.downloadingTables,
+    required this.onReviewRequested,
   });
   final PaperResult result;
   final ValueChanged<int> onEvidence;
   final ValueChanged<ResultEvidence> onCitation;
   final VoidCallback onDownloadTables;
   final bool downloadingTables;
+  final VoidCallback onReviewRequested;
 
   static const parameters = <String, String>{
     'research_problem': 'Masalah penelitian',
@@ -285,6 +327,7 @@ class _ResultPane extends StatelessWidget {
             label: entry.value,
             component: byParameter[entry.key],
             onEvidence: onCitation,
+            onReviewRequested: onReviewRequested,
           ),
       ],
     );
@@ -297,11 +340,13 @@ class _ComponentCard extends StatelessWidget {
     required this.label,
     required this.component,
     required this.onEvidence,
+    this.onReviewRequested,
   });
   final String parameter;
   final String label;
   final PaperComponentResult? component;
   final ValueChanged<ResultEvidence> onEvidence;
+  final VoidCallback? onReviewRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -339,10 +384,17 @@ class _ComponentCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                children: [
-                  Chip(label: Text(item.status.name)),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (item.status == VerificationStatus.needsReview)
+                      ActionChip(
+                        label: Text(item.status.name),
+                        backgroundColor: AppColors.primarySoft,
+                        onPressed: onReviewRequested,
+                      )
+                    else
+                      Chip(label: Text(item.status.name)),
                   if (item.confidence != null)
                     Chip(
                       label: Text(

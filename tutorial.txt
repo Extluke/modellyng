@@ -1,0 +1,61 @@
+# TUTORIAL: MENJALANKAN MODELLYNG SECARA ONLINE DENGAN CLOUDFLARE TUNNEL
+
+Tutorial ini berguna jika Anda ingin membagikan akses proyek lokal Anda kepada teman atau tim melalui internet secara gratis, tanpa perlu melakukan port forwarding.
+
+## PRASYARAT
+- Pastikan Redis dan Supabase lokal sudah berjalan (seperti biasa).
+- Pastikan Celery Worker sudah berjalan (seperti biasa).
+- Pastikan Anda sudah mengunduh `cloudflared.exe` dan menyimpannya di partisi `D:\` (atau sesuaikan dengan lokasi penyimpanannya).
+
+---
+
+## LANGKAH 1: Buat Tunnel untuk Backend dan Database
+Buka dua buah terminal/Command Prompt baru.
+
+1. **Terminal 1 (Untuk FastAPI/Backend):**
+   Jalankan perintah:
+   `D:\cloudflared.exe tunnel --url http://127.0.0.1:8000`
+   -> Tunggu dan catat URL `.trycloudflare.com` yang muncul (Ini akan kita sebut sebagai [URL-API]).
+
+2. **Terminal 2 (Untuk Supabase):**
+   Jalankan perintah:
+   `D:\cloudflared.exe tunnel --url http://127.0.0.1:18021`
+   -> Tunggu dan catat URL `.trycloudflare.com` yang muncul (Ini akan kita sebut sebagai [URL-SUPABASE]).
+
+---
+
+## LANGKAH 2: Whitelist URL Baru di Konfigurasi Backend
+Karena kita mengakses API dari internet, sistem keamanan (CORS) backend akan memblokirnya jika tidak didaftarkan.
+
+1. Buka file `backend/.env`.
+2. Cari variabel `MODELLYNG_ALLOWED_ORIGINS`.
+3. Tambahkan URL aplikasi Frontend Anda nanti ke dalamnya (biasanya biarkan saja `"*"`, atau masukkan URL spesifik Frontend jika Anda sudah tahu). Karena URL frontend digenerate di Langkah 4, jika Anda repot, pastikan backend tidak memblokirnya.
+4. **Sangat Penting:** Setelah menyimpan file `.env`, matikan terminal FastAPI (Uvicorn) Anda dengan `Ctrl + C`, lalu nyalakan ulang dengan:
+   `python -m uvicorn app.main:app --reload --port 8000`
+
+---
+
+## LANGKAH 3: Compile Frontend (Versi Produksi)
+Membuka aplikasi via cloudflare menggunakan `flutter run` akan sangat lambat (bisa loading 5 menit lebih) karena browser mencoba mendownload 500+ file secara bersamaan. Solusinya, kita harus meng-compile Frontend-nya.
+
+1. Buka terminal baru dan masuk ke folder `frontend`.
+2. Hentikan proses `flutter run` lokal Anda (jika ada).
+3. Jalankan perintah build berikut (ganti URL dengan yang Anda catat di Langkah 1):
+   `flutter build web --dart-define=API_BASE_URL="https://[URL-API]" --dart-define=SUPABASE_URL="https://[URL-SUPABASE]"`
+   *(Catatan: Jangan lupa tanda kutip dan pastikan tidak ada spasi berlebih!)*
+
+---
+
+## LANGKAH 4: Jalankan Server Statis & Publikasikan Frontend
+Setelah proses kompilasi selesai (sekitar 2 menit), file web siap disajikan.
+
+1. Di terminal yang sama (di dalam folder `frontend`), masuk ke folder hasil build:
+   `cd build\web`
+2. Jalankan server lokal ringan menggunakan Python:
+   `python -m http.server 3000`
+3. Terakhir, buka **Terminal 3** untuk membuat tunnel aplikasi Frontend:
+   `D:\cloudflared.exe tunnel --url http://127.0.0.1:3000`
+
+**Selesai!** 
+Berikan link `.trycloudflare.com` yang muncul di **Terminal 3** kepada teman Anda.
+Jika teman Anda mengalami error putih (blank), minta mereka untuk sekadar me-refresh (F5) halamannya.
