@@ -37,6 +37,8 @@ from .schemas import (
     ResearchGapDecisionCreate,
     ResearchGapDecisionRead,
     ExtractionParameter,
+    GlobalChatRequest,
+    GlobalChatResponse,
     ProjectChatRequest,
     ProjectChatResponse,
     ProjectChatMessageRead,
@@ -437,6 +439,19 @@ async def get_project_chat_messages(
     return await project_repository.list_project_chat_messages(
         current_user, project_id
     )
+
+
+@api.post(
+    "/assistant/chat",
+    response_model=GlobalChatResponse,
+    tags=["chat"],
+)
+async def chat_with_assistant(
+    payload: GlobalChatRequest,
+    current_user: CurrentUser,
+) -> GlobalChatResponse:
+    from .chat_service import answer_global_question
+    return answer_global_question(payload)
 
 
 @api.get(

@@ -11,6 +11,8 @@ import 'comparative_matrix_screen.dart';
 import 'dashboard_screen.dart';
 import 'maps_screen.dart';
 import 'new_project_screen.dart';
+import 'global_chat_screen.dart';
+import 'project_chat_screen.dart';
 import 'project_overview_screen.dart';
 import 'projects_screen.dart';
 import 'review_queue_screen.dart';
@@ -38,9 +40,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       selectedIcon: Icons.folder_rounded,
     ),
     _Destination(
-      label: 'Review',
-      icon: Icons.fact_check_outlined,
-      selectedIcon: Icons.fact_check_rounded,
+      label: 'Chat',
+      icon: Icons.chat_bubble_outline_rounded,
+      selectedIcon: Icons.chat_bubble_rounded,
     ),
     _Destination(
       label: 'Matrix',
@@ -51,11 +53,6 @@ class _AppShellState extends ConsumerState<AppShell> {
       label: 'Maps',
       icon: Icons.hub_outlined,
       selectedIcon: Icons.hub_rounded,
-    ),
-    _Destination(
-      label: 'Account',
-      icon: Icons.person_outline_rounded,
-      selectedIcon: Icons.person_rounded,
     ),
   ];
 
@@ -82,6 +79,29 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
+  void _openAccount(BuildContext context, String userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Akun & Pengaturan')),
+          body: AccountScreen(
+            onOpenAuditLog: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => Scaffold(
+                    appBar: AppBar(title: const Text('Antrean Review')),
+                    body: ReviewQueueScreen(userId: userId),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authRepositoryProvider).currentUser;
@@ -92,6 +112,17 @@ class _AppShellState extends ConsumerState<AppShell> {
         ? metadataName!.trim()
         : email.split('@').first;
 
+    final String initials;
+    final parts = displayName.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      initials = '?';
+    } else if (parts.length == 1) {
+      initials = parts[0].substring(0, 1).toUpperCase();
+    } else {
+      initials = '${parts[0].substring(0, 1)}${parts[1].substring(0, 1)}'.toUpperCase();
+    }
+    final avatarUrl = user.userMetadata?['avatar_url'] as String?;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final desktop = constraints.maxWidth >= 760;
@@ -101,28 +132,27 @@ class _AppShellState extends ConsumerState<AppShell> {
             displayName: displayName,
             onNewProject: _createProject,
             onOpenProject: _openProject,
-            onOpenReview: () => setState(() => _selectedIndex = 2),
+            onOpenReview: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => Scaffold(
+                    appBar: AppBar(title: const Text('Antrean Review')),
+                    body: ReviewQueueScreen(userId: user.id),
+                  ),
+                ),
+              );
+            },
           ),
           ProjectsScreen(
             userId: user.id,
             onNewProject: _createProject,
             onOpenProject: _openProject,
           ),
-          ReviewQueueScreen(
+          GlobalChatScreen(
             userId: user.id,
-            active: _selectedIndex == 2,
-            historyExpansionRequest: _reviewHistoryExpansionRequest,
           ),
           ComparativeMatrixScreen(userId: user.id),
           MapsScreen(userId: user.id),
-          AccountScreen(
-            onOpenAuditLog: () {
-              setState(() {
-                _selectedIndex = 2;
-                _reviewHistoryExpansionRequest++;
-              });
-            },
-          ),
         ];
 
         return Scaffold(
@@ -143,7 +173,27 @@ class _AppShellState extends ConsumerState<AppShell> {
                           ),
                       icon: const Icon(Icons.notifications_outlined),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => _openAccount(context, user.id),
+                      borderRadius: BorderRadius.circular(20),
+                      child: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppColors.primarySoft,
+                        backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl == null 
+                            ? Text(
+                                initials,
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
                   ],
                   bottom: const PreferredSize(
                     preferredSize: Size.fromHeight(1),
@@ -161,6 +211,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       onSelected: (index) =>
                           setState(() => _selectedIndex = index),
                       onNewProject: _createProject,
+                      onOpenAccount: () => _openAccount(context, user.id),
                     ),
                     Expanded(
                       child: IndexedStack(
@@ -200,6 +251,7 @@ class _DesktopSidebar extends StatelessWidget {
     required this.destinations,
     required this.onSelected,
     required this.onNewProject,
+    required this.onOpenAccount,
   });
 
   final String displayName;
@@ -208,6 +260,7 @@ class _DesktopSidebar extends StatelessWidget {
   final List<_Destination> destinations;
   final ValueChanged<int> onSelected;
   final VoidCallback onNewProject;
+  final VoidCallback onOpenAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -272,6 +325,7 @@ class _DesktopSidebar extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ListTile(
+                onTap: onOpenAccount,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                 leading: CircleAvatar(
                   backgroundColor: AppColors.primarySoft,

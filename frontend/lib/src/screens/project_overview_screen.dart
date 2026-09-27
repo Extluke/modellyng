@@ -144,16 +144,6 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
         title: const BrandLockup(),
         actions: [
           TextButton.icon(
-            key: const Key('open-chat-button'),
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => ProjectChatScreen(project: project),
-              ),
-            ),
-            icon: const Icon(Icons.forum_outlined),
-            label: const Text('Tanya AI'),
-          ),
-          TextButton.icon(
             key: const Key('open-export-button'),
             onPressed: () => Navigator.of(context).push<void>(
               MaterialPageRoute(

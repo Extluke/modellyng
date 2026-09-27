@@ -471,6 +471,11 @@ class ProjectChatRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=10)
 
 
+class GlobalChatRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=2_000)
+    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=15)
+
+
 class ProjectChatSource(BaseModel):
     source_id: str
     paper_id: UUID
@@ -488,6 +493,11 @@ class ProjectChatResponse(BaseModel):
     review_notice: str = (
         "Jawaban AI perlu diverifikasi kembali terhadap evidence dan PDF sumber."
     )
+
+
+class GlobalChatResponse(BaseModel):
+    answer: str
+    model_name: str
 
 
 class ProjectChatMessageRead(BaseModel):

@@ -10,7 +10,13 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from .config import get_settings
-from .schemas import ProjectChatRequest, ProjectChatResponse, ProjectChatSource
+from .schemas import (
+    GlobalChatRequest,
+    GlobalChatResponse,
+    ProjectChatRequest,
+    ProjectChatResponse,
+    ProjectChatSource,
+)
 
 
 class ChatUnavailableError(RuntimeError):
@@ -141,6 +147,63 @@ def answer_project_question(
     if not valid_sources:
         return ProjectChatResponse(answer=_REFUSAL, sources=[], model_name=used_model)
     return ProjectChatResponse(answer=parsed.answer.strip(), sources=valid_sources, model_name=used_model)
+
+
+def answer_global_question(request: GlobalChatRequest) -> GlobalChatResponse:
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        raise ChatUnavailableError("Gemini API key belum dikonfigurasi di backend")
+
+    history = "\n".join(f"{message.role.upper()}: {message.content}" for message in request.history[-6:])
+    prompt = f"""
+Anda adalah AI Assistant untuk aplikasi riset Modellyng.
+Tugas Anda adalah membantu pengguna memahami cara kerja aplikasi, menjawab pertanyaan seputar penelitian secara umum, atau memberikan ide/mencari topik jurnal yang bisa diunggah pengguna ke proyek riset mereka.
+Jawab dengan ramah, rapi, dan menggunakan Bahasa Indonesia. Jika perlu, berikan langkah-langkah praktis.
+
+RIWAYAT PERCAKAPAN:
+{history or '(belum ada)'}
+
+PERTANYAAN USER:
+{request.question}
+""".strip()
+
+    client = genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(
+            timeout=settings.gemini_chat_timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    )
+    models = [settings.gemini_fallback_model or settings.gemini_model]
+    if settings.gemini_model not in models:
+        models.append(settings.gemini_model)
+
+    answer_text = ""
+    used_model = settings.gemini_model
+    last_error: Exception | None = None
+    for model in models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.6,
+                ),
+            )
+            answer_text = response.text or ""
+            if answer_text:
+                used_model = model
+                break
+        except Exception as exc:
+            last_error = exc
+
+    if not answer_text:
+        message = str(last_error or "Gemini tidak mengembalikan jawaban").upper()
+        if any(code in message for code in ("429", "503", "504", "RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED")):
+            raise ChatUnavailableError("Gemini sedang sibuk atau kuotanya habis. Coba lagi beberapa saat.") from last_error
+        raise ChatUnavailableError("Chatbot belum dapat menjawab. Silakan coba lagi.") from last_error
+
+    return GlobalChatResponse(answer=answer_text.strip(), model_name=used_model)
 
 
 def _answer_document_list(documents: list[ProjectChatDocument]) -> ProjectChatResponse:
