@@ -9,6 +9,7 @@ import '../models/research_models.dart';
 import '../platform/download_file.dart';
 import '../theme/app_theme.dart';
 import '../widgets/source_verification_card.dart';
+import '../widgets/expandable_table_cell.dart';
 import 'review_queue_screen.dart';
 
 class PaperResultScreen extends ConsumerStatefulWidget {
@@ -454,7 +455,7 @@ class _ResearchQuestionTable extends StatelessWidget {
               child: DataTable(
                 key: const Key('research-question-table'),
                 dataRowMinHeight: 72,
-                dataRowMaxHeight: 180,
+                dataRowMaxHeight: double.infinity,
                 headingRowColor: WidgetStateProperty.all(AppColors.primarySoft),
                 columns: const [
                   DataColumn(label: Text('No')),
@@ -475,15 +476,15 @@ class _ResearchQuestionTable extends StatelessWidget {
                       cells: [
                         DataCell(Text('${row.number}')),
                         DataCell(
-                          SizedBox(width: 260, child: Text(row.question)),
+                          SizedBox(width: 260, child: ExpandableTableCell(text: row.question)),
                         ),
                         DataCell(
-                          SizedBox(width: 220, child: Text(row.relatedObject)),
+                          SizedBox(width: 220, child: ExpandableTableCell(text: row.relatedObject)),
                         ),
                         DataCell(
                           SizedBox(
                             width: 240,
-                            child: Text(row.discussionDirection),
+                            child: ExpandableTableCell(text: row.discussionDirection),
                           ),
                         ),
                         DataCell(
@@ -532,7 +533,7 @@ class _MethodologyTable extends StatelessWidget {
               child: DataTable(
                 key: const Key('methodology-table'),
                 dataRowMinHeight: 96,
-                dataRowMaxHeight: 240,
+                dataRowMaxHeight: double.infinity,
                 headingRowColor: WidgetStateProperty.all(AppColors.primarySoft),
                 columns: const [
                   DataColumn(label: SizedBox(width: 230, child: Text('Isi'))),
@@ -554,20 +555,20 @@ class _MethodologyTable extends StatelessWidget {
                     DataRow(
                       cells: [
                         DataCell(
-                          SizedBox(width: 230, child: Text(row.content)),
+                          SizedBox(width: 230, child: ExpandableTableCell(text: row.content)),
                         ),
-                        DataCell(SizedBox(width: 150, child: Text(row.form))),
+                        DataCell(SizedBox(width: 150, child: ExpandableTableCell(text: row.form))),
                         DataCell(
-                          SizedBox(width: 220, child: Text(row.mainActivity)),
+                          SizedBox(width: 220, child: ExpandableTableCell(text: row.mainActivity)),
                         ),
                         DataCell(
                           SizedBox(
                             width: 220,
-                            child: Text(row.activityDirection),
+                            child: ExpandableTableCell(text: row.activityDirection),
                           ),
                         ),
                         DataCell(
-                          SizedBox(width: 220, child: Text(row.finalGoal)),
+                          SizedBox(width: 220, child: ExpandableTableCell(text: row.finalGoal)),
                         ),
                       ],
                     ),

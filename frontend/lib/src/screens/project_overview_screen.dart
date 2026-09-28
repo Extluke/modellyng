@@ -55,7 +55,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
       _uploadProgress = 0;
     });
     try {
-      final paper = await ref
+      final papers = await ref
           .read(paperRepositoryProvider)
           .pickAndUploadPdf(
             widget.project,
@@ -64,7 +64,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
             },
           );
       if (!mounted) return;
-      if (paper != null) {
+      if (papers != null && papers.isNotEmpty) {
         final userId = ref.read(authRepositoryProvider).currentUser?.id;
         if (userId != null) {
           ref.invalidate(
@@ -77,7 +77,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${paper.originalFilename} berhasil diunggah.'),
+            content: Text('${papers.length} PDF berhasil diunggah.'),
           ),
         );
       }

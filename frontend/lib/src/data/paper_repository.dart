@@ -71,7 +71,7 @@ class PaperRepository {
     return ProjectPaper.fromJson(response.data!);
   }
 
-  Future<ProjectPaper?> pickAndUploadPdf(
+  Future<List<ProjectPaper>?> pickAndUploadPdf(
     ResearchProject project, {
     void Function(double progress)? onProgress,
   }) async {
@@ -79,7 +79,7 @@ class PaperRepository {
       dialogTitle: 'Pilih paper PDF',
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
-      allowMultiple: false,
+      allowMultiple: true,
       withData: true,
     ).timeout(
       const Duration(seconds: 15),
@@ -89,19 +89,38 @@ class PaperRepository {
     );
     if (result == null) return null;
 
-    final selected = result.files.single;
-    final bytes = selected.bytes;
-    if (bytes == null) {
+    if (result.files.length > 15) {
       throw const PaperUploadException(
-        'File tidak dapat dibaca. Silakan pilih PDF kembali.',
+        'Maksimal 15 PDF dalam satu kali unggah.',
       );
     }
-    return uploadPdfBytes(
-      project: project,
-      originalFilename: selected.name,
-      bytes: bytes,
-      onProgress: onProgress,
-    );
+
+    final List<ProjectPaper> uploadedPapers = [];
+    final totalFiles = result.files.length;
+    int completedFiles = 0;
+
+    for (final selected in result.files) {
+      final bytes = selected.bytes;
+      if (bytes == null) {
+        throw const PaperUploadException(
+          'Salah satu file tidak dapat dibaca. Silakan pilih PDF kembali.',
+        );
+      }
+      
+      final paper = await uploadPdfBytes(
+        project: project,
+        originalFilename: selected.name,
+        bytes: bytes,
+        onProgress: (progress) {
+          final overallProgress = (completedFiles + progress) / totalFiles;
+          onProgress?.call(overallProgress);
+        },
+      );
+      uploadedPapers.add(paper);
+      completedFiles++;
+    }
+    
+    return uploadedPapers;
   }
 
   Future<ProjectPaper> uploadPdfBytes({
