@@ -20,6 +20,8 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
     this.historyExpansionRequest = 0,
     this.initialProjectId,
     this.initialPaperId,
+    this.targetParameter,
+    this.onParameterCleared,
   });
 
   final String? userId;
@@ -27,6 +29,8 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
   final int historyExpansionRequest;
   final String? initialProjectId;
   final String? initialPaperId;
+  final String? targetParameter;
+  final VoidCallback? onParameterCleared;
 
   @override
   ConsumerState<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
@@ -34,12 +38,14 @@ class ReviewQueueScreen extends ConsumerStatefulWidget {
 
 class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
   String? _projectFilter;
+  String? _parameterFilter;
   bool _acceptingAll = false;
 
   @override
   void initState() {
     super.initState();
     _projectFilter = widget.initialProjectId;
+    _parameterFilter = widget.targetParameter;
   }
 
   @override
@@ -47,6 +53,9 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
     super.didUpdateWidget(oldWidget);
     if (!oldWidget.active && widget.active) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    }
+    if (widget.targetParameter != oldWidget.targetParameter) {
+      _parameterFilter = widget.targetParameter;
     }
   }
 
@@ -243,6 +252,9 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
     if (widget.initialPaperId != null) {
       visible = visible.where((item) => item.paperId == widget.initialPaperId).toList();
     }
+    if (_parameterFilter != null) {
+      visible = visible.where((item) => item.parameter == _parameterFilter).toList();
+    }
     final groups = <String, List<ReviewQueueItem>>{};
     for (final item in visible) {
       groups.putIfAbsent(item.paperId, () => []).add(item);
@@ -266,6 +278,20 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
                 ),
             ],
             onChanged: (value) => setState(() => _projectFilter = value),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (_parameterFilter != null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: InputChip(
+              avatar: const Icon(Icons.filter_list_rounded, size: 16),
+              label: Text('Terkunci pada: $_parameterFilter'),
+              onDeleted: () {
+                setState(() => _parameterFilter = null);
+                widget.onParameterCleared?.call();
+              },
+            ),
           ),
           const SizedBox(height: 12),
         ],

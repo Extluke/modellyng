@@ -40,6 +40,7 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
   String? _targetHighlightText;
   String? _targetBlockId;
   bool _downloadingTables = false;
+  String? _targetReviewParameter;
 
   @override
   void initState() {
@@ -121,7 +122,7 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
   Widget build(BuildContext context) {
     final result = ref.watch(paperResultProvider(_query));
     return Scaffold(
-      appBar: AppBar(title: const Text('Hasil paper dan evidence')),
+      appBar: AppBar(title: const Text('Hasil, evidence, dan review')),
       body: result.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _Failure(
@@ -149,7 +150,8 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
             onCitation: _showEvidence,
             onDownloadTables: _downloadStructuredTables,
             downloadingTables: _downloadingTables,
-            onReviewRequested: () {
+            onReviewRequested: (parameter) {
+              setState(() => _targetReviewParameter = parameter);
               if (MediaQuery.of(context).size.width >= 1050) {
                 _leftTabController.animateTo(1);
               } else {
@@ -187,6 +189,8 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
                                 ReviewQueueScreen(
                                   initialProjectId: widget.projectId,
                                   initialPaperId: widget.paperId,
+                                  targetParameter: _targetReviewParameter,
+                                  onParameterCleared: () => setState(() => _targetReviewParameter = null),
                                 ),
                               ],
                             ),
@@ -217,6 +221,8 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
                         ReviewQueueScreen(
                           initialProjectId: widget.projectId,
                           initialPaperId: widget.paperId,
+                          targetParameter: _targetReviewParameter,
+                          onParameterCleared: () => setState(() => _targetReviewParameter = null),
                         ),
                       ],
                     ),
@@ -245,7 +251,7 @@ class _ResultPane extends StatelessWidget {
   final ValueChanged<ResultEvidence> onCitation;
   final VoidCallback onDownloadTables;
   final bool downloadingTables;
-  final VoidCallback onReviewRequested;
+  final ValueChanged<String> onReviewRequested;
 
   static const parameters = <String, String>{
     'research_problem': 'Masalah penelitian',
@@ -270,27 +276,26 @@ class _ResultPane extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.paper.title ?? result.paper.originalFilename,
-                    style: Theme.of(context).textTheme.headlineSmall,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 600;
+            final titleWidget = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.paper.title ?? result.paper.originalFilename,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontSize: isMobile ? 22 : null,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${result.components.length}/11 komponen tersedia',
-                    style: const TextStyle(color: AppColors.muted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${result.components.length}/11 komponen tersedia',
+                  style: const TextStyle(color: AppColors.muted),
+                ),
+              ],
+            );
+            final buttonWidget = FilledButton.icon(
               key: const Key('download-structured-tables-pdf'),
               onPressed: downloadingTables ? null : onDownloadTables,
               icon: downloadingTables
@@ -304,8 +309,28 @@ class _ResultPane extends StatelessWidget {
                     )
                   : const Icon(Icons.picture_as_pdf_outlined),
               label: Text(downloadingTables ? 'Membuat...' : 'Unduh tabel PDF'),
-            ),
-          ],
+            );
+            
+            if (isMobile) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  titleWidget,
+                  const SizedBox(height: 16),
+                  buttonWidget,
+                ],
+              );
+            }
+            
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: titleWidget),
+                const SizedBox(width: 12),
+                buttonWidget,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 20),
         SourceVerificationCard(paper: result.paper),
@@ -335,7 +360,7 @@ class _ResultPane extends StatelessWidget {
         if (result.structuredTables.futureIdeas.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
-            '💡 Rekomendasi Penelitian Berikutnya',
+            'Rekomendasi Penelitian Berikutnya',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 10),
@@ -359,7 +384,7 @@ class _ComponentCard extends StatelessWidget {
   final String label;
   final PaperComponentResult? component;
   final ValueChanged<ResultEvidence> onEvidence;
-  final VoidCallback? onReviewRequested;
+  final ValueChanged<String>? onReviewRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -402,9 +427,13 @@ class _ComponentCard extends StatelessWidget {
                   children: [
                     if (item.status == VerificationStatus.needsReview)
                       ActionChip(
-                        label: Text(item.status.name),
-                        backgroundColor: AppColors.primarySoft,
-                        onPressed: onReviewRequested,
+                        label: Text(
+                          item.status.name,
+                          style: const TextStyle(color: AppColors.orange, fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: AppColors.orangeSoft,
+                        side: const BorderSide(color: AppColors.orange),
+                        onPressed: onReviewRequested != null ? () => onReviewRequested!(parameter) : null,
                       )
                     else
                       Chip(label: Text(item.status.name)),

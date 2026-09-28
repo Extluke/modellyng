@@ -323,6 +323,38 @@ Konten yang dihasilkan AI
         bukan poin teknis yang kering.
 
 
+## REVISI 4D
+## Path: Proyek > Hasil & Evidence — Validasi Paper & Sumber
+
+----------------------------------------------------------------
+
+### 4D.1  Peningkatan Fungsionalitas Box Validasi Sumber
+
+Kondisi saat ini
+    Box validasi sumber mewajibkan input catatan (human note) 
+    untuk menolak/menerima paper tanpa ada bantuan 
+    cross-check eksternal atau jalan pintas, sehingga sering 
+    diisi asal-asalan oleh user.
+    Selain itu, validasi sumber belum terhubung secara sistem
+    dengan proses "Review Queue" (validasi konten).
+
+Target Pengembangan
+    1.  Integrasi Pengecekan DOI Otomatis (Crossref API):
+        Tambahkan tombol "Cek di Crossref" untuk memuat 
+        metrik jurnal (Publisher, Citation, URL resmi) langsung 
+        di dalam box.
+
+    2.  Template Catatan Cepat (Quick Notes):
+        Sediakan chip (tombol cepat) untuk mengisi komentar 
+        otomatis, contoh:
+        [Valid - Terakreditasi], [Tolak - Predatory Journal], dsb.
+
+    3.  Keterkaitan dengan "Review Queue":
+        Blokir (disable) kemampuan menerima "Needs Review"
+        di tab Review jika sumber paper belum disetujui (Accept)
+        pada box Validasi Sumber ini.
+
+
 ================================================================
 
 
