@@ -135,26 +135,17 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
         ? const AsyncValue<List<ReviewQueueItem>>.data([])
         : ref.watch(reviewQueueProvider(userId));
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              PageHeading(
-                title: 'Antrean verifikasi',
-                subtitle:
-                    'Periksa hasil Gemini dan kutipan sumber sebelum data menjadi final.',
-                action: OutlinedButton.icon(
-                  key: const Key('refresh-review-queue'),
-                  onPressed: userId == null ? null : _refresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Segarkan'),
-                ),
-              ),
-              const SizedBox(height: 24),
+    return RefreshIndicator(
+      onRefresh: () async => userId == null ? null : _refresh(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 980),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               queue.when(
                 loading: () => const Center(
                   child: Padding(
@@ -239,7 +230,7 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildGroupedQueue(List<ReviewQueueItem> items, String userId) {
@@ -295,32 +286,115 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            key: const Key('accept-all-visible-reviews'),
-            onPressed: _acceptingAll
-                ? null
-                : () => _acceptAllVisible(visible, userId),
-            icon: _acceptingAll
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.done_all_rounded),
-            label: Text('Terima semua (${visible.length})'),
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 600;
+            final acceptAllBtn = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isMobile)
+                  IconButton(
+                    onPressed: () => widget.userId == null ? null : _refresh(),
+                    icon: const Icon(Icons.refresh_rounded),
+                    tooltip: 'Segarkan',
+                  ),
+                if (!isMobile) const SizedBox(width: 8),
+                FilledButton.icon(
+                  key: const Key('accept-all-visible-reviews'),
+                  onPressed: _acceptingAll
+                      ? null
+                      : () => _acceptAllVisible(visible, userId),
+                  icon: _acceptingAll
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.done_all_rounded),
+                  label: Text('Terima semua (${visible.length})'),
+                ),
+              ],
+            );
+            
+            if (groups.length > 1) {
+              return Align(
+                alignment: isMobile ? Alignment.centerLeft : Alignment.centerRight,
+                child: acceptAllBtn,
+              );
+            }
+            return const SizedBox.shrink(); // Handled below
+          },
         ),
-        const SizedBox(height: 18),
+        if (groups.length > 1) const SizedBox(height: 18),
         for (final group in groups.values) ...[
-          Text(
-            group.first.paperTitle,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${11 - group.length}/11 selesai ditinjau · ${group.length} tersisa',
-            style: const TextStyle(color: AppColors.muted),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              final acceptAllBtn = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isMobile)
+                    IconButton(
+                      onPressed: () => widget.userId == null ? null : _refresh(),
+                      icon: const Icon(Icons.refresh_rounded),
+                      tooltip: 'Segarkan',
+                    ),
+                  if (!isMobile) const SizedBox(width: 8),
+                  FilledButton.icon(
+                    key: const Key('accept-all-visible-reviews'),
+                    onPressed: _acceptingAll
+                        ? null
+                        : () => _acceptAllVisible(visible, userId),
+                    icon: _acceptingAll
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.done_all_rounded),
+                    label: Text('Terima semua (${visible.length})'),
+                  ),
+                ],
+              );
+              
+              final titleWidget = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.first.paperTitle,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontSize: isMobile ? 22 : null,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${11 - group.length}/11 selesai ditinjau · ${group.length} tersisa',
+                    style: const TextStyle(color: AppColors.muted),
+                  ),
+                ],
+              );
+
+              if (groups.length > 1) {
+                return titleWidget;
+              }
+
+              if (isMobile) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titleWidget,
+                    const SizedBox(height: 16),
+                    acceptAllBtn,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: titleWidget),
+                  const SizedBox(width: 12),
+                  acceptAllBtn,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 10),
           for (final item in group) ...[
@@ -532,11 +606,6 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                   label: const Text('Terima'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _submitting ? null : _edit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit'),
-                ),
-                TextButton.icon(
                   onPressed: _submitting
                       ? null
                       : () {
@@ -554,18 +623,13 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                           });
                         },
                   icon: const Icon(Icons.close_rounded, color: AppColors.red),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.red),
+                  ),
                   label: const Text(
                     'Tolak & Revisi',
                     style: TextStyle(color: AppColors.red),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: _submitting
-                      ? null
-                      : () =>
-                            _submitWithReason(ReviewDecision.requestReanalysis),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Analisis ulang'),
                 ),
               ],
             ),
