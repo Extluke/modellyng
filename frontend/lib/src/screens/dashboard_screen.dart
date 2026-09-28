@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import '../data/auth_repository.dart';
 import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
@@ -218,14 +218,109 @@ class _DashboardMetrics extends StatelessWidget {
   }
 }
 
-class _ProjectGrid extends StatelessWidget {
+class _ProjectGrid extends ConsumerWidget {
   const _ProjectGrid({required this.projects, required this.onOpenProject});
 
   final List<ResearchProject> projects;
   final ValueChanged<ResearchProject> onOpenProject;
 
+  Future<void> _deleteProject(
+    BuildContext context,
+    WidgetRef ref,
+    ResearchProject project,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        bool isMatched = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Hapus Proyek?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tindakan ini tidak dapat dibatalkan. Semua PDF, hasil analisis, '
+                    'dan riwayat review dalam proyek ini akan dihapus permanen.',
+                  ),
+                  const SizedBox(height: 16),
+                  Text.rich(
+                    TextSpan(
+                      text: 'Ketik ulang ',
+                      children: [
+                        TextSpan(
+                          text: project.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const TextSpan(text: ' untuk konfirmasi:'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Nama proyek',
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        isMatched = val.trim() == project.title;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Batal'),
+                ),
+                FilledButton.icon(
+                  onPressed: isMatched ? () => Navigator.pop(context, true) : null,
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text('Hapus Permanen'),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(projectRepositoryProvider).deleteProject(project.id);
+      
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (userId != null) {
+        ref.invalidate(projectsProvider(userId));
+      }
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Proyek "${project.title}" telah dihapus.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ProjectRepository.readableError(e)),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 960
@@ -246,6 +341,7 @@ class _ProjectGrid extends StatelessWidget {
                 child: _ProjectCard(
                   project: project,
                   onTap: () => onOpenProject(project),
+                  onDelete: () => _deleteProject(context, ref, project),
                 ),
               ),
           ],
@@ -256,10 +352,15 @@ class _ProjectGrid extends StatelessWidget {
 }
 
 class _ProjectCard extends StatelessWidget {
-  const _ProjectCard({required this.project, required this.onTap});
+  const _ProjectCard({
+    required this.project,
+    required this.onTap,
+    this.onDelete,
+  });
 
   final ResearchProject project;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -288,6 +389,21 @@ class _ProjectCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   StatusBadge.project(project.status),
+                  if (onDelete != null) ...[
+                    const SizedBox(width: 4),
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'delete') onDelete!();
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Hapus Proyek', style: TextStyle(color: AppColors.red)),
+                        ),
+                      ],
+                      icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 16),

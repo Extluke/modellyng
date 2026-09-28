@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/auth_repository.dart';
+
 import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
@@ -25,6 +27,97 @@ class ProjectsScreen extends ConsumerStatefulWidget {
 class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _query = '';
   ProjectStatus? _filter;
+
+  Future<void> _deleteProject(ResearchProject project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        bool isMatched = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Hapus Proyek?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tindakan ini tidak dapat dibatalkan. Semua PDF, hasil analisis, '
+                    'dan riwayat review dalam proyek ini akan dihapus permanen.',
+                  ),
+                  const SizedBox(height: 16),
+                  Text.rich(
+                    TextSpan(
+                      text: 'Ketik ulang ',
+                      children: [
+                        TextSpan(
+                          text: project.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const TextSpan(text: ' untuk konfirmasi:'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Nama proyek',
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        isMatched = val.trim() == project.title;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Batal'),
+                ),
+                FilledButton.icon(
+                  onPressed: isMatched ? () => Navigator.pop(context, true) : null,
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text('Hapus Permanen'),
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(projectRepositoryProvider).deleteProject(project.id);
+      
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (userId != null) {
+        ref.invalidate(projectsProvider(userId));
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Proyek "${project.title}" telah dihapus.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ProjectRepository.readableError(e)),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +246,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                         _ProjectListTile(
                           project: project,
                           onTap: () => widget.onOpenProject(project),
+                          onDelete: () => _deleteProject(project),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -169,10 +263,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 }
 
 class _ProjectListTile extends StatelessWidget {
-  const _ProjectListTile({required this.project, required this.onTap});
+  const _ProjectListTile({
+    required this.project,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   final ResearchProject project;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -257,6 +356,22 @@ class _ProjectListTile extends StatelessWidget {
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: AppColors.muted,
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        onDelete();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'Hapus Proyek',
+                          style: TextStyle(color: AppColors.red),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               );

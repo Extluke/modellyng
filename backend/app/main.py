@@ -156,6 +156,18 @@ async def get_project(
     return await project_repository.get_project(current_user, project_id)
 
 
+@api.delete(
+    "/projects/{project_id}",
+    status_code=204,
+    tags=["projects"],
+)
+async def delete_project(
+    project_id: UUID,
+    current_user: CurrentUser,
+) -> None:
+    await project_repository.delete_project(current_user, project_id)
+
+
 @api.post(
     "/projects/{project_id}/papers",
     response_model=PaperRead,
@@ -243,6 +255,19 @@ async def get_paper_result(
     project_id: UUID, paper_id: UUID, current_user: CurrentUser
 ) -> PaperResultRead:
     return await project_repository.get_paper_result(current_user, project_id, paper_id)
+
+
+@api.delete(
+    "/projects/{project_id}/papers/{paper_id}",
+    status_code=204,
+    tags=["projects"],
+)
+async def delete_paper(
+    project_id: UUID,
+    paper_id: UUID,
+    current_user: CurrentUser,
+) -> None:
+    await project_repository.delete_paper(current_user, project_id, paper_id)
 
 
 @api.get(

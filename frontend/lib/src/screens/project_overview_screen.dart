@@ -120,6 +120,63 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
     }
   }
 
+  Future<void> _deletePaper(ProjectPaper paper) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Hapus Paper?'),
+          content: Text(
+            'Apakah Anda yakin ingin menghapus PDF "${paper.originalFilename}"? '
+            'Semua data hasil analisis dan riwayat review untuk paper ini akan hilang permanen.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Hapus'),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(projectRepositoryProvider).deletePaper(
+            widget.project.id,
+            paper.id,
+          );
+          
+      if (!mounted) return;
+      
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (userId != null) {
+        ref.invalidate(
+          projectPapersProvider((userId: userId, projectId: widget.project.id)),
+        );
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Paper "${paper.originalFilename}" telah dihapus.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ProjectRepository.readableError(error)),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
@@ -281,6 +338,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
                                 onProcess: paper.canStartProcessing
                                     ? () => _processPaper(paper)
                                     : null,
+                                onDelete: () => _deletePaper(paper),
                               ),
                               const SizedBox(height: 12),
                             ],
@@ -360,11 +418,13 @@ class _PaperTile extends StatelessWidget {
     required this.paper,
     required this.onOpenResult,
     this.onProcess,
+    this.onDelete,
   });
 
   final ProjectPaper paper;
   final VoidCallback onOpenResult;
   final VoidCallback? onProcess;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -490,6 +550,15 @@ class _PaperTile extends StatelessWidget {
                           ? 'Analisis AI'
                           : 'Proses',
                     ),
+                  ),
+                ],
+                if (onDelete != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                    label: const Text('Hapus', style: TextStyle(color: AppColors.red)),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.red),
                   ),
                 ],
               ],

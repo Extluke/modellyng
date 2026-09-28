@@ -47,6 +47,14 @@ class ProjectRepository {
     return ResearchProject.fromJson(response.data!);
   }
 
+  Future<void> deleteProject(String projectId) async {
+    await _dio.delete('/api/v1/projects/$projectId');
+  }
+
+  Future<void> deletePaper(String projectId, String paperId) async {
+    await _dio.delete('/api/v1/projects/$projectId/papers/$paperId');
+  }
+
   static String readableError(Object error) {
     if (error is DioException) {
       final data = error.response?.data;

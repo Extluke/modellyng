@@ -220,6 +220,42 @@ class SupabaseProjectRepository:
             raise EntityNotFoundError(f"Project {project_id} was not found")
         return self._to_project(rows[0])
 
+    async def delete_project(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+    ) -> None:
+        await self.get_project(user, project_id)
+        
+        papers = await self.list_papers(user, project_id)
+        storage_keys = [p.storage_key for p in papers if p.storage_key]
+        
+        if storage_keys:
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    await client.request(
+                        "DELETE",
+                        f"{self._storage_url}/object/{self._storage_bucket}",
+                        headers={
+                            **self._headers(user),
+                            "Content-Type": "application/json",
+                        },
+                        json={"prefixes": storage_keys},
+                    )
+            except Exception:
+                pass
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(
+                f"{self._rest_url}/projects",
+                headers={
+                    "apikey": self._anon_key,
+                    "Authorization": f"Bearer {self._worker_service_key}",
+                },
+                params={"id": f"eq.{project_id}"},
+            )
+        self._raise_for_repository_error(response)
+
     async def create_paper(
         self,
         user: AuthenticatedUser,
@@ -308,6 +344,28 @@ class SupabaseProjectRepository:
         if not rows:
             raise EntityNotFoundError(f"Paper {paper_id} was not found")
         return self._to_paper(rows[0])
+
+    async def delete_paper(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        paper_id: UUID,
+    ) -> None:
+        paper = await self.get_paper(user, project_id, paper_id)
+        
+        if paper.storage_key:
+            await self._remove_storage_object(user, paper.storage_key)
+            
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(
+                f"{self._rest_url}/papers",
+                headers={
+                    "apikey": self._anon_key,
+                    "Authorization": f"Bearer {self._worker_service_key}",
+                },
+                params={"id": f"eq.{paper_id}", "project_id": f"eq.{project_id}"},
+            )
+        self._raise_for_repository_error(response)
 
     async def start_pdf_processing(
         self,
