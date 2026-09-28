@@ -182,14 +182,41 @@ class MethodologyTableRow {
       );
 }
 
+class FutureResearchIdea {
+  const FutureResearchIdea({
+    required this.rank,
+    required this.title,
+    required this.rationale,
+    required this.methodology,
+    required this.impact,
+  });
+
+  final int rank;
+  final String title;
+  final String rationale;
+  final String methodology;
+  final String impact;
+
+  factory FutureResearchIdea.fromJson(Map<String, dynamic> json) =>
+      FutureResearchIdea(
+        rank: (json['rank'] as num?)?.toInt() ?? 1,
+        title: json['title']?.toString() ?? '',
+        rationale: json['rationale']?.toString() ?? '',
+        methodology: json['methodology']?.toString() ?? '',
+        impact: json['impact']?.toString() ?? '',
+      );
+}
+
 class StructuredPaperTables {
   const StructuredPaperTables({
     required this.researchQuestions,
     required this.methodology,
+    required this.futureIdeas,
   });
 
   final List<ResearchQuestionTableRow> researchQuestions;
   final List<MethodologyTableRow> methodology;
+  final List<FutureResearchIdea> futureIdeas;
 
   factory StructuredPaperTables.fromJson(Map<String, dynamic>? json) {
     final value = json ?? const <String, dynamic>{};
@@ -202,6 +229,10 @@ class StructuredPaperTables {
       methodology: (value['methodology'] as List<dynamic>? ?? const [])
           .cast<Map<String, dynamic>>()
           .map(MethodologyTableRow.fromJson)
+          .toList(growable: false),
+      futureIdeas: (value['future_ideas'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(FutureResearchIdea.fromJson)
           .toList(growable: false),
     );
   }

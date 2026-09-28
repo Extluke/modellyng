@@ -210,6 +210,15 @@ Untuk setiap komponen:
      (Kuantitatif): Desain Riset, Variabel, Hipotesis, Ukuran Sampel, Teknik Sampling, Instrumen, Teknik Analisis.
      (Kualitatif): Desain Riset, Fokus Riset, Subjek/Informan, Teknik Pemilihan, Instrumen, Teknik Analisis.
      (Mixed): Desain Riset, Tahap Kuantitatif, Tahap Kualitatif, Integrasi Analisis.
+  4) future_work: WAJIB buat 3 rekomendasi ide penelitian selanjutnya berdasarkan paper ini. Pemisah antar ide WAJIB '|||'. Format setiap ide harus persis seperti ini:
+     [RANK 1]
+     Judul: [judul singkat ide]
+     Alasan: [alasan berdasarkan gap di paper ini]
+     Metode: [rekomendasi metode/pendekatan]
+     Dampak: [potensi dampak jika berhasil]
+     |||
+     [RANK 2]
+     ... (dst sampai Rank 3)
 - evidence berisi 1-3 kutipan verbatim dengan page_number yang benar.
 - jika informasi tidak dinyatakan, value harus menjelaskan bahwa informasi
   tidak ditemukan, confidence rendah, dan evidence boleh kosong.
@@ -287,10 +296,11 @@ def verify_extraction(
                         )
                     )
                     break
+        import re
         verified_components.append(
             VerifiedComponent(
                 parameter=component.parameter,
-                value=" ".join(component.value.split()),
+                value=re.sub(r'[ \t]+', ' ', component.value).strip(),
                 confidence=(
                     component.confidence
                     if verified_evidence

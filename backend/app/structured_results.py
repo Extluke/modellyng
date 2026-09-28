@@ -52,12 +52,39 @@ def build_structured_tables(
     form_part = methodology_parts[1].strip() if len(methodology_parts) > 1 else _infer_method_form(methodology_text)
 
     results_findings = _display_value(by_parameter.get("results_findings"))
-    future_work = _display_value(by_parameter.get("future_work"))
+    future_work_raw = _display_value(by_parameter.get("future_work"))
+    future_work_display = future_work_raw
+    future_ideas = []
+    
+    if future_work_raw and "[RANK 1]" in future_work_raw.upper():
+        parts = future_work_raw.split("|||")
+        future_work_display = "Telah dirinci pada bagian Rekomendasi Penelitian Berikutnya."
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            
+            rank_match = re.search(r'\[RANK\s*(\d+)\]', part, re.IGNORECASE)
+            rank = int(rank_match.group(1)) if rank_match else 1
+            
+            title_match = re.search(r'Judul:\s*(.*?)(?=\nAlasan:|\nMetode:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            rationale_match = re.search(r'Alasan:\s*(.*?)(?=\nJudul:|\nMetode:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            method_match = re.search(r'Metode:\s*(.*?)(?=\nJudul:|\nAlasan:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            impact_match = re.search(r'Dampak:\s*(.*?)(?=\nJudul:|\nAlasan:|\nMetode:|$)', part, re.IGNORECASE | re.DOTALL)
+            
+            future_ideas.append({
+                "rank": rank,
+                "title": title_match.group(1).strip() if title_match else "Ide Penelitian",
+                "rationale": rationale_match.group(1).strip() if rationale_match else "-",
+                "methodology": method_match.group(1).strip() if method_match else "-",
+                "impact": impact_match.group(1).strip() if impact_match else "-",
+            })
+
     activity_direction_parts = []
     if results_findings:
         activity_direction_parts.append(f"Output penelitian:\n{results_findings}")
-    if future_work:
-        activity_direction_parts.append(f"Arah pengembangan:\n{future_work}")
+    if future_work_display:
+        activity_direction_parts.append(f"Arah pengembangan:\n{future_work_display}")
     activity_direction = "\n\n".join(activity_direction_parts) if activity_direction_parts else "Belum dinyatakan"
 
     def _bulletize(text: str) -> str:
@@ -99,6 +126,7 @@ def build_structured_tables(
     return StructuredPaperTablesRead(
         research_questions=research_questions,
         methodology=methodology,
+        future_ideas=future_ideas if future_ideas else None,
     )
 
 

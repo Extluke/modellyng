@@ -323,13 +323,25 @@ class _ResultPane extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         for (final entry in narrativeParameters)
-          _ComponentCard(
-            parameter: entry.key,
-            label: entry.value,
-            component: byParameter[entry.key],
-            onEvidence: onCitation,
-            onReviewRequested: onReviewRequested,
+          if (entry.key != 'future_work' && entry.key != 'methodology')
+            _ComponentCard(
+              parameter: entry.key,
+              label: entry.value,
+              component: byParameter[entry.key],
+              onEvidence: onCitation,
+              onReviewRequested: onReviewRequested,
+            ),
+        
+        if (result.structuredTables.futureIdeas.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            '💡 Rekomendasi Penelitian Berikutnya',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
+          const SizedBox(height: 10),
+          for (final idea in result.structuredTables.futureIdeas)
+            _FutureResearchIdeaCard(idea: idea),
+        ],
       ],
     );
   }
@@ -421,6 +433,101 @@ class _ComponentCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FutureResearchIdeaCard extends StatelessWidget {
+  const _FutureResearchIdeaCard({required this.idea});
+  final FutureResearchIdea idea;
+
+  @override
+  Widget build(BuildContext context) {
+    final isRank1 = idea.rank == 1;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: isRank1 ? 2 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isRank1 ? Colors.amber.shade300 : Colors.transparent,
+          width: isRank1 ? 2 : 0,
+        ),
+      ),
+      color: isRank1 ? Colors.amber.shade50 : Theme.of(context).cardColor,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isRank1 ? Colors.amber.shade600 : AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isRank1 ? '👑 Rank ${idea.rank}' : 'Rank ${idea.rank}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    idea.title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isRank1 ? Colors.brown.shade900 : null,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildSection(context, 'Alasan / Konteks', idea.rationale, Icons.info_outline),
+            const SizedBox(height: 8),
+            _buildSection(context, 'Rekomendasi Metode', idea.methodology, Icons.science_outlined),
+            const SizedBox(height: 8),
+            _buildSection(context, 'Dampak Potensial', idea.impact, Icons.trending_up),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(BuildContext context, String title, String content, IconData icon) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppColors.muted),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.muted,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                content,
+                style: const TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

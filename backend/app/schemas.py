@@ -209,9 +209,18 @@ class MethodologyTableRow(BaseModel):
     final_goal: str
 
 
+class FutureResearchIdea(BaseModel):
+    rank: int = Field(ge=1, le=3)
+    title: str
+    rationale: str
+    methodology: str
+    impact: str
+
+
 class StructuredPaperTablesRead(BaseModel):
     research_questions: list[ResearchQuestionTableRow]
     methodology: list[MethodologyTableRow]
+    future_ideas: list[FutureResearchIdea] | None = None
 
 
 class ReviewRecordCreate(BaseModel):
