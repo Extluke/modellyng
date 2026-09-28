@@ -128,7 +128,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           DashboardScreen(
             userId: user.id,
             displayName: displayName,
-            onNewProject: _createProject,
+            onGoToProjects: () => setState(() => _selectedIndex = 1),
             onOpenProject: _openProject,
             onOpenReview: () {
               Navigator.of(context).push(

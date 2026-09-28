@@ -10,7 +10,7 @@ class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({
     required this.userId,
     required this.displayName,
-    required this.onNewProject,
+    required this.onGoToProjects,
     required this.onOpenProject,
     required this.onOpenReview,
     super.key,
@@ -18,7 +18,7 @@ class DashboardScreen extends ConsumerWidget {
 
   final String userId;
   final String displayName;
-  final VoidCallback onNewProject;
+  final VoidCallback onGoToProjects;
   final ValueChanged<ResearchProject> onOpenProject;
   final VoidCallback onOpenReview;
 
@@ -39,9 +39,9 @@ class DashboardScreen extends ConsumerWidget {
                 subtitle:
                     'Lanjutkan sintesis literatur Anda atau mulai workspace riset baru.',
                 action: FilledButton.icon(
-                  onPressed: onNewProject,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Proyek baru'),
+                  onPressed: onGoToProjects,
+                  icon: const Icon(Icons.folder_open_rounded),
+                  label: const Text('Buka Menu Proyek'),
                 ),
               ),
               const SizedBox(height: 24),
@@ -57,7 +57,7 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 data: (items) => _DashboardContent(
                   projects: items,
-                  onNewProject: onNewProject,
+                  onGoToProjects: onGoToProjects,
                   onOpenProject: onOpenProject,
                 ),
               ),
@@ -72,12 +72,12 @@ class DashboardScreen extends ConsumerWidget {
 class _DashboardContent extends StatelessWidget {
   const _DashboardContent({
     required this.projects,
-    required this.onNewProject,
+    required this.onGoToProjects,
     required this.onOpenProject,
   });
 
   final List<ResearchProject> projects;
-  final VoidCallback onNewProject;
+  final VoidCallback onGoToProjects;
   final ValueChanged<ResearchProject> onOpenProject;
 
   @override
@@ -116,11 +116,11 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.create_new_folder_outlined,
               title: 'Belum ada proyek',
               message:
-                  'Buat proyek pertama untuk menyiapkan workspace ekstraksi paper.',
+                  'Buka menu proyek untuk menyiapkan workspace ekstraksi paper.',
               action: FilledButton.icon(
-                onPressed: onNewProject,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Buat proyek pertama'),
+                onPressed: onGoToProjects,
+                icon: const Icon(Icons.folder_open_rounded),
+                label: const Text('Buka Menu Proyek'),
               ),
             ),
           )

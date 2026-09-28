@@ -479,7 +479,13 @@ class _ResearchQuestionTable extends StatelessWidget {
                           SizedBox(width: 260, child: ExpandableTableCell(text: row.question)),
                         ),
                         DataCell(
-                          SizedBox(width: 220, child: ExpandableTableCell(text: row.relatedObject)),
+                          SizedBox(
+                            width: 220,
+                            child: _NarrativeValue(
+                              value: row.relatedObject,
+                              preferBullets: true,
+                            ),
+                          ),
                         ),
                         DataCell(
                           SizedBox(
@@ -593,7 +599,7 @@ class _NarrativeValue extends StatelessWidget {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList();
-    if (!preferBullets || items.length < 2) return Text(value);
+    if (!preferBullets || items.isEmpty) return Text(value);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

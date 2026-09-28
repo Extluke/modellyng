@@ -203,6 +203,13 @@ contribution, limitations, future_work, key_claims.
 
 Untuk setiap komponen:
 - value harus ringkas, faktual, dan tidak melebih-lebihkan isi paper.
+- WAJIB IKUTI ATURAN FORMAT VALUE BERIKUT (JANGAN ABAIKAN):
+  1) variables_concepts: WAJIB gunakan titik koma (;) atau baris baru (\n) sebagai pemisah poin. DILARANG menggunakan paragraf panjang.
+  2) dataset_sample: WAJIB tuliskan 3 baris ini: "Populasi data dari paper ini adalah: [X]\nTahap pengumpulan data penelitian ini adalah: [Y]\nTeknik analisis data penelitian ini adalah: [Z]". Jika bukan paper penelitian, isi dengan: "File yang diunggah tidak terdeteksi sebagai paper penelitian. Silakan unggah file lain yang merupakan jurnal atau paper ilmiah."
+  3) methodology: WAJIB pisahkan narasi (Isi) dan format (Bentuk) dengan pemisah '|||'. Contoh: "Penelitian ini menggunakan simulasi... ||| Desain Riset: Kuantitatif\nVariabel: X dan Y...". Format Bentuk:
+     (Kuantitatif): Desain Riset, Variabel, Hipotesis, Ukuran Sampel, Teknik Sampling, Instrumen, Teknik Analisis.
+     (Kualitatif): Desain Riset, Fokus Riset, Subjek/Informan, Teknik Pemilihan, Instrumen, Teknik Analisis.
+     (Mixed): Desain Riset, Tahap Kuantitatif, Tahap Kualitatif, Integrasi Analisis.
 - evidence berisi 1-3 kutipan verbatim dengan page_number yang benar.
 - jika informasi tidak dinyatakan, value harus menjelaskan bahwa informasi
   tidak ditemukan, confidence rendah, dan evidence boleh kosong.

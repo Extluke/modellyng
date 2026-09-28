@@ -22,8 +22,9 @@ def build_structured_tables(
     by_parameter = {component.parameter.value: component for component in components}
     questions_component = by_parameter.get("research_question")
     questions = _split_items(_display_value(questions_component))
-    objects = _split_items(_display_value(by_parameter.get("variables_concepts")))
-    directions = _split_items(_display_value(by_parameter.get("research_objective")))
+    objects_raw = _display_value(by_parameter.get("variables_concepts"))
+    directions_raw = _display_value(by_parameter.get("research_objective"))
+    directions = _split_items(directions_raw)
 
     research_questions: list[ResearchQuestionTableRow] = []
     for index, question in enumerate(questions):
@@ -36,7 +37,7 @@ def build_structured_tables(
             ResearchQuestionTableRow(
                 number=index + 1,
                 question=question,
-                related_object=_aligned_value(objects, index, "Belum dinyatakan"),
+                related_object=objects_raw or "Belum dinyatakan",
                 discussion_direction=_aligned_value(
                     directions, index, "Belum dinyatakan"
                 ),
@@ -46,18 +47,50 @@ def build_structured_tables(
         )
 
     methodology_text = _display_value(by_parameter.get("methodology"))
+    methodology_parts = methodology_text.split("|||")
+    content_part = methodology_parts[0].strip() if methodology_parts else ""
+    form_part = methodology_parts[1].strip() if len(methodology_parts) > 1 else _infer_method_form(methodology_text)
+
+    results_findings = _display_value(by_parameter.get("results_findings"))
+    future_work = _display_value(by_parameter.get("future_work"))
+    activity_direction_parts = []
+    if results_findings:
+        activity_direction_parts.append(f"Output penelitian:\n{results_findings}")
+    if future_work:
+        activity_direction_parts.append(f"Arah pengembangan:\n{future_work}")
+    activity_direction = "\n\n".join(activity_direction_parts) if activity_direction_parts else "Belum dinyatakan"
+
+    def _bulletize(text: str) -> str:
+        # Menangani jika Gemini tidak memberikan newline dengan memotong berdasarkan kata kunci
+        keywords = [
+            "Populasi data dari paper ini adalah:",
+            "Tahap pengumpulan data penelitian ini adalah:",
+            "Teknik analisis data penelitian ini adalah:",
+            "Desain Riset:", "Variabel:", "Hipotesis:", "Ukuran Sampel:",
+            "Teknik Sampling:", "Instrumen:", "Teknik Analisis:",
+            "Fokus Riset:", "Subjek/Informan:", "Teknik Pemilihan:",
+            "Tahap Kuantitatif:", "Tahap Kualitatif:", "Integrasi Analisis:"
+        ]
+        
+        # Buat regex pattern untuk mencari kata kunci (dengan atau tanpa newline sebelumnya)
+        # Pisahkan text dan pastikan kata kunci tetap berada di awal baris
+        pattern = re.compile(r'(?<!\n)\s*(' + '|'.join(map(re.escape, keywords)) + r')')
+        formatted_text = pattern.sub(r'\n\1', text)
+        
+        lines = [line.strip() for line in formatted_text.split('\n') if line.strip()]
+        if len(lines) > 1:
+            return "\n\n".join(f"• {line.lstrip('•').strip()}" for line in lines)
+        return text
+
     methodology = []
     if methodology_text:
         methodology.append(
             MethodologyTableRow(
-                content=methodology_text,
-                form=_infer_method_form(methodology_text),
-                main_activity=_display_value(by_parameter.get("dataset_sample"))
+                content=content_part,
+                form=_bulletize(form_part),
+                main_activity=_bulletize(_display_value(by_parameter.get("dataset_sample")))
                 or "Belum dinyatakan",
-                activity_direction=_display_value(
-                    by_parameter.get("variables_concepts")
-                )
-                or "Belum dinyatakan",
+                activity_direction=activity_direction,
                 final_goal=_display_value(by_parameter.get("research_objective"))
                 or "Belum dinyatakan",
             )
@@ -72,7 +105,9 @@ def build_structured_tables(
 def _display_value(component: ExtractedComponentRead | None) -> str:
     if component is None:
         return ""
-    return " ".join((component.final_value or component.ai_value).split()).strip()
+    val = component.final_value or component.ai_value
+    val = re.sub(r'[ \t]+', ' ', val)
+    return val.strip()
 
 
 def _split_items(value: str) -> list[str]:
