@@ -36,8 +36,10 @@ class ComponentRevisionScreen extends ConsumerStatefulWidget {
 class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _focusNode = FocusNode();
   final _messages = <_RevisionMessage>[];
   bool _sending = false;
+  bool _showInputArea = true;
 
   @override
   void initState() {
@@ -46,7 +48,7 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
       _RevisionMessage(
         role: 'assistant',
         content:
-            'Silakan berikan komentar — hasil seperti apa yang Anda inginkan untuk komponen **${widget.component.parameter}** ini?',
+            'Silakan berikan komentar — hasil seperti apa yang Anda inginkan untuk komponen **${widget.component.parameterLabel}** ini?',
       ),
     );
   }
@@ -55,6 +57,7 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -76,6 +79,7 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
     setState(() {
       _messages.add(userMessage);
       _sending = true;
+      _showInputArea = false;
       _controller.clear();
     });
 
@@ -109,6 +113,9 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
       });
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _showInputArea = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gagal merevisi: $e'),
@@ -186,7 +193,7 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Teks Asli (${widget.component.parameter})',
+                  'Teks Asli (${widget.component.parameterLabel})',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted),
                 ),
                 const SizedBox(height: 8),
@@ -255,8 +262,14 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                               children: [
                                 OutlinedButton.icon(
                                   onPressed: () {
-                                    // User wants to reject again, simply scroll to bottom to input new prompt
-                                    _scrollToBottom();
+                                    // User wants to reject again, show input and focus
+                                    setState(() {
+                                      _showInputArea = true;
+                                    });
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      _focusNode.requestFocus();
+                                      _scrollToBottom();
+                                    });
                                   },
                                   icon: const Icon(Icons.close),
                                   label: const Text('Tolak Lagi'),
@@ -329,54 +342,77 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
               },
             ),
           ),
-          Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    enabled: !_sending,
-                    minLines: 1,
-                    maxLines: 5,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(
-                      hintText: 'Misal: Gunakan bahasa yang lebih akademik...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+          if (_showInputArea)
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      focusNode: _focusNode,
+                      controller: _controller,
+                      enabled: !_sending,
+                      minLines: 1,
+                      maxLines: 5,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: const InputDecoration(
+                        hintText: 'Misal: Gunakan bahasa yang lebih akademik...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  FloatingActionButton(
+                    elevation: 0,
+                    onPressed: _sending ? null : _send,
+                    backgroundColor: _sending ? AppColors.border : AppColors.primary,
+                    foregroundColor: Colors.white,
+                    child: _sending
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
+            )
+          else if (_sending)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'AI sedang memproses revisi...',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                FloatingActionButton(
-                  elevation: 0,
-                  onPressed: _sending ? null : _send,
-                  backgroundColor: _sending ? AppColors.border : AppColors.primary,
-                  foregroundColor: Colors.white,
-                  child: _sending
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded),
-                ),
-              ],
+              ),
             ),
-          ),
         ],
       ),
     );

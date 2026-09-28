@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_repository.dart';
 import '../data/paper_comparison_repository.dart';
+import '../data/paper_result_repository.dart';
 import '../data/project_repository.dart';
 import '../data/review_repository.dart';
 import '../theme/app_theme.dart';
@@ -108,6 +109,7 @@ class _ReviewQueueScreenState extends ConsumerState<ReviewQueueScreen> {
       ref.invalidate(reviewHistoryProvider(userId));
       ref.invalidate(projectsProvider(userId));
       ref.invalidate(paperComparisonsProvider);
+      ref.invalidate(paperResultProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$accepted hasil berhasil diterima.')),
@@ -499,6 +501,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
         ref.invalidate(reviewQueueProvider(widget.userId));
         ref.invalidate(projectsProvider(widget.userId));
         ref.invalidate(paperComparisonsProvider);
+        ref.invalidate(paperResultProvider);
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -619,6 +622,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                           ).then((success) {
                             if (success == true) {
                               ref.invalidate(reviewQueueProvider);
+                              ref.invalidate(paperResultProvider);
                             }
                           });
                         },

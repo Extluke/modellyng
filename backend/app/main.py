@@ -453,7 +453,7 @@ async def chat_with_assistant(
     current_user: CurrentUser,
 ) -> GlobalChatResponse:
     from .chat_service import answer_global_question
-    return answer_global_question(payload)
+    return await asyncio.to_thread(answer_global_question, payload)
 
 
 @api.post(
@@ -468,7 +468,7 @@ async def revise_extracted_component(
     current_user: CurrentUser,
 ) -> ComponentReviseResponse:
     from .chat_service import revise_component
-    return revise_component(payload)
+    return await asyncio.to_thread(revise_component, payload)
 
 
 @api.get(
@@ -545,6 +545,7 @@ async def review_component(
         component_id,
         payload,
     )
+    return result
 
 
 @api.get("/account/settings", response_model=AccountSettingsRead, tags=["account"])
