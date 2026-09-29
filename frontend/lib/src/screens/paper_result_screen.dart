@@ -8,8 +8,8 @@ import '../data/paper_result_repository.dart';
 import '../models/research_models.dart';
 import '../platform/download_file.dart';
 import '../theme/app_theme.dart';
-import '../widgets/source_verification_card.dart';
 import '../widgets/expandable_table_cell.dart';
+import '../widgets/source_verification_card.dart';
 import 'review_queue_screen.dart';
 
 class PaperResultScreen extends ConsumerStatefulWidget {
@@ -190,7 +190,9 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
                                   initialProjectId: widget.projectId,
                                   initialPaperId: widget.paperId,
                                   targetParameter: _targetReviewParameter,
-                                  onParameterCleared: () => setState(() => _targetReviewParameter = null),
+                                  onParameterCleared: () => setState(
+                                    () => _targetReviewParameter = null,
+                                  ),
                                 ),
                               ],
                             ),
@@ -222,7 +224,8 @@ class _PaperResultScreenState extends ConsumerState<PaperResultScreen>
                           initialProjectId: widget.projectId,
                           initialPaperId: widget.paperId,
                           targetParameter: _targetReviewParameter,
-                          onParameterCleared: () => setState(() => _targetReviewParameter = null),
+                          onParameterCleared: () =>
+                              setState(() => _targetReviewParameter = null),
                         ),
                       ],
                     ),
@@ -310,7 +313,7 @@ class _ResultPane extends StatelessWidget {
                   : const Icon(Icons.picture_as_pdf_outlined),
               label: Text(downloadingTables ? 'Membuat...' : 'Unduh tabel PDF'),
             );
-            
+
             if (isMobile) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -321,7 +324,7 @@ class _ResultPane extends StatelessWidget {
                 ],
               );
             }
-            
+
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,7 +359,7 @@ class _ResultPane extends StatelessWidget {
               onEvidence: onCitation,
               onReviewRequested: onReviewRequested,
             ),
-        
+
         if (result.structuredTables.futureIdeas.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
@@ -422,21 +425,26 @@ class _ComponentCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    if (item.status == VerificationStatus.needsReview)
-                      ActionChip(
-                        label: Text(
-                          item.status.name,
-                          style: const TextStyle(color: AppColors.orange, fontWeight: FontWeight.bold),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (item.status == VerificationStatus.needsReview)
+                    ActionChip(
+                      label: Text(
+                        item.status.name,
+                        style: const TextStyle(
+                          color: AppColors.orange,
+                          fontWeight: FontWeight.bold,
                         ),
-                        backgroundColor: AppColors.orangeSoft,
-                        side: const BorderSide(color: AppColors.orange),
-                        onPressed: onReviewRequested != null ? () => onReviewRequested!(parameter) : null,
-                      )
-                    else
-                      Chip(label: Text(item.status.name)),
+                      ),
+                      backgroundColor: AppColors.orangeSoft,
+                      side: const BorderSide(color: AppColors.orange),
+                      onPressed: onReviewRequested != null
+                          ? () => onReviewRequested!(parameter)
+                          : null,
+                    )
+                  else
+                    Chip(label: Text(item.status.name)),
                   if (item.confidence != null)
                     Chip(
                       label: Text(
@@ -492,7 +500,10 @@ class _FutureResearchIdeaCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: isRank1 ? Colors.amber.shade600 : AppColors.primary,
                     borderRadius: BorderRadius.circular(8),
@@ -511,26 +522,46 @@ class _FutureResearchIdeaCard extends StatelessWidget {
                   child: Text(
                     idea.title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isRank1 ? Colors.brown.shade900 : null,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: isRank1 ? Colors.brown.shade900 : null,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            _buildSection(context, 'Alasan / Konteks', idea.rationale, Icons.info_outline),
+            _buildSection(
+              context,
+              'Alasan / Konteks',
+              idea.rationale,
+              Icons.info_outline,
+            ),
             const SizedBox(height: 8),
-            _buildSection(context, 'Rekomendasi Metode', idea.methodology, Icons.science_outlined),
+            _buildSection(
+              context,
+              'Rekomendasi Metode',
+              idea.methodology,
+              Icons.science_outlined,
+            ),
             const SizedBox(height: 8),
-            _buildSection(context, 'Dampak Potensial', idea.impact, Icons.trending_up),
+            _buildSection(
+              context,
+              'Dampak Potensial',
+              idea.impact,
+              Icons.trending_up,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, String content, IconData icon) {
+  Widget _buildSection(
+    BuildContext context,
+    String title,
+    String content,
+    IconData icon,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -549,10 +580,7 @@ class _FutureResearchIdeaCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                content,
-                style: const TextStyle(fontSize: 14),
-              ),
+              Text(content, style: const TextStyle(fontSize: 14)),
             ],
           ),
         ),
@@ -612,7 +640,10 @@ class _ResearchQuestionTable extends StatelessWidget {
                       cells: [
                         DataCell(Text('${row.number}')),
                         DataCell(
-                          SizedBox(width: 260, child: ExpandableTableCell(text: row.question)),
+                          SizedBox(
+                            width: 260,
+                            child: ExpandableTableCell(text: row.question),
+                          ),
                         ),
                         DataCell(
                           SizedBox(
@@ -626,7 +657,9 @@ class _ResearchQuestionTable extends StatelessWidget {
                         DataCell(
                           SizedBox(
                             width: 240,
-                            child: ExpandableTableCell(text: row.discussionDirection),
+                            child: ExpandableTableCell(
+                              text: row.discussionDirection,
+                            ),
                           ),
                         ),
                         DataCell(
@@ -697,20 +730,36 @@ class _MethodologyTable extends StatelessWidget {
                     DataRow(
                       cells: [
                         DataCell(
-                          SizedBox(width: 230, child: ExpandableTableCell(text: row.content)),
+                          SizedBox(
+                            width: 230,
+                            child: ExpandableTableCell(text: row.content),
+                          ),
                         ),
-                        DataCell(SizedBox(width: 150, child: ExpandableTableCell(text: row.form))),
                         DataCell(
-                          SizedBox(width: 220, child: ExpandableTableCell(text: row.mainActivity)),
+                          SizedBox(
+                            width: 150,
+                            child: ExpandableTableCell(text: row.form),
+                          ),
                         ),
                         DataCell(
                           SizedBox(
                             width: 220,
-                            child: ExpandableTableCell(text: row.activityDirection),
+                            child: ExpandableTableCell(text: row.mainActivity),
                           ),
                         ),
                         DataCell(
-                          SizedBox(width: 220, child: ExpandableTableCell(text: row.finalGoal)),
+                          SizedBox(
+                            width: 220,
+                            child: ExpandableTableCell(
+                              text: row.activityDirection,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 220,
+                            child: ExpandableTableCell(text: row.finalGoal),
+                          ),
                         ),
                       ],
                     ),
