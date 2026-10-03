@@ -55,10 +55,15 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
       _uploadProgress = 0;
     });
     try {
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      final query = (userId: userId!, projectId: widget.project.id);
+      final existingPapers = ref.read(projectPapersProvider(query)).value ?? [];
+      
       final papers = await ref
           .read(paperRepositoryProvider)
           .pickAndUploadPdf(
             widget.project,
+            existingPapers: existingPapers,
             onProgress: (progress) {
               if (mounted) setState(() => _uploadProgress = progress);
             },
@@ -326,15 +331,20 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
                             for (final paper in items) ...[
                               _PaperTile(
                                 paper: paper,
-                                onOpenResult: () =>
-                                    Navigator.of(context).push<void>(
-                                      MaterialPageRoute(
-                                        builder: (_) => PaperResultScreen(
-                                          projectId: project.id,
-                                          paperId: paper.id,
-                                        ),
+                                onOpenResult: () async {
+                                  await Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) => PaperResultScreen(
+                                        projectId: project.id,
+                                        paperId: paper.id,
                                       ),
                                     ),
+                                  );
+                                  if (userId != null) {
+                                    ref.invalidate(projectPapersProvider((userId: userId, projectId: project.id)));
+                                    ref.invalidate(projectsProvider(userId));
+                                  }
+                                },
                                 onProcess: paper.canStartProcessing
                                     ? () => _processPaper(paper)
                                     : null,

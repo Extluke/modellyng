@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/concept_map_repository.dart';
-import '../data/project_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/research_flowchart.dart';
 import 'paper_result_screen.dart';
 
 class ConceptEvidenceMapScreen extends ConsumerStatefulWidget {
-  const ConceptEvidenceMapScreen({required this.userId, super.key});
+  const ConceptEvidenceMapScreen({required this.userId, required this.projectId, super.key});
   final String userId;
+  final String projectId;
   @override
   ConsumerState<ConceptEvidenceMapScreen> createState() =>
       _ConceptEvidenceMapScreenState();
@@ -18,13 +18,11 @@ class ConceptEvidenceMapScreen extends ConsumerStatefulWidget {
 
 class _ConceptEvidenceMapScreenState
     extends ConsumerState<ConceptEvidenceMapScreen> {
-  String? _projectId;
-  String? _paperId;
+    String? _paperId;
 
   @override
   Widget build(BuildContext context) {
-    final projects = ref.watch(projectsProvider(widget.userId));
-    return Material(
+        return Material(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
@@ -35,45 +33,12 @@ class _ConceptEvidenceMapScreenState
                 'Jelajahi hubungan paper, konsep hasil review, dan evidence pada PDF privat.',
           ),
           const SizedBox(height: 20),
-          projects.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) =>
-                const _MapMessage('Proyek belum dapat dimuat.'),
-            data: (items) {
-              if (items.isEmpty)
-                return const _MapMessage('Belum ada proyek untuk dipetakan.');
-              _projectId ??= items.first.id;
-              return Column(
+          Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: _projectId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Pilih proyek',
-                    ),
-                    items: [
-                      for (final project in items)
-                        DropdownMenuItem(
-                          value: project.id,
-                          child: Text(
-                            project.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() {
-                      _projectId = value;
-                      _paperId = null;
-                    }),
-                  ),
-                  const SizedBox(height: 18),
-                  _map(ref.watch(conceptMapProvider(_projectId!))),
+                  _map(ref.watch(conceptMapProvider(widget.projectId))),
                 ],
-              );
-            },
-          ),
+              ),
         ],
       ),
     );

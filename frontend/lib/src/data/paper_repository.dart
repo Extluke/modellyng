@@ -73,6 +73,7 @@ class PaperRepository {
 
   Future<List<ProjectPaper>?> pickAndUploadPdf(
     ResearchProject project, {
+    List<ProjectPaper> existingPapers = const [],
     void Function(double progress)? onProgress,
   }) async {
     final result = await FilePicker.pickFiles(
@@ -93,6 +94,16 @@ class PaperRepository {
       throw const PaperUploadException(
         'Maksimal 15 PDF dalam satu kali unggah.',
       );
+    }
+    
+    // Check for duplicates
+    final existingTitles = existingPapers.map((p) => p.title?.toLowerCase() ?? '').toSet();
+    for (final file in result.files) {
+      if (existingTitles.contains(file.name.toLowerCase())) {
+        throw PaperUploadException(
+          'Paper "${file.name}" sudah pernah diunggah ke proyek ini.',
+        );
+      }
     }
 
     final List<ProjectPaper> uploadedPapers = [];

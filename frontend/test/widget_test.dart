@@ -225,6 +225,7 @@ void main() {
       title: 'Export Project',
       description: '',
       paperCount: 2,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -293,7 +294,6 @@ void main() {
           home: DashboardScreen(
             userId: 'test-user',
             displayName: 'Pengguna Pilot',
-            onNewProject: () {},
             onOpenProject: (_) {},
             onOpenReview: () {},
           ),
@@ -315,6 +315,7 @@ void main() {
       title: 'Rahasia Akun A',
       description: 'Tidak boleh terlihat akun B',
       paperCount: 0,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -334,7 +335,6 @@ void main() {
           home: DashboardScreen(
             userId: 'user-a',
             displayName: 'Akun A',
-            onNewProject: () {},
             onOpenProject: (_) {},
             onOpenReview: () {},
           ),
@@ -356,7 +356,6 @@ void main() {
           home: DashboardScreen(
             userId: 'user-b',
             displayName: 'Akun B',
-            onNewProject: () {},
             onOpenProject: (_) {},
             onOpenReview: () {},
           ),
@@ -375,6 +374,7 @@ void main() {
       title: 'Proyek review',
       description: '',
       paperCount: 4,
+      readyCount: 0,
       reviewCount: 2,
       progress: 0.85,
       status: ProjectStatus.needsReview,
@@ -393,7 +393,6 @@ void main() {
           home: DashboardScreen(
             userId: 'review-user',
             displayName: 'Reviewer',
-            onNewProject: () {},
             onOpenProject: (_) {},
             onOpenReview: () {},
           ),
@@ -526,6 +525,7 @@ void main() {
       title: 'Matrix Project',
       description: '',
       paperCount: 2,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -579,6 +579,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: ComparativeMatrixScreen(userId: 'matrix-user'),
+            onGoToProjects: () {},
         ),
       ),
     );
@@ -599,6 +600,7 @@ void main() {
       title: 'Mobile Matrix',
       description: '',
       paperCount: 2,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -652,6 +654,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: ComparativeMatrixScreen(userId: 'matrix-user'),
+            onGoToProjects: () {},
         ),
       ),
     );
@@ -669,6 +672,7 @@ void main() {
         title: 'One Paper',
         description: '',
         paperCount: 1,
+        readyCount: 0,
         reviewCount: 0,
         progress: 1,
         status: ProjectStatus.ready,
@@ -699,6 +703,7 @@ void main() {
           ],
           child: const MaterialApp(
             home: ComparativeMatrixScreen(userId: 'matrix-user'),
+              onGoToProjects: () {},
           ),
         ),
       );
@@ -715,6 +720,7 @@ void main() {
       title: 'Map Project With A Very Long Responsive Project Title',
       description: '',
       paperCount: 1,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -779,6 +785,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: ConceptEvidenceMapScreen(userId: 'map-user'),
+            projectId: 'project-123',
         ),
       ),
     );
@@ -804,6 +811,7 @@ void main() {
       title: 'Gap Project',
       description: '',
       paperCount: 1,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -868,6 +876,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: Scaffold(body: ResearchGapMapScreen(userId: 'gap-user')),
+            projectId: 'project-123',
         ),
       ),
     );
@@ -970,6 +979,7 @@ void main() {
       title: 'Chat Project',
       description: '',
       paperCount: 2,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,
@@ -1022,6 +1032,7 @@ void main() {
       title: 'History Project',
       description: '',
       paperCount: 1,
+      readyCount: 0,
       reviewCount: 0,
       progress: 1,
       status: ProjectStatus.ready,

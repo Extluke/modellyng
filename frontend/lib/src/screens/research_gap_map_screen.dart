@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/concept_map_repository.dart';
-import '../data/project_repository.dart';
 import '../data/research_gap_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
@@ -10,8 +9,9 @@ import '../widgets/paper_comparison_panel.dart';
 import 'paper_result_screen.dart';
 
 class ResearchGapMapScreen extends ConsumerStatefulWidget {
-  const ResearchGapMapScreen({required this.userId, super.key});
+  const ResearchGapMapScreen({required this.userId, required this.projectId, super.key});
   final String userId;
+  final String projectId;
 
   @override
   ConsumerState<ResearchGapMapScreen> createState() =>
@@ -19,14 +19,12 @@ class ResearchGapMapScreen extends ConsumerStatefulWidget {
 }
 
 class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
-  String? _projectId;
-  String _source = 'all';
+    String _source = 'all';
   String? _savingCandidateKey;
 
   @override
   Widget build(BuildContext context) {
-    final projects = ref.watch(projectsProvider(widget.userId));
-    return Material(
+        return Material(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
@@ -39,37 +37,10 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
           const SizedBox(height: 10),
           const _HumanReviewNotice(),
           const SizedBox(height: 18),
-          projects.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) =>
-                const _GapMessage('Proyek belum dapat dimuat.'),
-            data: (items) {
-              if (items.isEmpty) {
-                return const _GapMessage(
-                  'Belum ada proyek untuk mencari kandidat research gap.',
-                );
-              }
-              _projectId ??= items.first.id;
-              return Column(
+          Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: _projectId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Pilih proyek',
-                    ),
-                    items: [
-                      for (final project in items)
-                        DropdownMenuItem(
-                          value: project.id,
-                          child: Text(project.title),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() => _projectId = value),
-                  ),
-                  const SizedBox(height: 14),
-                  PaperComparisonPanel(key: ValueKey('gap-pairs-$_projectId'), projectId: _projectId!),
+                  PaperComparisonPanel(key: ValueKey('gap-pairs-${widget.projectId}'), projectId: widget.projectId),
                   const SizedBox(height: 24),
                   Text('Keterbatasan dari masing-masing paper', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
@@ -93,13 +64,11 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                   ),
                   const SizedBox(height: 18),
                   _map(
-                    ref.watch(researchGapMapProvider(_projectId!)),
-                    ref.watch(researchGapDecisionsProvider(_projectId!)),
+                    ref.watch(researchGapMapProvider(widget.projectId)),
+                    ref.watch(researchGapDecisionsProvider(widget.projectId)),
                   ),
                 ],
-              );
-            },
-          ),
+              ),
         ],
       ),
     );
@@ -177,9 +146,9 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
   }
 
   Future<void> _saveDecision(ConceptMapNode gap, GapDecision decision) async {
-    final projectId = _projectId;
+    final projectId = widget.projectId;
     final parameter = gap.parameter;
-    if (projectId == null || parameter == null) return;
+    if (parameter == null) return;
     final candidateKey = '${gap.paperId}:$parameter';
     setState(() => _savingCandidateKey = candidateKey);
     try {

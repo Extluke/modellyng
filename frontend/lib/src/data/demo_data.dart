@@ -10,6 +10,7 @@ abstract final class DemoData {
       description:
           'Sintesis strategi adaptasi infrastruktur kota terhadap perubahan iklim.',
       paperCount: 14,
+      readyCount: 0,
       reviewCount: 3,
       progress: 0.82,
       status: ProjectStatus.needsReview,
@@ -22,6 +23,7 @@ abstract final class DemoData {
       description:
           'Perbandingan metode koreksi error untuk arsitektur quantum modern.',
       paperCount: 8,
+      readyCount: 0,
       reviewCount: 0,
       progress: 0.48,
       status: ProjectStatus.processing,
@@ -34,6 +36,7 @@ abstract final class DemoData {
       description:
           'Pemetaan arsitektur dan efisiensi komputasi perangkat neuromorfik.',
       paperCount: 22,
+      readyCount: 0,
       reviewCount: 5,
       progress: 1,
       status: ProjectStatus.ready,
