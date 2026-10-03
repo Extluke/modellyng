@@ -5,7 +5,6 @@ import '../data/component_revise_repository.dart';
 import '../data/global_chat_repository.dart'; // Re-use GlobalChatMessage
 import '../data/review_repository.dart'; // for submitting review & ReviewQueueItem
 import '../theme/app_theme.dart';
-import '../widgets/common_widgets.dart';
 
 class _RevisionMessage {
   const _RevisionMessage({
@@ -30,10 +29,12 @@ class ComponentRevisionScreen extends ConsumerStatefulWidget {
   final ReviewQueueItem component;
 
   @override
-  ConsumerState<ComponentRevisionScreen> createState() => _ComponentRevisionScreenState();
+  ConsumerState<ComponentRevisionScreen> createState() =>
+      _ComponentRevisionScreenState();
 }
 
-class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScreen> {
+class _ComponentRevisionScreenState
+    extends ConsumerState<ComponentRevisionScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
@@ -91,9 +92,13 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
           .map((m) => GlobalChatMessage(role: m.role, content: m.content))
           .toList();
 
-      final evidenceQuotes = widget.component.evidence.map((e) => e.quote).toList();
+      final evidenceQuotes = widget.component.evidence
+          .map((e) => e.quote)
+          .toList();
 
-      final response = await ref.read(componentReviseRepositoryProvider).reviseComponent(
+      final response = await ref
+          .read(componentReviseRepositoryProvider)
+          .reviseComponent(
             widget.projectId,
             widget.component.componentId,
             widget.component.parameter,
@@ -105,11 +110,13 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
 
       if (!mounted) return;
       setState(() {
-        _messages.add(_RevisionMessage(
-          role: 'assistant',
-          content: response.revisedContent,
-          isRevisionResult: true,
-        ));
+        _messages.add(
+          _RevisionMessage(
+            role: 'assistant',
+            content: response.revisedContent,
+            isRevisionResult: true,
+          ),
+        );
       });
     } catch (e) {
       if (!mounted) return;
@@ -194,7 +201,10 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
               children: [
                 Text(
                   'Teks Asli (${widget.component.parameterLabel})',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.muted,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 SelectableText(
@@ -214,7 +224,7 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
               itemBuilder: (context, index) {
                 final message = _messages[index];
                 final isUser = message.role == 'user';
-                
+
                 if (message.isRevisionResult) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 24),
@@ -232,7 +242,11 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                           children: [
                             const Row(
                               children: [
-                                Icon(Icons.auto_awesome, color: AppColors.primary, size: 20),
+                                Icon(
+                                  Icons.auto_awesome,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
                                 SizedBox(width: 8),
                                 Text(
                                   'Hasil Revisi AI',
@@ -253,7 +267,10 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                               ),
                               child: SelectableText(
                                 message.content,
-                                style: const TextStyle(color: AppColors.ink, height: 1.5),
+                                style: const TextStyle(
+                                  color: AppColors.ink,
+                                  height: 1.5,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -266,21 +283,25 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                                     setState(() {
                                       _showInputArea = true;
                                     });
-                                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                                      _focusNode.requestFocus();
-                                      _scrollToBottom();
-                                    });
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          _focusNode.requestFocus();
+                                          _scrollToBottom();
+                                        });
                                   },
                                   icon: const Icon(Icons.close),
                                   label: const Text('Tolak Lagi'),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.red,
-                                    side: const BorderSide(color: AppColors.redSoft),
+                                    side: const BorderSide(
+                                      color: AppColors.redSoft,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 FilledButton.icon(
-                                  onPressed: () => _approveRevision(message.content),
+                                  onPressed: () =>
+                                      _approveRevision(message.content),
                                   icon: const Icon(Icons.check),
                                   label: const Text('Setujui'),
                                   style: FilledButton.styleFrom(
@@ -300,14 +321,19 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                   padding: const EdgeInsets.only(bottom: 24),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment:
-                        isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                    mainAxisAlignment: isUser
+                        ? MainAxisAlignment.end
+                        : MainAxisAlignment.start,
                     children: [
                       if (!isUser) ...[
                         const CircleAvatar(
                           radius: 16,
                           backgroundColor: AppColors.primary,
-                          child: Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+                          child: Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                         const SizedBox(width: 12),
                       ],
@@ -316,7 +342,9 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: isUser ? AppColors.primary : Colors.white,
-                            border: isUser ? null : Border.all(color: AppColors.border),
+                            border: isUser
+                                ? null
+                                : Border.all(color: AppColors.border),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: SelectableText(
@@ -333,7 +361,11 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                         const CircleAvatar(
                           radius: 16,
                           backgroundColor: AppColors.border,
-                          child: Icon(Icons.person, color: AppColors.muted, size: 16),
+                          child: Icon(
+                            Icons.person,
+                            color: AppColors.muted,
+                            size: 16,
+                          ),
                         ),
                       ],
                     ],
@@ -361,7 +393,8 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _send(),
                       decoration: const InputDecoration(
-                        hintText: 'Misal: Gunakan bahasa yang lebih akademik...',
+                        hintText:
+                            'Misal: Gunakan bahasa yang lebih akademik...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
@@ -376,7 +409,9 @@ class _ComponentRevisionScreenState extends ConsumerState<ComponentRevisionScree
                   FloatingActionButton(
                     elevation: 0,
                     onPressed: _sending ? null : _send,
-                    backgroundColor: _sending ? AppColors.border : AppColors.primary,
+                    backgroundColor: _sending
+                        ? AppColors.border
+                        : AppColors.primary,
                     foregroundColor: Colors.white,
                     child: _sending
                         ? const SizedBox(
