@@ -72,6 +72,7 @@ class ProjectRead(ProjectCreate):
     status: ProjectStatus
     paper_count: int = 0
     review_count: int = 0
+    ready_count: int = 0
     knowledge_node_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -186,11 +187,33 @@ class ExtractedComponentRead(BaseModel):
     final_value: str | None = None
     status: VerificationStatus
     confidence: float | None = Field(default=None, ge=0, le=1)
+    is_implicit: bool = False
     evidence: list[EvidenceSpan]
     model_name: str
     prompt_version: str
     created_at: datetime
 
+class ComparativeSynthesisCreate(BaseModel):
+    paper_ids: list[UUID] = Field(min_length=2)
+
+class ComparativeSynthesisRead(BaseModel):
+    id: UUID
+    project_id: UUID
+    paper_ids: list[UUID]
+    similarities: str
+    differences: str
+    research_patterns: str
+    approach_differences: str
+    created_at: datetime
+    updated_at: datetime
+
+class PaperStructurePart(BaseModel):
+    id: UUID
+    paper_id: UUID
+    part_name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
 class ResearchQuestionTableRow(BaseModel):
     number: int = Field(ge=1)

@@ -18,6 +18,7 @@ from .schemas import (
     ExtractedComponentRead,
     ExtractionParameter,
     ComparativeMatrixRead,
+    ComparativeSynthesisRead,
     ConceptEvidenceMapRead,
     ResearchGapMapRead,
     ResearchGapDecisionCreate,
@@ -87,11 +88,15 @@ class SupabaseProjectRepository:
         paper_relation = payload.pop("papers", [])
         paper_count = 0
         review_count = 0
+        ready_count = 0
         knowledge_node_count = 0
         if isinstance(paper_relation, list):
             paper_count = len(paper_relation)
             review_count = sum(
                 1 for paper in paper_relation if paper.get("status") == "needs_review"
+            )
+            ready_count = sum(
+                1 for paper in paper_relation if paper.get("status") == "ready"
             )
             knowledge_node_count = sum(
                 1
@@ -105,6 +110,7 @@ class SupabaseProjectRepository:
                 **payload,
                 "paper_count": paper_count,
                 "review_count": review_count,
+                "ready_count": ready_count,
                 "knowledge_node_count": knowledge_node_count,
             }
         )
@@ -746,6 +752,107 @@ class SupabaseProjectRepository:
                 for parameter in parameters
             ],
         })
+
+    async def generate_comparative_synthesis(
+        self, user: AuthenticatedUser, project_id: UUID, paper_ids: list[UUID]
+    ) -> ComparativeSynthesisRead:
+        sorted_ids = sorted([str(pid) for pid in paper_ids])
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/comparative_syntheses",
+                headers=self._headers(user),
+                params={
+                    "select": "*",
+                    "project_id": f"eq.{project_id}",
+                    "paper_ids": f"eq.{{{','.join(sorted_ids)}}}",
+                },
+            )
+            self._raise_for_repository_error(response)
+            rows = response.json()
+            if rows:
+                from .schemas import ComparativeSynthesisRead
+                return ComparativeSynthesisRead(**rows[0])
+
+        matrix = await self.get_comparative_matrix(user, project_id)
+        selected_pids = set(sorted_ids)
+        papers_info = []
+        for p in matrix.papers:
+            if str(p.id) in selected_pids:
+                papers_info.append(f"Title: {p.title}")
+        
+        extracted_text = []
+        for row in matrix.rows:
+            extracted_text.append(f"--- Parameter: {row.parameter.value} ---")
+            for cell in row.cells:
+                if str(cell.paper_id) in selected_pids:
+                    val = cell.final_value or cell.ai_value
+                    extracted_text.append(f"Paper {cell.paper_id}: {val}")
+
+        combined_text = "\n".join(papers_info) + "\n\n" + "\n".join(extracted_text)
+        
+        from google import genai
+        from google.genai import types
+        from pydantic import BaseModel
+        from .config import get_settings
+        
+        settings = get_settings()
+        if not settings.gemini_api_key:
+            raise RepositoryError("Gemini API key is not configured.")
+        
+        class SynthesisOutput(BaseModel):
+            similarities: str
+            differences: str
+            research_patterns: str
+            approach_differences: str
+            
+        prompt = (
+            "Analisis hasil ekstraksi paper ini dan berikan 4 output:\n"
+            "1. Ringkasan persamaan antar-paper\n"
+            "2. Ringkasan perbedaan antar-paper\n"
+            "3. Pola penelitian yang ditemukan\n"
+            "4. Perbedaan pendekatan penelitian\n\n"
+            "Data Ekstraksi:\n"
+            f"{combined_text[:settings.gemini_max_input_chars]}"
+        )
+        
+        try:
+            client_gemini = genai.Client(api_key=settings.gemini_api_key)
+            response_llm = client_gemini.models.generate_content(
+                model=settings.gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=SynthesisOutput,
+                    temperature=0.2,
+                ),
+            )
+            result_json = response_llm.text
+            if not result_json:
+                 raise ValueError("Empty response")
+            parsed = SynthesisOutput.model_validate_json(result_json)
+        except Exception as e:
+            raise RepositoryError(f"Gagal melakukan sintesis AI: {str(e)}")
+        
+        insert_payload = {
+            "project_id": str(project_id),
+            "paper_ids": sorted_ids,
+            "similarities": parsed.similarities,
+            "differences": parsed.differences,
+            "research_patterns": parsed.research_patterns,
+            "approach_differences": parsed.approach_differences,
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res_insert = await client.post(
+                f"{self._rest_url}/comparative_syntheses",
+                headers=self._headers(user, {"Prefer": "return=representation"}),
+                json=insert_payload,
+            )
+            self._raise_for_repository_error(res_insert)
+            inserted_row = res_insert.json()[0]
+            from .schemas import ComparativeSynthesisRead
+            return ComparativeSynthesisRead(**inserted_row)
 
     async def get_concept_evidence_map(
         self, user: AuthenticatedUser, project_id: UUID

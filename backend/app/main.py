@@ -32,6 +32,8 @@ from .schemas import (
     PaperResultRead,
     ReviewHistoryItemRead,
     ComparativeMatrixRead,
+    ComparativeSynthesisRead,
+    ComparativeSynthesisCreate,
     ConceptEvidenceMapRead,
     ResearchGapMapRead,
     ResearchGapDecisionCreate,
@@ -347,6 +349,16 @@ async def get_comparative_matrix(
     project_id: UUID, current_user: CurrentUser
 ) -> ComparativeMatrixRead:
     return await project_repository.get_comparative_matrix(current_user, project_id)
+
+@api.post(
+    "/projects/{project_id}/synthesis",
+    response_model=ComparativeSynthesisRead,
+    tags=["projects"],
+)
+async def generate_comparative_synthesis(
+    project_id: UUID, payload: ComparativeSynthesisCreate, current_user: CurrentUser
+) -> ComparativeSynthesisRead:
+    return await project_repository.generate_comparative_synthesis(current_user, project_id, payload.paper_ids)
 
 
 @api.get(

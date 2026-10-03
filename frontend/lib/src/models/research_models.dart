@@ -15,10 +15,12 @@ class ResearchProject {
     required this.description,
     required this.paperCount,
     required this.reviewCount,
+    required this.readyCount,
     this.knowledgeNodeCount = 0,
     required this.progress,
     required this.status,
     required this.updatedLabel,
+    this.updatedAt,
     required this.accent,
   });
 
@@ -27,10 +29,12 @@ class ResearchProject {
   final String description;
   final int paperCount;
   final int reviewCount;
+  final int readyCount;
   final int knowledgeNodeCount;
   final double progress;
   final ProjectStatus status;
   final String updatedLabel;
+  final DateTime? updatedAt;
   final Color accent;
 
   factory ResearchProject.fromJson(Map<String, dynamic> json) {
@@ -47,6 +51,7 @@ class ResearchProject {
       description: json['description']?.toString() ?? '',
       paperCount: (json['paper_count'] as num?)?.toInt() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      readyCount: (json['ready_count'] as num?)?.toInt() ?? 0,
       knowledgeNodeCount: (json['knowledge_node_count'] as num?)?.toInt() ?? 0,
       progress: switch (status) {
         ProjectStatus.ready => 1,
@@ -55,6 +60,7 @@ class ResearchProject {
       },
       status: status,
       updatedLabel: _updatedLabel(updatedAt),
+      updatedAt: updatedAt,
       accent: const Color(0xFF5747E8),
     );
   }
