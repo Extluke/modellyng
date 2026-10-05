@@ -52,6 +52,7 @@ from .schemas import (
     IntelligenceReportRead,
     AccountSettingsRead,
     AccountSettingsUpdate,
+    AiResearchSynthesis,
 )
 from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
 from .source_verification import VerificationRequest, SourceVerificationRead, SourceReviewCreate, SourceReviewRead
@@ -383,6 +384,18 @@ async def get_research_gap_map(
     return await project_repository.get_research_gap_map(current_user, project_id)
 
 
+@api.post(
+    "/projects/{project_id}/synthesize_gaps",
+    response_model=AiResearchSynthesis,
+    tags=["projects"],
+)
+async def generate_research_formulation_synthesis(
+    project_id: UUID, current_user: CurrentUser
+) -> AiResearchSynthesis:
+    from .synthesis_service import synthesize_gaps
+    return await synthesize_gaps(current_user, project_id)
+
+
 @api.get(
     "/projects/{project_id}/intelligence-report",
     response_model=IntelligenceReportRead,
@@ -615,3 +628,10 @@ async def review_source_verification(project_id: UUID, paper_id: UUID, verificat
 
 
 app.include_router(api)
+
+from .synthesis_service import synthesize_gaps
+
+@app.post("/projects/{project_id}/synthesize_gaps", response_model=AiResearchSynthesis)
+async def synthesize_research_gaps(project_id: UUID, user: CurrentUser) -> AiResearchSynthesis:
+    return await synthesize_gaps(user, project_id)
+

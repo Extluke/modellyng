@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/maps_mock_data.dart';
 import '../theme/app_theme.dart';
+import 'package:graphview/GraphView.dart';
 
 class ProjectMapsDetailScreen extends StatefulWidget {
   const ProjectMapsDetailScreen({
@@ -66,6 +67,22 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
       ..translate(dx, dy)
       ..scale(scale);
     _transformController.value = centerMatrix;
+  }
+
+  Graph _buildGraphViewGraph() {
+    final graph = Graph()..isTree = false;
+    final Map<String, Node> gvNodes = {};
+    for (final n in _visibleNodes) {
+      final node = Node.Id(n);
+      gvNodes[n.id] = node;
+      graph.addNode(node);
+    }
+    for (final e in _visibleEdges) {
+      if (gvNodes.containsKey(e.sourceId) && gvNodes.containsKey(e.targetId)) {
+        graph.addEdge(gvNodes[e.sourceId]!, gvNodes[e.targetId]!, paint: Paint()..color = Colors.indigo.shade200..strokeWidth = 1.5..style = PaintingStyle.stroke);
+      }
+    }
+    return graph;
   }
 
   void _generateLayout() {
@@ -956,22 +973,22 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                                   ),
                                 ),
                               ],
-                              
-                              // Edges
-                              CustomPaint(
-                                size: const Size(2000, 2000),
-                                painter: _GraphEdgePainter(
-                                  edges: _visibleEdges,
-                                  positions: _nodePositions,
+                              // GraphView to render nodes and edges with Sugiyama auto layout
+                              Positioned.fill(
+                                child: GraphView(
+                                  graph: _buildGraphViewGraph(),
+                                  algorithm: SugiyamaAlgorithm(SugiyamaConfiguration()
+                                    ..nodeSeparation = 120
+                                    ..levelSeparation = 300
+                                    ..orientation = SugiyamaConfiguration.ORIENTATION_LEFT_RIGHT
+                                  ),
+                                  paint: Paint()..color = Colors.indigo.shade200..strokeWidth = 1.5..style = PaintingStyle.stroke,
+                                  builder: (Node node) {
+                                    final graphNode = node.key!.value as GraphNode;
+                                    return _buildNodeWidget(graphNode);
+                                  },
                                 ),
                               ),
-                              // Nodes
-                              for (final node in _visibleNodes)
-                                Positioned(
-                                  left: _nodePositions[node.id]!.dx,
-                                  top: _nodePositions[node.id]!.dy,
-                                  child: _buildNodeWidget(node),
-                                ),
                             ],
                           ),
                         ),

@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/paper_comparison_panel.dart';
 import 'paper_result_screen.dart';
+import 'synthesis_screen.dart';
 
 class ResearchGapMapScreen extends ConsumerStatefulWidget {
   const ResearchGapMapScreen({required this.userId, required this.projectId, super.key});
@@ -24,9 +25,9 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-        return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: ListView(
+        return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
         children: [
           const PageHeading(
@@ -70,6 +71,17 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
                 ],
               ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => SynthesisScreen(projectId: widget.projectId),
+            ),
+          );
+        },
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('Sintesis Riset'),
       ),
     );
   }

@@ -286,3 +286,32 @@ class ResearchGap {
   final double confidence;
   final String type;
 }
+
+class AiResearchSynthesis {
+  const AiResearchSynthesis({
+    required this.usulanJudul,
+    required this.rumusanMasalah,
+    required this.pernyataanNovelty,
+    required this.alasanPemilihan,
+  });
+
+  final List<String> usulanJudul;
+  final List<String> rumusanMasalah;
+  final String pernyataanNovelty;
+  final String alasanPemilihan;
+
+  factory AiResearchSynthesis.fromJson(Map<String, dynamic> json) {
+    return AiResearchSynthesis(
+      usulanJudul: (json['usulan_judul'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      rumusanMasalah: (json['rumusan_masalah'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      pernyataanNovelty: json['pernyataan_novelty']?.toString() ?? '',
+      alasanPemilihan: json['alasan_pemilihan']?.toString() ?? '',
+    );
+  }
+}

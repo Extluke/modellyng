@@ -1,15 +1,43 @@
-rekomendasi perbaikan
+1. EPIC: Arsitektur Knowledge Graph & Actionable Canvas (Backend & AI Extraction Enhancement)
+Visi utama dari UI Canvas Maps adalah menjadi alat sintesis visual yang actionable (bisa dieksekusi langsung). Untuk mendukung filter, detail gap, dan pemetaan hubungan yang komprehensif, Backend dan AI harus di-upgrade untuk menyediakan data berikut:
 
-1. kesalahan pada judul
-pada bagian judul hasil pdf, saya lihat hasilnya masih belum akurat mengambil dari judul asli dari paper tersebut, saaya memang uploud dalam bentuk PDF namun kan didalamnya ada judul paper yng seharsunya di jadikan sebagai judul dari hasil PDF, tapi yang membuat saya heran judul in dia terkadang benar di beberpa PDF namun ada juga yang salah ini kenapa ya, apakah memang hasil generate ai untuk saat ini masih sangat labil atau bagaimana??
+a. Ekstraksi Node & Edge Lengkap (Comprehensive Relationship Mapping):
+   - Kondisi saat ini: AI HANYA mengekstrak Node Paper, Node Konsep, dan Node Gap secara terbatas.
+   - Kebutuhan: AI harus mampu mengekstrak tambahan tipe node (Variabel, Metode, Hasil, dan Area Riset).
+   - Kebutuhan: AI wajib mengekstrak GARIS RELASI (Edges) lintas entitas (misal: Metode A -> Hasil B -> memunculkan Gap C) agar kanvas terhubung menjadi satu jaring laba-laba yang utuh.
 
-2. pada tabel pertanyaan penelitian bagian Evidence
-pada bagian ini terkadang muncul informasi evidence daalam bentu Hal 1, namun dari 10 paper yang saya uploud hanya 1 yang berhasil sisanya?, pada bagian evidence malah dia kosong dan hanya memunculkan strip tengah.
+b. Klasifikasi & Representasi Hierarkis (Gap Typology & Sub-concepts):
+   - Kebutuhan: AI harus membedakan secara eksplisit mana "Konsep Utama/Payung" dan "Sub-konsep" (misalnya dengan penambahan `parent_id`), karena skema saat ini terlalu datar (flat).
+   - Kebutuhan: AI harus mampu mengklasifikasi tipe celah secara spesifik (Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, Empirical Gap) untuk filter "Saring Tipe Celah".
 
-3. pada tabel metodologi 
-- pada kolom Bentuk saya melihat adanya [] di setiap jawaban apapun termausk informasi yang tidak ditemukan, saya jujur kurang nyaman dengan ini bisakah hapus saja adanya bentuk [] agar bisa terlihat lebih natural lagi, tapi ada hal yang sangat aneh 1 dari 3 pdf yang saya unggah masih ada yang hasilnya bahkan tidak pakai [] sama sekali, jadi hasilnya memang benar benar perfect, tapi 2 pdf yang lainnya di awal dan akhir kalimatnya selalu ada [], ingat untuk jangan samapai kamu merubah struktur secara asal, yang saya inginkan hanya menghilangkan tanda[] bukan merubah struktur.
-- pada kolom arah kegiatan, seharusnya hanya akan ada 2 paragraf yang membahas output penelitian dan arah pengembangan, tapi 4 dari 10 pdf dia seperti mengalami bug, jadi ada garis || dan kemudian ada kalimat yang seharusnya ada di rekomendasi penelitian ( karna disini tertulis jelas rank 1 rank 2 rank 3 ) malah ditulis disini, tapi yang saya aneh adalah tidak semua hasil PDF itu eror, ini kira kira kenapa yah?, apakah ada kesalahan?, apakah ai nya masih labil?, apakah algoritma yang saya bauat sebelumnya malah menimbulkan kelabilan berlebih?, atau ini ada semacam kaya data lama yang ditampikan ulang?????.
+c. Kalkulasi Saturasi Riset (Mengetahui Topik Jenuh vs Peluang):
+   - Kebutuhan: Backend harus memiliki algoritma kalkulasi/scoring agregasi lintas paper untuk sebuah konsep. Tujuannya mengirimkan data saturasi riset (Banyak diteliti/Hijau, Cukup/Kuning, Jarang/Oranye, Belum diteliti/Merah) untuk mendukung filter "Saring Area Cakupan".
 
-4. pada sub menu rekomendasi penelitian berikutnya
-- seperti yang sudah sya sbutkan sebelumnya jika pada tabel metodologi kolom arah kegiatan disana malah aplikasi ngebug dan memunculkan hasil yang harusnya ditulis disini malah dimasukkan di tabel metodologi arah kegiatan, pastinya di bagian ini paastinya ikut rusak, entah nanti hanya menampilkan 1 rank tunggal ( padahal seharusnya 3 bukan 1)
-- dan 6 dari 10 PDF dia itu seperti bug, dimana bug ini sudah pernah saya masukkan ke promp sebelumya, jadi di bagian judul dari card rank, dia itu seperti menggabungkan isi dari judul + alasn / konteks, dan nantinya di paragraf bawahnya yang akan menampilkan alasan / konteks, dia juga masih ditampilkan, tolong la ini di perbaiki dan ini benar benar aneh, dari semua fitur yang saya komentari hasilnya tidak 10/10 semua pdf eror, masih ada beberapa pdf yang bisa berjalan dan tidak eror, jujur ini kenapa ya? apakah mungkin karena ai yang labil atau ada bug yang membuat sistem ekstraksi dari ai mengirim data lama???
+d. Bukti Pendukung & Clustering (Rich Supporting Evidence):
+   - Kondisi saat ini: Skema gap (ConceptMapNodeRead) tidak memiliki nilai Confidence (%) real, dan hanya memuat 1 referensi `paper_id`.
+   - Kebutuhan: Menyediakan angka persentase riil untuk Confidence Score AI.
+   - Kebutuhan: Schema harus memuat Array of Evidence, di mana setiap bukti memuat: (1) Judul Paper, (2) Section sumber, dan (3) Kutipan Asli (Quote).
+   - Kebutuhan: Algoritma clustering untuk mengelompokkan paper ke dalam Method Cluster atau Object Cluster.
+
+e. Actionable Canvas & Sintesis Riset Terpusat:
+   - Kebutuhan (Validasi): Endpoint validasi (Terima/Tolak) harus didesain agar update-nya bisa langsung me-refresh state/warna node di kanvas dari Pending ke Validated secara real-time saat BottomSheet digunakan.
+   - Kebutuhan (Sintesis): Membuat endpoint "Sintesis Riset" baru di backend yang menerima input berupa Node GAP yang sudah divalidasi/dipilih oleh user (bukan paper ID), untuk kemudian menghasilkan usulan Judul, Rumusan Masalah, dan Narasi Novelty yang sangat tajam berdasarkan celah tersebut.
+
+f. Tata Letak Spasial & Zonasi (Spatial Layout & Zoning):
+   - Kondisi saat ini: Algoritma Sugiyama di frontend tidak mendukung pembuatan compound/cluster box (seperti zona hijau/kuning) secara otomatis karena murni hanya merapikan garis. Jika koordinat tidak di-hardcode, desain zona akan berantakan.
+   - Kebutuhan: AI/Backend harus menyematkan atribut `zone_category` pada setiap node.
+   - Kebutuhan: Backend wajib menghitung koordinat layout secara algoritmik (misal dengan NetworkX atau Graphviz) dan mengirimkan koordinat pasti (X, Y) ke Frontend, sehingga Frontend hanya bertugas "menggambar" titik dan zona tanpa perlu menghitung layout Sugiyama sendiri.
+
+2. PROTOKOL ANTI-DOMINO EFFECT (Aturan Mutlak Eksekusi Backend)
+DILARANG KERAS merusak hasil ekstraksi yang sudah stabil (seperti Hasil PDF, Tabel Evidence, dan Metodologi) demi memenuhi kebutuhan Knowledge Graph di atas. Semua eksekusi harus mematuhi aturan berikut:
+
+a. Isolasi Prompt AI (Separation of Concerns):
+   - Jangan menyatukan prompt ekstraksi Knowledge Graph dengan prompt ekstraksi dasar (judul, tujuan, metodologi).
+   - Ekstraksi Graph (node, edge, saturasi, dll) harus menjadi PHASE KE-2 (Secondary Pipeline) yang berjalan SETELAH ekstraksi dasar berhasil dan aman, menggunakan prompt yang terpisah 100%.
+
+b. Isolasi Skema Data (Non-Destructive Schema Update):
+   - Dilarang memodifikasi secara destruktif skema inti yang dipakai oleh layar Hasil PDF.
+   - Jika diperlukan, buat skema turunan BARU (contoh: `KnowledgeGraphNodeRead` turunan dari `ConceptMapNodeRead`) khusus untuk melayani halaman Maps, sehingga perubahan atribut (seperti `zone_category`, array of evidence) tidak membuat API layar lain crash.
+
+c. Penggunaan Data Referensi:
+   - Untuk membangun Graph dan Relasi, AI harus membaca dari data hasil ekstraksi dasar yang sudah ada di database (hasil tabel metodologi, dll), BUKAN membaca ulang PDF mentah dari nol yang berisiko menghasilkan output yang berbeda/labil.

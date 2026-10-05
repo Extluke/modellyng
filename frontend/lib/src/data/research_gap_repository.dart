@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_client.dart';
 import 'concept_map_repository.dart';
+import '../models/research_models.dart';
+
 
 final researchGapRepositoryProvider = Provider<ResearchGapRepository>((ref) {
   return ResearchGapRepository(ref.watch(dioProvider));
@@ -114,5 +116,12 @@ class ResearchGapRepository {
       data: {'decision': decision.name},
     );
     return ResearchGapDecision.fromJson(response.data!);
+  }
+
+  Future<AiResearchSynthesis> synthesizeGaps(String projectId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/v1/projects/$projectId/synthesize_gaps',
+    );
+    return AiResearchSynthesis.fromJson(response.data!);
   }
 }

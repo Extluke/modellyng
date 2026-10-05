@@ -579,3 +579,10 @@ class DependencyHealthRead(BaseModel):
     status: str
     redis: DependencyStatus
     supabase: DependencyStatus
+
+class AiResearchSynthesis(BaseModel):
+    usulan_judul: list[str] = Field(description="3 alternatif usulan judul penelitian baru")
+    rumusan_masalah: list[str] = Field(description="2-3 pertanyaan penelitian (Research Questions) yang spesifik")
+    pernyataan_novelty: str = Field(description="Narasi 1 paragraf yang menjelaskan kebaruan penelitian ini berdasarkan gap yang dipilih")
+    alasan_pemilihan: str = Field(description="Narasi mengapa usulan judul-judul ini relevan dan kuat berdasarkan gap yang ada")
+
