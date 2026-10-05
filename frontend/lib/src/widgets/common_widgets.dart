@@ -300,6 +300,7 @@ class MetricCard extends StatelessWidget {
             ),
           ],
         ),
+        ),
       ),
       ),
     );
