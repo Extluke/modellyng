@@ -52,7 +52,13 @@ def build_structured_tables(
     content_part = ""
     form_part = ""
     
-    if methodology_text.strip().startswith('{'):
+    clean_text = methodology_text.replace("**", "")
+    
+    if "--- ARAH KEGIATAN ---" in clean_text:
+        parts = clean_text.split("--- ARAH KEGIATAN ---")
+        form_part = parts[0].replace("--- BENTUK METODOLOGI ---", "").strip()
+        content_part = parts[1].strip() if len(parts) > 1 else ""
+    elif methodology_text.strip().startswith('{'):
         try:
             data = json.loads(methodology_text)
             content_part = data.get("arah_kegiatan", "")

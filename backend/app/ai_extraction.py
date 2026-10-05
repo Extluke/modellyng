@@ -62,12 +62,31 @@ class AiMethodologyDetail(BaseModel):
         description="Kutipan verbatim (persis sama) dari teks asli. HARUS diisi sebelum membuat ringkasan. Jika tidak ada, isi null."
     )
     page_number: int | None = Field(default=None, ge=1)
-    bentuk: str = Field(
-        description="Format metodologi (Kuantitatif/Kualitatif/Mixed). HANYA isi teks polos, TANPA karakter kurung siku [] sama sekali."
-    )
-    arah_kegiatan: str = Field(
-        description="Membahas narasi isi atau alur dari metodologi yang digunakan."
-    )
+    
+    jenis_metodologi: str = Field(description="Format metodologi (Kuantitatif/Kualitatif/Mixed)")
+    desain_riset: str = Field(description="Desain riset (misal: Eksperimental / Survei / Studi Kasus)")
+    
+    # -- Kuantitatif (opsional) --
+    variabel: str | None = Field(default=None, description="Hanya untuk Kuantitatif. Misal: X = [...], Y = [...]")
+    hipotesis: str | None = Field(default=None, description="Hanya untuk Kuantitatif. Hipotesis penelitian.")
+    ukuran_sampel: str | None = Field(default=None, description="Hanya untuk Kuantitatif. Jumlah responden/sampel.")
+    teknik_sampling: str | None = Field(default=None, description="Hanya untuk Kuantitatif. Nama teknik sampling.")
+    
+    # -- Kualitatif (opsional) --
+    fokus_riset: str | None = Field(default=None, description="Hanya untuk Kualitatif. Pertanyaan/tujuan eksplorasi.")
+    subjek_informan: str | None = Field(default=None, description="Hanya untuk Kualitatif. Jumlah dan deskripsi subjek.")
+    teknik_pemilihan: str | None = Field(default=None, description="Hanya untuk Kualitatif. Teknik pemilihan subjek.")
+    
+    # -- Mixed (opsional) --
+    tahap_kuantitatif: str | None = Field(default=None, description="Hanya untuk Mixed Methods. Ringkasan tahap kuantitatif.")
+    tahap_kualitatif: str | None = Field(default=None, description="Hanya untuk Mixed Methods. Ringkasan tahap kualitatif.")
+    integrasi_analisis: str | None = Field(default=None, description="Hanya untuk Mixed Methods. Cara penggabungan data.")
+    
+    # -- Overlapping --
+    instrumen: str | None = Field(default=None, description="Instrumen pengumpulan data.")
+    teknik_analisis: str | None = Field(default=None, description="Teknik analisis data.")
+    
+    arah_kegiatan: str = Field(description="Membahas narasi isi metodologi, output, dan arah pengembangannya.")
     ai_confidence: int = Field(default=95, ge=0, le=100)
 
 class AiFutureWorkRecommendation(BaseModel):
@@ -301,7 +320,7 @@ Untuk setiap komponen:
       Teknik analisis data penelitian ini adalah: [ISI_DI_SINI]
      JIKA teks bukan merupakan paper penelitian ilmiah (tidak memiliki sampel/dataset/metode penelitian), tuliskan teks peringatan berikut (tanpa tambahan lain):
       "File yang diunggah tidak terdeteksi sebagai paper penelitian. Silakan unggah file lain yang merupakan jurnal atau paper ilmiah."
-  3) methodology: HANYA ISI OBJEK JSON `methodology`. Isi `bentuk` dengan format metodologi (Kuantitatif/Kualitatif/Mixed) TANPA kurung siku []. Isi `arah_kegiatan` dengan narasi isi metodologi.
+  3) methodology: HANYA ISI OBJEK JSON `methodology`. Isi `jenis_metodologi`, `desain_riset`, dan HANYA isi field opsional yang sesuai dengan jenis metodologinya. Isi `arah_kegiatan` dengan narasi isi metodologi.
   4) results_findings: WAJIB fokus menjawab "Output dari penelitian ini apa? (hasil konkret yang dihasilkan)".
   5) future_work: HANYA ISI OBJEK JSON `future_work`. Isi `arah_pengembangan` dengan deskripsi potensi pengembangan. Isi `recommendations` dengan daftar 3 ide penelitian.
   6) research_question: Khusus untuk pertanyaan penelitian, JIKA tidak ditulis secara eksplisit, Anda WAJIB merumuskan (inferensi) pertanyaan penelitian berdasarkan masalah dan tujuan penelitian. JANGAN gunakan "Informasi tidak ditemukan" kecuali sama sekali tidak bisa dirumuskan.
@@ -346,10 +365,43 @@ def verify_extraction(
     
     # Process methodology separately and append to components
     if extraction.methodology:
-        val = json.dumps({
-            "bentuk": extraction.methodology.bentuk,
-            "arah_kegiatan": extraction.methodology.arah_kegiatan
-        }, ensure_ascii=False)
+        def get_val(val):
+            return val if val and str(val).strip() != "None" else "-"
+            
+        parts = ["--- BENTUK METODOLOGI ---"]
+        
+        desain_text = str(extraction.methodology.jenis_metodologi)
+        if extraction.methodology.desain_riset and str(extraction.methodology.desain_riset).strip() != "None":
+            desain_text += f" ({extraction.methodology.desain_riset})"
+            
+        jenis_lower = str(extraction.methodology.jenis_metodologi).lower()
+        
+        if "kuantitatif" in jenis_lower and "mixed" not in jenis_lower:
+            parts.append(f"{'Desain Riset'.ljust(18)}: {desain_text}")
+            parts.append(f"{'Variabel'.ljust(18)}: {get_val(extraction.methodology.variabel)}")
+            parts.append(f"{'Hipotesis'.ljust(18)}: {get_val(extraction.methodology.hipotesis)}")
+            parts.append(f"{'Ukuran Sampel'.ljust(18)}: {get_val(extraction.methodology.ukuran_sampel)}")
+            parts.append(f"{'Teknik Sampling'.ljust(18)}: {get_val(extraction.methodology.teknik_sampling)}")
+            parts.append(f"{'Instrumen'.ljust(18)}: {get_val(extraction.methodology.instrumen)}")
+            parts.append(f"{'Teknik Analisis'.ljust(18)}: {get_val(extraction.methodology.teknik_analisis)}")
+        elif "kualitatif" in jenis_lower and "mixed" not in jenis_lower:
+            parts.append(f"{'Desain Riset'.ljust(18)}: {desain_text}")
+            parts.append(f"{'Fokus Riset'.ljust(18)}: {get_val(extraction.methodology.fokus_riset)}")
+            parts.append(f"{'Subjek/Informan'.ljust(18)}: {get_val(extraction.methodology.subjek_informan)}")
+            parts.append(f"{'Teknik Pemilihan'.ljust(18)}: {get_val(extraction.methodology.teknik_pemilihan)}")
+            parts.append(f"{'Instrumen'.ljust(18)}: {get_val(extraction.methodology.instrumen)}")
+            parts.append(f"{'Teknik Analisis'.ljust(18)}: {get_val(extraction.methodology.teknik_analisis)}")
+        else:
+            parts.append(f"{'Desain Riset'.ljust(18)}: {desain_text}")
+            parts.append(f"{'Tahap Kuantitatif'.ljust(18)}: {get_val(extraction.methodology.tahap_kuantitatif)}")
+            parts.append(f"{'Tahap Kualitatif'.ljust(18)}: {get_val(extraction.methodology.tahap_kualitatif)}")
+            parts.append(f"{'Integrasi Analisis'.ljust(18)}: {get_val(extraction.methodology.integrasi_analisis)}")
+                
+        parts.append("\n--- ARAH KEGIATAN ---")
+        parts.append(extraction.methodology.arah_kegiatan)
+        
+        val = "\n".join(parts)
+        
         extraction.components.append(AiComponent(
             parameter=ExtractionParameter.METHODOLOGY,
             evidence_quote=extraction.methodology.evidence_quote,
