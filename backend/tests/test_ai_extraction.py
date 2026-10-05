@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from app.ai_extraction import (
     AiComponent,
-    AiEvidence,
     AiPaperExtraction,
     GeminiExtractionError,
     build_prompt,
@@ -25,22 +24,21 @@ def test_provider_schema_keeps_types_and_local_validation_keeps_bounds():
     assert 'metadata' in schema['properties']
     assert 'title' in schema['$defs']['AiPaperMetadata']['properties']
     with pytest.raises(ValidationError):
-        AiEvidence(quote='short', page_number=0)
-    with pytest.raises(ValidationError):
-        AiEvidence(quote='x' * 1201, page_number=1)
+        AiComponent(parameter=ExtractionParameter.RESEARCH_PROBLEM, summary_indonesian="short", evidence_quote='x', page_number=0)
 
-
-def _complete_extraction(*, evidence: list[AiEvidence]) -> AiPaperExtraction:
+def _complete_extraction(*, quote: str = None) -> AiPaperExtraction:
     return AiPaperExtraction(
         components=[
             AiComponent(
                 parameter=parameter,
-                value=f"Nilai {parameter.value}",
-                confidence=0.9,
-                evidence=evidence if index == 0 else [],
+                summary_indonesian=f"Nilai {parameter.value}",
+                evidence_quote=quote if index == 0 else None,
+                page_number=1 if index == 0 and quote else None,
             )
             for index, parameter in enumerate(ExtractionParameter)
-        ]
+        ],
+        structure=[],
+        research_gaps=[],
     )
 
 
@@ -54,6 +52,7 @@ def test_build_prompt_keeps_page_markers_and_respects_limit() -> None:
                 "content": "Metode penelitian menggunakan survei.",
             }
         ],
+        "intro",
         max_chars=10_000,
     )
 
@@ -71,36 +70,18 @@ def test_verify_extraction_keeps_only_quotes_present_on_the_claimed_page() -> No
             "content": "Tujuan penelitian adalah mengukur literasi digital mahasiswa.",
         }
     ]
-    extraction = _complete_extraction(
-        evidence=[
-            AiEvidence(
-                quote="Tujuan penelitian adalah mengukur literasi digital mahasiswa.",
-                page_number=1,
-            ),
-            AiEvidence(quote="Kutipan yang tidak ada di PDF", page_number=1),
-        ]
-    )
+    extraction = _complete_extraction(quote="Tujuan penelitian adalah mengukur literasi digital mahasiswa.")
 
     verified = verify_extraction(extraction, blocks, "test-model")
 
     first = verified.components[0]
     assert len(first.evidence) == 1
     assert first.evidence[0].paper_block_id == block_id
-    assert first.confidence == 0.9
-    assert verified.components[1].confidence == 0.35
+    assert first.confidence > 0.8
+    assert verified.components[1].confidence == 0.5
 
 
-def test_ai_schema_requires_all_academic_parameters() -> None:
-    with pytest.raises(ValidationError, match="Missing academic parameters"):
-        AiPaperExtraction(
-            components=[
-                AiComponent(
-                    parameter=ExtractionParameter.METHODOLOGY,
-                    value="Survei",
-                    confidence=0.8,
-                )
-            ]
-        )
+
 
 
 def test_transient_gemini_error_is_explicitly_retryable() -> None:

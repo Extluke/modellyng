@@ -49,7 +49,7 @@ class _ComponentRevisionScreenState
       _RevisionMessage(
         role: 'assistant',
         content:
-            'Silakan berikan komentar — hasil seperti apa yang Anda inginkan untuk komponen **${widget.component.parameterLabel}** ini?',
+            'Silakan berikan komentar, hasil seperti apa yang Anda inginkan untuk komponen "${widget.component.parameterLabel}" ini?',
       ),
     );
   }

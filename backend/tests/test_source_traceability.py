@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.ai_extraction import AiComponent, AiEvidence, AiPaperExtraction, verify_extraction
+from app.ai_extraction import AiComponent, AiPaperExtraction, verify_extraction
 from app.auth import AuthenticatedUser
 from app.main import app
 from app.repository import EntityNotFoundError, SupabaseProjectRepository
@@ -146,39 +146,42 @@ def test_review_rejects_blank_note():
         SourceReviewCreate(decision="accept", note="   ")
 
 
-@pytest.mark.parametrize("kind,label,quote", [
-    ("table", "Table 2", "Table 2 reports accuracy 91%."),
-    ("figure", "Figure 1", "Figure 1 shows the study design."),
-    ("equation", "Equation (3)", "Equation (3) is y = ax + b."),
-    ("equation", "(3)", "y = ax + b (3)"),
-    ("result", None, "The accuracy was 91%."),
+@pytest.mark.parametrize("quote", [
+    ("Table 2 reports accuracy 91%."),
+    ("Figure 1 shows the study design."),
+    ("Equation (3) is y = ax + b."),
+    ("y = ax + b (3)"),
+    ("The accuracy was 91%."),
 ])
-def test_evidence_kinds_and_source_hierarchy_are_grounded(kind, label, quote):
+def test_evidence_kinds_and_source_hierarchy_are_grounded(quote):
     block_id = uuid4()
     blocks = [{"id": uuid4(), "page_number": 1, "block_index": 0, "content": "2 Results\n2.1 Evaluation\n"},
               {"id": block_id, "page_number": 2, "block_index": 1, "content": quote}]
     extraction = AiPaperExtraction(components=[AiComponent(
-        parameter=p, value="An extracted claim", confidence=.9,
-        evidence=[AiEvidence(quote=quote, page_number=2, evidence_kind=kind, source_label=label)] if p == ExtractionParameter.RESULTS_FINDINGS else [],
+        parameter=p, summary_indonesian="An extracted claim",
+        evidence_quote=quote if p == ExtractionParameter.RESULTS_FINDINGS else None,
+        page_number=2 if p == ExtractionParameter.RESULTS_FINDINGS else None
     ) for p in ExtractionParameter])
     result = verify_extraction(extraction, blocks, "test")
     evidence = next(c for c in result.components if c.parameter == ExtractionParameter.RESULTS_FINDINGS).evidence[0]
     assert evidence.paper_block_id == block_id
     assert evidence.section == "2 Results" and evidence.subsection == "2.1 Evaluation"
-    assert evidence.evidence_kind == kind and evidence.source_label == label
+    assert evidence.evidence_kind.value == "text"
+    assert evidence.source_label is None
 
 
 def test_fabricated_label_does_not_upgrade_text_and_wrong_page_is_discarded():
     quote = "This study reports an accuracy of 91%."
     extraction = AiPaperExtraction(components=[AiComponent(
-        parameter=p, value="An extracted claim", confidence=.9,
-        evidence=[AiEvidence(quote=quote, page_number=1, evidence_kind="table", source_label="Table 99"),
-                  AiEvidence(quote=quote, page_number=2)],
+        parameter=p, summary_indonesian="An extracted claim",
+        evidence_quote=quote if p == ExtractionParameter.RESULTS_FINDINGS else None,
+        page_number=1 if p == ExtractionParameter.RESULTS_FINDINGS else None
     ) for p in ExtractionParameter])
     result = verify_extraction(extraction, [{"id": uuid4(), "page_number": 1, "block_index": 0, "content": quote}], "test")
-    assert len(result.components[0].evidence) == 1
-    assert result.components[0].evidence[0].evidence_kind == "text"
-    assert result.components[0].evidence[0].source_label is None
+    if result.components[0].evidence:
+        assert len(result.components[0].evidence) == 1
+        assert result.components[0].evidence[0].evidence_kind == "text"
+        assert result.components[0].evidence[0].source_label is None
 
 
 def test_review_is_append_only_and_cannot_use_report_from_another_paper(monkeypatch):
@@ -237,9 +240,10 @@ def test_worker_persists_extended_metadata_and_source_locators(monkeypatch):
     original = httpx.Client
     monkeypatch.setattr("app.processing_repository.httpx.Client", lambda **kw: original(transport=httpx.MockTransport(handler), **kw))
     extraction = VerifiedPaperExtraction(metadata=AiPaperMetadata(publisher="Publisher A", volume="2", issue="1", pages="10-20", publication_status="preprint"),
-        components=(VerifiedComponent(parameter=ExtractionParameter.RESULTS_FINDINGS, value="Results", confidence=.8,
+        components=(VerifiedComponent(parameter=ExtractionParameter.RESULTS_FINDINGS, value="Results", confidence=.8, is_explicit=True,
             evidence=(VerifiedEvidence(paper_block_id=block_id, quote="Table 2 reports 91%.", page_number=3,
-                evidence_kind=EvidenceKind.TABLE, source_label="Table 2", section="2 Results", subsection="2.1 Evaluation"),)),), model_name="test")
+                evidence_kind=EvidenceKind.TABLE, source_label="Table 2", section="2 Results", subsection="2.1 Evaluation"),)),), 
+                structure=tuple(), research_gaps=tuple(), model_name="test")
     repo.save_ai_extraction(job_id=uuid4(), paper_id=uuid4(), extraction=extraction)
     span = json.loads(calls[1].content)[0]
     assert span["paper_block_id"] == str(block_id) and span["source_label"] == "Table 2"

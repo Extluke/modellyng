@@ -1,9 +1,10 @@
 from uuid import UUID
 
-from .ai_extraction import GeminiExtractionError, extract_academic_components
+from .ai_extraction import GeminiExtractionError, extract_academic_components, VerifiedPaperExtraction
 from .celery_app import celery_app
 from .pdf_processing import extract_pdf
 from .processing_repository import PdfProcessingRepository
+from .source_location import partition_blocks_by_route
 
 
 @celery_app.task(name="modellyng.process_pdf", bind=True)
@@ -67,7 +68,45 @@ def process_pdf(self, job_id: str, paper_id: str) -> dict[str, object]:
             progress=0.85,
         )
         blocks = repository.get_blocks(parsed_paper_id)
-        ai_extraction = extract_academic_components(blocks)
+        routed_blocks = partition_blocks_by_route(blocks)
+        
+        all_components = []
+        all_gaps = []
+        all_structure = []
+        metadata = None
+        used_model = None
+        prompt_version = None
+        
+        for route in ["intro", "method", "discussion"]:
+            route_blocks = routed_blocks.get(route, blocks)
+            if not route_blocks:
+                route_blocks = blocks
+                
+            route_extraction = extract_academic_components(route_blocks, route=route)
+            
+            if metadata is None:
+                metadata = route_extraction.metadata
+                used_model = route_extraction.model_name
+                prompt_version = route_extraction.prompt_version
+                
+            all_components.extend(route_extraction.components)
+            all_gaps.extend(route_extraction.research_gaps)
+            all_structure.extend(route_extraction.structure)
+            
+        # Deduplicate components by parameter
+        unique_components = {c.parameter.value: c for c in all_components}.values()
+        
+        # Deduplicate structure by section name (case-insensitive)
+        unique_structure = {s.section_name.strip().lower(): s for s in all_structure}.values()
+        
+        ai_extraction = VerifiedPaperExtraction(
+            metadata=metadata,
+            structure=tuple(unique_structure),
+            components=tuple(unique_components),
+            research_gaps=tuple(all_gaps),
+            model_name=used_model,
+            prompt_version=prompt_version
+        )
 
         self.update_state(
             state="PROGRESS",

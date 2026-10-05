@@ -52,7 +52,7 @@ def test_structured_tables_align_questions_objects_and_methodology() -> None:
     tables = build_structured_tables(components)
 
     assert [row.number for row in tables.research_questions] == [1, 2]
-    assert tables.research_questions[0].related_object == "B-tree index"
+    assert tables.research_questions[0].related_object == "B-tree index; query optimizer"
     assert tables.research_questions[1].discussion_direction == "Measure memory"
     assert tables.research_questions[0].evidence_page == 3
     assert tables.methodology[0].form == "Eksperimen / Kuantitatif"

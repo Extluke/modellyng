@@ -19,7 +19,9 @@ def locate_headings(blocks: list[dict], target_id: str, quote: str) -> tuple[str
         content = str(block["content"])
         target = str(block["id"]) == target_id
         if target:
-            content = content[:content.index(quote)]
+            idx = content.find(quote)
+            if idx != -1:
+                content = content[:idx]
         for raw_line in content.splitlines():
             line = raw_line.strip()
             numbered = _HEADING.fullmatch(line)
@@ -56,3 +58,24 @@ def classify_evidence(kind: EvidenceKind, label: str | None, quote: str, *, para
     if kind == EvidenceKind.RESULT and parameter != "results_findings":
         return EvidenceKind.TEXT, None
     return kind, None
+
+
+def partition_blocks_by_route(blocks: list[dict]) -> dict[str, list[dict]]:
+    """Partition blocks into intro, method, and discussion routes based on headings."""
+    routes = {"intro": [], "method": [], "discussion": []}
+    current_route = "intro" # Default start
+    
+    for block in sorted(blocks, key=lambda b: (int(b.get("page_number", 0)), int(b.get("block_index", 0)))):
+        content = str(block.get("content", ""))
+        # Simple heuristic to detect section changes
+        lower_content = content.lower()
+        if re.search(r"^(?:\d+\.\s*)?(?:methods?|methodology|metodologi|metode penelitian)", lower_content, re.MULTILINE):
+            current_route = "method"
+        elif re.search(r"^(?:\d+\.\s*)?(?:results?|discussion|conclusions?|hasil|pembahasan|kesimpulan)", lower_content, re.MULTILINE):
+            current_route = "discussion"
+        
+        routes[current_route].append(block)
+        
+    return routes
+
+

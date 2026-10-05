@@ -46,31 +46,65 @@ def build_structured_tables(
             )
         )
 
+    import json
+    
     methodology_text = _display_value(by_parameter.get("methodology"))
-    methodology_parts = methodology_text.split("|||")
-    content_part = methodology_parts[0].strip() if methodology_parts else ""
-    form_part = methodology_parts[1].strip() if len(methodology_parts) > 1 else _infer_method_form(methodology_text)
+    content_part = ""
+    form_part = ""
+    
+    if methodology_text.strip().startswith('{'):
+        try:
+            data = json.loads(methodology_text)
+            content_part = data.get("arah_kegiatan", "")
+            form_part = data.get("bentuk", "")
+        except json.JSONDecodeError:
+            pass
+            
+    if not content_part and not form_part:
+        methodology_parts = methodology_text.split("|||")
+        content_part = methodology_parts[0].strip() if methodology_parts else ""
+        form_part = methodology_parts[1].strip() if len(methodology_parts) > 1 else _infer_method_form(methodology_text)
 
     results_findings = _display_value(by_parameter.get("results_findings"))
     future_work_raw = _display_value(by_parameter.get("future_work"))
     future_work_display = future_work_raw
     future_ideas = []
     
-    if future_work_raw and "[RANK 1]" in future_work_raw.upper():
+    if future_work_raw.strip().startswith('{'):
+        try:
+            data = json.loads(future_work_raw)
+            future_work_display = data.get("pengembangan", "Belum dinyatakan")
+            for rec in data.get("recommendations", []):
+                future_ideas.append({
+                    "rank": rec.get("rank", 1),
+                    "title": rec.get("judul", "Ide Penelitian"),
+                    "rationale": rec.get("alasan", "-"),
+                    "methodology": rec.get("metode", "-"),
+                    "impact": rec.get("dampak", "-"),
+                })
+        except json.JSONDecodeError:
+            pass
+            
+    if not future_ideas and future_work_raw and "[RANK 1]" in future_work_raw.upper():
         parts = future_work_raw.split("|||")
-        future_work_display = "Telah dirinci pada bagian Rekomendasi Penelitian Berikutnya."
+        future_work_display = parts[0].strip() if parts else "Belum dinyatakan"
         for part in parts:
             part = part.strip()
             if not part:
                 continue
             
             rank_match = re.search(r'\[RANK\s*(\d+)\]', part, re.IGNORECASE)
-            rank = int(rank_match.group(1)) if rank_match else 1
+            if not rank_match:
+                continue
+            rank = int(rank_match.group(1))
             
-            title_match = re.search(r'Judul:\s*(.*?)(?=\nAlasan:|\nMetode:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
-            rationale_match = re.search(r'Alasan:\s*(.*?)(?=\nJudul:|\nMetode:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
-            method_match = re.search(r'Metode:\s*(.*?)(?=\nJudul:|\nAlasan:|\nDampak:|$)', part, re.IGNORECASE | re.DOTALL)
-            impact_match = re.search(r'Dampak:\s*(.*?)(?=\nJudul:|\nAlasan:|\nMetode:|$)', part, re.IGNORECASE | re.DOTALL)
+            part = part.strip().replace('\\n', '\n')
+            part = re.sub(r'\*\*', '', part)
+            
+            title_match = re.search(r'Judul:\s*(.*?)(?=\n\s*Alasan:|\n\s*Metode:|\n\s*Dampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            rationale_match = re.search(r'Alasan:\s*(.*?)(?=\n\s*Judul:|\n\s*Metode:|\n\s*Dampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            method_match = re.search(r'Metode:\s*(.*?)(?=\n\s*Judul:|\n\s*Alasan:|\n\s*Dampak:|$)', part, re.IGNORECASE | re.DOTALL)
+            impact_match = re.search(r'Dampak:\s*(.*?)(?=\n\s*Judul:|\n\s*Alasan:|\n\s*Metode:|$)', part, re.IGNORECASE | re.DOTALL)
             
             future_ideas.append({
                 "rank": rank,

@@ -1,76 +1,15 @@
-Tugas 1.A: Merancang Struktur Data Graf (Node & Edge) untuk Fitur Maps
+rekomendasi perbaikan
 
-Konteks: Saya sedang mengembangkan fitur "Research Gap Map & Concept Map". Fitur ini membutuhkan struktur data berbentuk graf (Nodes dan Edges) yang diekstrak dari paper penelitian. Tolong baca struktur database saya yang ada saat ini, lalu berikan implementation plan untuk kebutuhan berikut:
+1. kesalahan pada judul
+pada bagian judul hasil pdf, saya lihat hasilnya masih belum akurat mengambil dari judul asli dari paper tersebut, saaya memang uploud dalam bentuk PDF namun kan didalamnya ada judul paper yng seharsunya di jadikan sebagai judul dari hasil PDF, tapi yang membuat saya heran judul in dia terkadang benar di beberpa PDF namun ada juga yang salah ini kenapa ya, apakah memang hasil generate ai untuk saat ini masih sangat labil atau bagaimana??
 
-1. Skema Data Node (Titik):
-   - Saya butuh struktur/tabel untuk menyimpan berbagai tipe entitas penelitian sebagai Node.
-   - Tipe Node meliputi: Paper, Concept, Variable, Method, Object, Research Area, dan Research Gap.
-   - Khusus untuk "Research Gap Node", harus memiliki field tambahan: Gap Statement, Gap Type (misal: Population Gap, Methodological Gap), Confidence (High/Medium/Low), dan Validation Status.
+2. pada tabel pertanyaan penelitian bagian Evidence
+pada bagian ini terkadang muncul informasi evidence daalam bentu Hal 1, namun dari 10 paper yang saya uploud hanya 1 yang berhasil sisanya?, pada bagian evidence malah dia kosong dan hanya memunculkan strip tengah.
 
-2. Skema Data Edge/Relationship (Garis Hubungan):
-   - Saya butuh struktur/tabel untuk memetakan hubungan antar-node (Source Node ID -> Target Node ID).
-   - Hubungan ini harus bisa mendeskripsikan koneksinya (misal: Concept "memengaruhi" Variable, atau Paper "mendukung" Research Gap).
+3. pada tabel metodologi 
+- pada kolom Bentuk saya melihat adanya [] di setiap jawaban apapun termausk informasi yang tidak ditemukan, saya jujur kurang nyaman dengan ini bisakah hapus saja adanya bentuk [] agar bisa terlihat lebih natural lagi, tapi ada hal yang sangat aneh 1 dari 3 pdf yang saya unggah masih ada yang hasilnya bahkan tidak pakai [] sama sekali, jadi hasilnya memang benar benar perfect, tapi 2 pdf yang lainnya di awal dan akhir kalimatnya selalu ada [], ingat untuk jangan samapai kamu merubah struktur secara asal, yang saya inginkan hanya menghilangkan tanda[] bukan merubah struktur.
+- pada kolom arah kegiatan, seharusnya hanya akan ada 2 paragraf yang membahas output penelitian dan arah pengembangan, tapi 4 dari 10 pdf dia seperti mengalami bug, jadi ada garis || dan kemudian ada kalimat yang seharusnya ada di rekomendasi penelitian ( karna disini tertulis jelas rank 1 rank 2 rank 3 ) malah ditulis disini, tapi yang saya aneh adalah tidak semua hasil PDF itu eror, ini kira kira kenapa yah?, apakah ada kesalahan?, apakah ai nya masih labil?, apakah algoritma yang saya bauat sebelumnya malah menimbulkan kelabilan berlebih?, atau ini ada semacam kaya data lama yang ditampikan ulang?????.
 
-3. Data Evidence (Bukti Celah):
-   - Saya butuh relasi untuk menyimpan bukti spesifik ketika sebuah Paper mendukung sebuah Gap. Harus bisa menyimpan: Supporting Section (misal: Limitation/Future Work) dan Supporting Evidence (teks kutipan asli).
-
-Tolong buatkan skema database/Pydantic models dan rancang query API untuk mengembalikan data graf utuh (list of nodes & list of edges) dalam satu project.
-
-Tugas 1.B: Membuat Halaman "Riwayat Maps" dan Pemilihan Proyek
-
-Konteks: Buat UI untuk menu/tab "Maps" (berada di Bottom Navbar). Navigasinya identik dengan fitur Matriks yang sudah saya buat. Tolong baca kode halaman Riwayat Matriks saya, lalu duplikasi/adaptasi logikanya untuk halaman Maps ini.
-
-Detail UI yang diinginkan:
-- Baris atas: AppBar dengan judul "Riwayat Peta Konsep & Celah".
-- Isi halaman: ListView berisi proyek-proyek yang peta (maps)-nya terakhir kali dilihat.
-- Tombol Aksi (FAB): "Buat Peta Baru". Jika diklik, munculkan showModalBottomSheet berisi daftar semua proyek.
-- Logika Navigasi: Jika user memilih proyek di bottom sheet, tutup panel dan arahkan (push/go) ke halaman "Detail Kanvas Maps" membawa ID Proyek tersebut.
-
-Tugas 2.A: Membuat UI Halaman "Detail Kanvas Maps" (Interactive Graph)
-
-Konteks: Saya membutuhkan halaman yang menampilkan visualisasi graf (Concept Map & Gap Map). Halaman ini merupakan layar utama untuk analisis visual.
-
-Struktur UI yang diinginkan (Dari atas ke bawah):
-1. AppBar: Menampilkan judul proyek.
-2. Statistik & Toggle Bar:
-   - Tampilkan jumlah Paper dan jumlah Gap yang ditemukan.
-   - Buat Toggle Button (atau Segmented Control) dengan dua opsi: "Concept Map" dan "Gap Map".
-3. Area Kanvas Graf (Interactive Viewer):
-   - Ini adalah area utama. Gunakan package Flutter yang cocok untuk merender graf (seperti graphview, flutter_mermaid, atau interactive_viewer dengan custom painter).
-   - Pengguna harus bisa melakukan zoom-in, zoom-out, dan panning (menggeser kanvas).
-   - Render Nodes sebagai kotak (Card/Container) dengan ikon yang sesuai tipe node-nya (misal: 🧠 untuk Concept, ⚠️ untuk Gap).
-   - Render Edges sebagai garis panah antar-node.
-4. Daftar Gap Cepat (Bagian Bawah):
-   - Di bawah kanvas, sediakan list/slider vertikal kecil yang merangkum daftar Research Gaps yang ditemukan, agar user yang kesulitan mencari di kanvas bisa langsung melihatnya di list ini.
-
-Tolong berikan implementation plan dan kerangka widget untuk struktur ini. Biarkan data grafnya menggunakan dummy data (mock) terlebih dahulu agar saya bisa melihat tampilannya.
-
-Tugas 3.A: Membuat UI Bottom Sheet "Gap Detail" & Evidence Validation
-
-Konteks: Pada layar Kanvas (Tugas 2.A), jika pengguna men-tap (mengklik) salah satu node "Research Gap" di graf atau di list bawah, sebuah panel Bottom Sheet harus muncul untuk membuktikan validitas celah penelitian tersebut.
-
-Kebutuhan UI (showModalBottomSheet):
-- Header: Tampilkan "Gap Statement" secara lengkap.
-- Badges: Tampilkan label "Jenis Gap" (misal: Population Gap), "Status Validasi", dan "Confidence Level".
-- Bagian Bukti (Supporting Evidence): Buat list berisi paper-paper yang mendukung gap ini.
-  - Untuk setiap paper, tampilkan: Judul/ID Paper, "Ditemukan pada bab:" (Supporting Section), dan teks kutipan asli ("Evidence").
-  - Berikan styling yang membedakan teks kutipan (misalnya cetak miring dengan tanda kutip di dalam container berlatar abu-abu terang).
-- Bagian Konsep Terkait: Tampilkan deretan chips/tags konsep apa saja yang berhubungan dengan gap ini.
-
-Tolong buatkan komponen widget untuk Bottom Sheet ini yang dinamis menerima objek/model data Gap.
-
-Tugas 3.B: Membuat State Management & UI Bottom Sheet "Filter Map"
-
-Konteks: Saya butuh panel Filter agar tampilan Kanvas Graf tidak terlalu penuh. Panel ini dipicu oleh tombol FAB "Filter Map" yang mengambang di atas layar kanvas.
-
-Kebutuhan UI (showModalBottomSheet) & State Management:
-Buat form filter yang terhubung dengan state management (sesuaikan dengan yang saya gunakan di project, misal Riverpod/Bloc). 
-
-Kategori Filter yang dibutuhkan:
-1. "Tampilkan Tipe Node" (Checkboxes): Paper, Research Gap, Concept, Research Area, Variable, Method.
-2. "Saring Tipe Celah" (Checkboxes): Unexplored Concept, Population Gap, Missing Relationship, Dataset Gap, Methodological Gap, Empirical Gap.
-3. "Saring Area Cakupan" (Checkboxes): Well-Studied Area, Moderately Studied Area, Under-Studied Area, Unexplored Area.
-4. "Saring Klaster" (Dropdowns): Method Cluster dan Object Cluster.
-
-Aksi: Sediakan tombol "Reset Filter" dan "Terapkan Filter".
-Tolong buatkan UI panel filter ini dan kerangka fungsi state-nya untuk menyaring list of nodes dan list of edges yang akan di-render di kanvas.
+4. pada sub menu rekomendasi penelitian berikutnya
+- seperti yang sudah sya sbutkan sebelumnya jika pada tabel metodologi kolom arah kegiatan disana malah aplikasi ngebug dan memunculkan hasil yang harusnya ditulis disini malah dimasukkan di tabel metodologi arah kegiatan, pastinya di bagian ini paastinya ikut rusak, entah nanti hanya menampilkan 1 rank tunggal ( padahal seharusnya 3 bukan 1)
+- dan 6 dari 10 PDF dia itu seperti bug, dimana bug ini sudah pernah saya masukkan ke promp sebelumya, jadi di bagian judul dari card rank, dia itu seperti menggabungkan isi dari judul + alasn / konteks, dan nantinya di paragraf bawahnya yang akan menampilkan alasan / konteks, dia juga masih ditampilkan, tolong la ini di perbaiki dan ini benar benar aneh, dari semua fitur yang saya komentari hasilnya tidak 10/10 semua pdf eror, masih ada beberapa pdf yang bisa berjalan dan tidak eror, jujur ini kenapa ya? apakah mungkin karena ai yang labil atau ada bug yang membuat sistem ekstraksi dari ai mengirim data lama???

@@ -58,9 +58,12 @@ def test_worker_activates_new_version_only_after_result_is_saved(monkeypatch) ->
                 parameter=ExtractionParameter.METHODOLOGY,
                 value="Experiment",
                 confidence=0.9,
+                is_explicit=True,
                 evidence=(),
             ),
         ),
+        structure=tuple(),
+        research_gaps=tuple(),
         model_name="gemini-test",
     )
 

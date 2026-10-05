@@ -37,7 +37,6 @@ PARAMETER_LABELS = {
     ExtractionParameter.CONTRIBUTION: "Contribution",
     ExtractionParameter.LIMITATIONS: "Limitations",
     ExtractionParameter.FUTURE_WORK: "Future work",
-    ExtractionParameter.KEY_CLAIMS: "Key claims",
 }
 
 

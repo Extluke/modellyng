@@ -40,7 +40,7 @@ def test_report_contains_clusters_relationships_and_unsupported_claims():
         matrix,
         [
             {"id": paper_id, "title": "Waste behavior", "extracted_components": [
-                {"id": str(uuid4()), "paper_id": paper_id, "parameter": "key_claims",
+                {"id": str(uuid4()), "paper_id": paper_id, "parameter": "limitations",
                  "ai_value": "unsupported claim", "status": "unsupported", "confidence": 0.2,
                  "is_active": True, "evidence_spans": []},
             ]},

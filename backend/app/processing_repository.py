@@ -165,6 +165,19 @@ class PdfProcessingRepository:
         paper_id: UUID,
         extraction: VerifiedPaperExtraction,
     ) -> None:
+        if extraction.metadata.title:
+            paper_update = {
+                "title": extraction.metadata.title,
+                "authors": extraction.metadata.authors,
+                "publication_year": extraction.metadata.publication_year,
+                "journal": extraction.metadata.journal,
+                "doi": extraction.metadata.doi,
+            }
+            # Remove None values
+            paper_update = {k: v for k, v in paper_update.items() if v is not None}
+            if paper_update:
+                self._patch("papers", paper_id, paper_update)
+
         component_rows = [
             {
                 "paper_id": str(paper_id),
@@ -219,6 +232,51 @@ class PdfProcessingRepository:
                     f"{self._rest_url}/evidence_spans",
                     headers={**self._headers, "Prefer": "return=minimal"},
                     json=evidence_rows,
+                )
+            self._raise_for_error(response)
+
+        structure_rows: list[dict[str, object]] = []
+        for part in extraction.structure:
+            structure_rows.append({
+                "paper_id": str(paper_id),
+                "analysis_job_id": str(job_id),
+                "part_name": part.section_name,
+                "is_present": part.is_present,
+                "page_number": part.page_number,
+                "status": "needs_review",
+            })
+        if structure_rows:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    f"{self._rest_url}/paper_structures",
+                    headers={**self._headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
+                    params={"on_conflict": "paper_id,part_name"},
+                    json=structure_rows,
+                )
+            self._raise_for_error(response)
+            
+        gap_rows: list[dict[str, object]] = []
+        for gap in extraction.research_gaps:
+            evidence = gap.evidence[0] if gap.evidence else None
+            gap_rows.append({
+                "paper_id": str(paper_id),
+                "analysis_job_id": str(job_id),
+                "gap_statement": gap.gap_statement,
+                "gap_type": gap.gap_type,
+                "supporting_section": gap.supporting_section,
+                "confidence": gap.confidence,
+                "is_explicit": gap.is_explicit,
+                "is_active": False,
+                "paper_block_id": str(evidence.paper_block_id) if evidence else None,
+                "evidence_quote": evidence.quote if evidence else None,
+                "page_number": evidence.page_number if evidence else None,
+            })
+        if gap_rows:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    f"{self._rest_url}/research_gaps",
+                    headers={**self._headers, "Prefer": "return=minimal"},
+                    json=gap_rows,
                 )
             self._raise_for_error(response)
 

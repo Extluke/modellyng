@@ -781,7 +781,7 @@ class _NarrativeValue extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = value
         .split(RegExp(r'\n+|\s*;\s*'))
-        .map((item) => item.trim())
+        .map((item) => item.trim().replaceFirst(RegExp(r'^[-*•]\s+'), ''))
         .where((item) => item.isNotEmpty)
         .toList();
     if (!preferBullets || items.isEmpty) return Text(value);

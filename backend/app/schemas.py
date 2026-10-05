@@ -61,6 +61,14 @@ class ExtractionParameter(StrEnum):
     FUTURE_WORK = "future_work"
     KEY_CLAIMS = "key_claims"
 
+class GapType(StrEnum):
+    POPULATION = "population"
+    METHODOLOGICAL = "methodological"
+    EMPIRICAL = "empirical"
+    THEORETICAL = "theoretical"
+    CONCEPTUAL = "conceptual"
+    OTHER = "other"
+
 
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=3, max_length=180)
