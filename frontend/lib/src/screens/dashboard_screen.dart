@@ -59,6 +59,7 @@ class DashboardScreen extends ConsumerWidget {
                   projects: items,
                   onGoToProjects: onGoToProjects,
                   onOpenProject: onOpenProject,
+                  onOpenReview: onOpenReview,
                 ),
               ),
             ],
@@ -74,11 +75,13 @@ class _DashboardContent extends StatelessWidget {
     required this.projects,
     required this.onGoToProjects,
     required this.onOpenProject,
+    required this.onOpenReview,
   });
 
   final List<ResearchProject> projects;
   final VoidCallback onGoToProjects;
   final ValueChanged<ResearchProject> onOpenProject;
+  final VoidCallback onOpenReview;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +106,7 @@ class _DashboardContent extends StatelessWidget {
           paperCount: paperCount,
           reviewCount: reviewCount,
           knowledgeNodeCount: knowledgeNodeCount,
+          onOpenReview: onOpenReview,
         ),
         const SizedBox(height: 30),
         const SectionHeading(
@@ -161,12 +165,14 @@ class _DashboardMetrics extends StatelessWidget {
     required this.paperCount,
     required this.reviewCount,
     required this.knowledgeNodeCount,
+    required this.onOpenReview,
   });
 
   final int projectCount;
   final int paperCount;
   final int reviewCount;
   final int knowledgeNodeCount;
+  final VoidCallback onOpenReview;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +210,7 @@ class _DashboardMetrics extends StatelessWidget {
             label: 'Menunggu review',
             value: '$reviewCount',
             color: AppColors.orange,
+            onTap: onOpenReview,
           ),
         ];
         return Wrap(

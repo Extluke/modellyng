@@ -55,30 +55,32 @@ class _ModellyngBootstrap extends StatelessWidget {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: snapshot.hasError
-                  ? const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_off_outlined, size: 48),
-                        SizedBox(height: 16),
-                        Text(
-                          'Layanan belum dapat dihubungkan. Periksa koneksi internet lalu buka kembali aplikasi.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    )
-                  : const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text('Menyiapkan Modellyng…'),
-                      ],
-                    ),
+        onGenerateRoute: (_) => MaterialPageRoute(
+          builder: (_) => Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: snapshot.hasError
+                    ? const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_off_outlined, size: 48),
+                          SizedBox(height: 16),
+                          Text(
+                            'Layanan belum dapat dihubungkan. Periksa koneksi internet lalu buka kembali aplikasi.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      )
+                    : const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text('Menyiapkan Modellyng…'),
+                        ],
+                      ),
+              ),
             ),
           ),
         ),
