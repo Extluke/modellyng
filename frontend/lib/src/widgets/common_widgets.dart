@@ -249,6 +249,7 @@ class MetricCard extends StatelessWidget {
     required this.value,
     required this.color,
     this.note,
+    this.onTap,
     super.key,
   });
 
@@ -257,12 +258,16 @@ class MetricCard extends StatelessWidget {
   final String value;
   final String? note;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
         child: Row(
           children: [
             Container(

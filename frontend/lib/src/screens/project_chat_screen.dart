@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/paper_result_repository.dart';
@@ -320,10 +321,13 @@ class _MessageBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                message.content,
-                style: TextStyle(
-                  color: message.isUser ? Colors.white : AppColors.ink,
+              MarkdownBody(
+                data: message.content,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(
+                    color: message.isUser ? Colors.white : AppColors.ink,
+                  ),
                 ),
               ),
               if (message.sources.isNotEmpty) ...[

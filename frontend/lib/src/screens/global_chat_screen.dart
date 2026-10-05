@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/global_chat_repository.dart';
@@ -167,11 +168,14 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                             border: isUser ? null : Border.all(color: AppColors.border),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: SelectableText(
-                            message.content,
-                            style: TextStyle(
-                              color: isUser ? AppColors.primaryDark : AppColors.ink,
-                              height: 1.5,
+                          child: MarkdownBody(
+                            data: message.content,
+                            selectable: true,
+                            styleSheet: MarkdownStyleSheet(
+                              p: TextStyle(
+                                color: isUser ? AppColors.primaryDark : AppColors.ink,
+                                height: 1.5,
+                              ),
                             ),
                           ),
                         ),
