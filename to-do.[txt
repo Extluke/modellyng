@@ -28,16 +28,16 @@
 - [x] 1.E Tulis semua temuan (1.A-1.D, 1.F) ke docs/RECON.md (boleh sentuh: hanya file ini)
 
 ## 2. KONSTANTA TUNGGAL
-- [ ] 2.A Buat file baru constants_graph.py berisi enum:
+- [x] 2.A Buat file baru constants_graph.py berisi enum:
       NodeType: paper, concept, research_gap, variable, method, result
       GapType: unexplored_concept, missing_relation, methodological, population_gap, dataset_gap, empirical_gap
       SaturationStatus: high, medium, low, none
       EdgeType: uses, produces, reveals, relates_to, supports, mentioned_in
       Selesai jika: python -c "import constants_graph" sukses
-- [ ] 2.B Cek string/enum tipe node lama yang bentrok, catat di docs/RECON.md, JANGAN diubah, tanya saya
-- [ ] 2.C KEPUTUSAN FINAL: NodeType backend tetap 6 tipe. Tipe object dan researchArea TIDAK dibuat di backend. Agent dilarang menambahkannya.
-- [ ] 2.D KONTRAK STRING: semua nilai enum dikirim backend dalam snake_case persis seperti di constants_graph.py. Dilarang ada konversi huruf besar/kecil atau spasi di sisi backend.
-- [ ] (Aturan seterusnya) Dilarang tulis string tipe manual, selalu import dari constants_graph.py
+- [x] 2.B Cek string/enum tipe node lama yang bentrok, catat di docs/RECON.md, JANGAN diubah, tanya saya
+- [x] 2.C KEPUTUSAN FINAL: NodeType backend tetap 6 tipe. Tipe object dan researchArea TIDAK dibuat di backend. Agent dilarang menambahkannya.
+- [x] 2.D KONTRAK STRING: semua nilai enum dikirim backend dalam snake_case persis seperti di constants_graph.py. Dilarang ada konversi huruf besar/kecil atau spasi di sisi backend.
+- [x] (Aturan seterusnya) Dilarang tulis string tipe manual, selalu import dari constants_graph.py
 
 ## 3. DATABASE (hanya menambah)
 - [ ] 3.A Tambah kolom nullable di node: gap_type, saturation_status, method_cluster, object_cluster, x (float), y (float), confidence_score (int 0-100)
