@@ -40,11 +40,11 @@
 - [x] (Aturan seterusnya) Dilarang tulis string tipe manual, selalu import dari constants_graph.py
 
 ## 3. DATABASE (hanya menambah)
-- [ ] 3.A Tambah kolom nullable di node: gap_type, saturation_status, method_cluster, object_cluster, x (float), y (float), confidence_score (int 0-100)
+- [x] 3.A Tambah kolom nullable di node: gap_type, saturation_status, method_cluster, object_cluster, x (float), y (float), confidence_score (int 0-100)
       zone_category dibiarkan, nanti diisi sama dengan object_cluster
-- [ ] 3.B Buat tabel baru gap_evidence: id, gap_node_id (FK), paper_id (FK), section, quote, page_number
-- [ ] 3.C Tambah kolom validation_status di node gap: pending (default) / accepted / rejected
-- [ ] 3.D Buat file migrasi untuk 3.A-3.C
+- [x] 3.B Buat tabel baru gap_evidence: id, gap_node_id (FK), paper_id (FK), section, quote, page_number
+- [x] 3.C Tambah kolom validation_status di node gap: pending (default) / accepted / rejected
+- [x] 3.D Buat file migrasi untuk 3.A-3.C
       Selesai jika: upgrade -> downgrade -> upgrade sukses, test baseline tidak berubah
 
 ## 4. SKEMA RESPONS (hanya menambah field)
