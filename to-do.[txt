@@ -1,89 +1,154 @@
-1. Data untuk "Tampilkan Tipe Node" (Ekstraksi Entitas)
-UI meminta 6 tipe node untuk bisa disaring dan ditampilkan:
+# TODO: Research GAP Backend + Frontend Wiring (kerjakan SATU poin per sesi)
 
-Paper Nodes (Sudah ada)
-Concept Nodes (Sudah ada)
-Research GAP Nodes (Sudah ada)
-🔴 Variable Nodes (Data belum diekstrak AI)
-🔴 Method Nodes (Data belum diekstrak AI)
-🔴 Research Area Nodes / Result (Data belum diekstrak AI) Kebutuhan Backend: AI (Prompt) di ai_extraction.py harus di-upgrade agar tidak hanya membaca Konsep dan Gap, tapi juga mengekstrak Variabel, Metode, dan Temuan.
-2. Data untuk "Saring Tipe Celah" (Klasifikasi Gap)
-UI menyediakan filter spesifik untuk 6 tipe celah:
+## 0. ATURAN GLOBAL (tempel di awal SETIAP prompt)
+- [ ] 0.A Kerjakan satu poin saja per sesi, jangan lanjut ke poin berikutnya
+- [ ] 0.B Hanya MENAMBAH, dilarang rename/hapus/refactor/reformat/ganti library
+- [ ] 0.C Semua kolom/field baru wajib nullable atau punya default
+- [ ] 0.D Hanya sentuh file yang tertulis "Boleh sentuh", file lain hanya dibaca
+- [ ] 0.E Sebelum edit, baca file terkait dan tulis ringkasan 3 baris
+- [ ] 0.F Dilarang menebak nama kolom/fungsi/path, kalau tidak ketemu BERHENTI dan tanya
+- [ ] 0.G Kalau verifikasi gagal, batalkan perubahan poin itu (git checkout -- <file>)
+- [ ] 0.H Maksimal 2 kali percobaan perbaikan, lalu berhenti dan laporkan error
+- [ ] 0.I 1 commit per poin, pesan: "poin X.Y: <deskripsi>"
+- [ ] 0.J Laporan akhir: file diubah, file ditambah, hasil verifikasi, hal tidak yakin
 
-Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, dan Empirical Gap. Kebutuhan Backend: AI harus mampu secara akurat mengklasifikasikan gap_type ke dalam salah satu dari 6 kategori wajib tersebut setiap kali ia menemukan sebuah kelemahan/celah di dalam paper, dan menyimpannya di database.
-3. Data untuk "Saring Area Cakupan" (Kalkulasi Saturasi / Heatmap)
-UI membutuhkan indikator warna cakupan riset:
+## 1. RECON (HANYA BACA, dilarang edit apa pun)
+- [ ] 1.A Petakan file: model DB, skema KnowledgeGraphNodeRead, ai_extraction.py, endpoint graf, endpoint proyek
+      Selesai jika: ada daftar path nyata, git status bersih
+- [ ] 1.B Catat kolom node/edge yang SUDAH ada vs BELUM (gap_type, saturation_status, zone_category, confidence_score, evidence, x, y)
+      Selesai jika: ada tabel "ada / belum ada"
+- [ ] 1.C Baca ai_extraction.py: prompt sekarang, bentuk output JSON, fungsi simpan ke DB
+      Catat juga: apakah teks hasil ekstraksi PDF masih menyimpan NOMOR HALAMAN per bagian
+      Jika TIDAK ada nomor halaman: BERHENTI dan lapor, poin 6 tidak bisa jalan
+      Selesai jika: ada ringkasan alur PDF -> teks -> prompt -> parse -> simpan + status nomor halaman
+- [ ] 1.D Cari cara migrasi (Alembic/lain) dan cara menjalankan test, jalankan test sekali sebagai BASELINE
+      Selesai jika: ada perintah pasti + jumlah test lolos/gagal tercatat
+- [ ] 1.F Catat gaya penamaan field JSON yang dibaca Frontend (snake_case atau camelCase) dengan melihat model Dart / fromJson. Hanya BACA, jangan ubah frontend.
+      Catat juga: apakah Pydantic sudah memakai alias camelCase
+- [ ] 1.E Tulis semua temuan (1.A-1.D, 1.F) ke docs/RECON.md (boleh sentuh: hanya file ini)
 
-🟢 Banyak diteliti (High)
-🟡 Cukup diteliti (Medium)
-🟠 Jarang diteliti (Low)
-🔴 Belum diteliti (None) Kebutuhan Backend: Harus ada algoritma kalkulasi (bukan AI ekstraksi, melainkan hitungan logis di backend) yang menghitung seberapa sering sebuah konsep/metode diulang oleh berbagai paper dalam satu proyek. Hasil hitungan ini disuntikkan ke kolom saturation_status agar UI tahu warna apa yang harus digambar.
-4. Data untuk "Saring Klaster Penelitian" (Zonasi & Pengelompokan)
-UI memiliki 2 dropdown penyaringan klaster:
+## 2. KONSTANTA TUNGGAL
+- [ ] 2.A Buat file baru constants_graph.py berisi enum:
+      NodeType: paper, concept, research_gap, variable, method, result
+      GapType: unexplored_concept, missing_relation, methodological, population_gap, dataset_gap, empirical_gap
+      SaturationStatus: high, medium, low, none
+      EdgeType: uses, produces, reveals, relates_to, supports, mentioned_in
+      Selesai jika: python -c "import constants_graph" sukses
+- [ ] 2.B Cek string/enum tipe node lama yang bentrok, catat di docs/RECON.md, JANGAN diubah, tanya saya
+- [ ] 2.C KEPUTUSAN FINAL: NodeType backend tetap 6 tipe. Tipe object dan researchArea TIDAK dibuat di backend. Agent dilarang menambahkannya.
+- [ ] 2.D KONTRAK STRING: semua nilai enum dikirim backend dalam snake_case persis seperti di constants_graph.py. Dilarang ada konversi huruf besar/kecil atau spasi di sisi backend.
+- [ ] (Aturan seterusnya) Dilarang tulis string tipe manual, selalu import dari constants_graph.py
 
-🔴 Method Cluster: Mengelompokkan berdasarkan metodologi yang mirip.
-🔴 Object Cluster (Zone): Mengelompokkan berdasarkan objek/subjek riset yang mirip. Kebutuhan Backend: Harus ada algoritma pengelompokan (K-Means/Clustering) di backend yang mengisi kolom zone_category pada setiap node agar UI tahu node ini masuk ke klaster mana.
-5. Kebutuhan Fundamental untuk Melukis Kanvas (Relasi & Koordinat)
-Agar titik-titik tersebut tidak saling menumpuk dan bisa membentuk "Jaring Laba-laba" serta menempati zonanya masing-masing, kita butuh:
+## 3. DATABASE (hanya menambah)
+- [ ] 3.A Tambah kolom nullable di node: gap_type, saturation_status, method_cluster, object_cluster, x (float), y (float), confidence_score (int 0-100)
+      zone_category dibiarkan, nanti diisi sama dengan object_cluster
+- [ ] 3.B Buat tabel baru gap_evidence: id, gap_node_id (FK), paper_id (FK), section, quote, page_number
+- [ ] 3.C Tambah kolom validation_status di node gap: pending (default) / accepted / rejected
+- [ ] 3.D Buat file migrasi untuk 3.A-3.C
+      Selesai jika: upgrade -> downgrade -> upgrade sukses, test baseline tidak berubah
 
-🔴 Edges (Garis Relasi Lintas Entitas): AI harus bisa menemukan benang merah antar entitas. (Misal: Metode A menghasilkan Temuan B, yang memunculkan Gap C).
-🔴 Koordinat Spasial (X & Y): Backend (misalnya menggunakan algoritma NetworkX) harus menghitung dan memberikan titik koordinat x dan y yang rapi sebelum data dikirim ke frontend, sehingga UI tahu persis di piksel mana ia harus menggambar zona Hijau/Kuning/Merah dan menempatkan node-nya.
+## 4. SKEMA RESPONS (hanya menambah field)
+- [ ] 4.A Di KnowledgeGraphNodeRead tambah field Optional (default None): gap_type, saturation_status, method_cluster, object_cluster, zone_category, x, y, confidence_score, validation_status
+- [ ] 4.B Buat skema EvidenceRead (paper_title, section, quote, page_number) + field evidence: list[EvidenceRead] = []
+      Selesai jika: endpoint graf lama tetap sama + field baru null/kosong, test baseline tidak berubah
 
-1. Halaman Awal Research GAP
-Ini adalah dasbor utama visualisasi pengetahuan (Knowledge Graph).
+## 5. EKSTRAKSI AI: Variable, Method, Result
+- [ ] 5.A Di ai_extraction.py, JANGAN ubah prompt lama. Buat fungsi baru extract_entities_v2(paper_text) -> JSON valid saja: variables[], methods[], results[]
+- [ ] 5.B Buat parse_entities_v2(raw): strip ```json, tangkap error, return list kosong kalau gagal (tanpa exception)
+      Selesai jika: unit test 3 input (JSON valid, JSON berpagar markdown, teks sampah) tidak crash
+- [ ] 5.C Buat save_entities_v2(project_id, paper_id, parsed): simpan node variable/method/result, cek duplikat (lowercase+trim) per proyek
+      Setelah menyimpan tiap entitas, KODE (BUKAN AI) otomatis membuat edge entitas -> node paper sumbernya dengan edge_type mentioned_in
+      Cek duplikat edge (source, target, type) supaya tidak ganda
+      Selesai jika: tiap node variable/method/result punya minimal 1 edge ke paper
+- [ ] 5.D Sambungkan ke pipa utama via flag ENABLE_ENTITY_V2 (default False)
+      Selesai jika: False = perilaku identik, True = node baru + edge mentioned_in muncul untuk 1 paper uji
 
-Card Paper
+## 6. KLASIFIKASI GAP + EVIDENCE
+- [ ] 6.A Buat extract_gaps_v2(paper_text_with_pages). Output per gap: statement, gap_type, confidence_score, evidence[{section, quote, page_number}]
+      Prompt wajib menyebut 6 nilai gap_type persis dan melarang nilai lain
+- [ ] 6.B Buat normalize_gap_type(value): valid -> enum, mirip (huruf besar/spasi/hyphen) -> petakan, tak dikenal -> None + log warning
+      Selesai jika: test untuk "Methodological", "dataset gap", "ngawur"
+- [ ] 6.C Validator evidence:
+      - tolak simpan kalau quote kosong atau page_number kosong
+      - tolak simpan kalau quote (dinormalisasi spasi + huruf besar/kecil) TIDAK ditemukan sebagai substring di teks paper
+      - confidence_score dipaksa ke rentang 0-100
+      Selesai jika: ada unit test untuk quote asli (lolos) dan quote karangan (ditolak)
+- [ ] 6.D Buat save_gaps_v2 (isi gap_evidence + node gap). Gap juga otomatis dapat edge mentioned_in ke paper sumbernya (dibuat oleh kode, bukan AI)
+      Sambungkan via flag ENABLE_GAP_V2 (default False)
+      Selesai jika: False = tidak berubah, True = 1 paper uji hasilkan gap dengan gap_type valid + min 1 evidence + edge ke paper
 
-Fungsi: Menampilkan total seluruh paper/literatur yang sedang dianalisis dalam proyek tersebut.
-Integrasi Frontend-Backend: Frontend membaca atribut statis paperCount dari data proyek secara global. Backend cukup melakukan count (perhitungan baris) pada tabel referensi di database untuk proyek terkait dan mengirimkannya melalui endpoint utama proyek.
-Card Gaps
+## 7. EDGES ANTAR ENTITAS (edge ke paper sudah dibuat kode di 5.C dan 6.D)
+- [ ] 7.A Buat extract_edges_v2(paper_text, entities_of_that_paper)
+      Dijalankan PER PAPER, teks paper WAJIB disertakan di prompt
+      Edge hanya boleh menghubungkan entitas dari paper itu
+      Output: [{source, target, edge_type, quote_basis}], edge_type dari EdgeType (selain mentioned_in)
+- [ ] 7.B Validator: buang edge jika
+      - source/target tidak ada di node proyek
+      - edge_type tidak valid
+      - source sama dengan target (self-loop)
+      - quote_basis kosong
+- [ ] 7.C Simpan ke tabel edge yang sudah ada (cek RECON.md), flag ENABLE_EDGE_V2 (default False)
+      Selesai jika: tidak ada edge yatim (orphan) di 1 proyek uji
 
-Fungsi: Menampilkan total jumlah celah penelitian (Research Gaps) yang berhasil diekstrak dari kumpulan paper. Angka ini dinamis mengikuti filter yang sedang aktif.
-Integrasi Frontend-Backend: Frontend menghitung jumlah titik di memori yang berstatus GraphNodeType.researchGap. Backend menyuplainya melalui endpoint graf setelah pipa AI (ekstraksi sekunder) selesai menambang data celah dari semua paper.
-Canvas Semua (All Map)
+## 8. SATURASI (backend, TANPA AI)
+- [ ] 8.A Buat services/saturation.py: compute_saturation(paper_count, total_papers) -> SaturationStatus
+      paper_count == 0 -> none | rasio <= 0.20 -> low | <= 0.50 -> medium | > 0.50 -> high | total 0 -> none
+      Ambang disimpan sebagai konstanta yang mudah diubah
+- [ ] 8.B Unit test batas: 0, 1/10, 2/10, 5/10, 6/10, total 0
+- [ ] 8.C Buat update_saturation_for_project(project_id): hitung paper BERBEDA per concept/method/variable (lewat edge mentioned_in ke node paper), tulis ke saturation_status
+      Selesai jika: dijalankan 2x hasil sama (idempoten), kolom lain tidak berubah
 
-Fungsi: Mode default untuk melihat seluruh jaring laba-laba. Menampilkan semua entitas sekaligus (Konsep, Celah, Kertas, Variabel, Metode) berserta garis relasinya.
-Integrasi Frontend-Backend: Frontend menggunakan kanvas interaktif (InteractiveViewer) untuk melukis data. Backend memikul beban komputasi berat: memetakan relasi (siapa terhubung ke siapa) dan menggunakan algoritma layouting (NetworkX) untuk menghitung titik koordinat X dan Y yang rapi agar titik tidak menumpuk saat dikirim ke Frontend.
-Canvas Concept
+## 9. CLUSTERING
+- [ ] 9.A Cek scikit-learn dan numpy. LAPORKAN: sudah ada atau belum + perkiraan ukuran. JANGAN install.
+      Keputusan sklearn vs LLM ada di saya. BERHENTI setelah melapor.
+- [ ] 9.B (hanya jika saya pilih SKLEARN) Buat services/clustering.py: cluster_nodes(names, k) -> list[int], TF-IDF + KMeans, random_state tetap
+      Jika node < 3 -> semua klaster 0, k = min(k, jumlah_node)
+- [ ] 9.B-ALT (hanya jika saya pilih LLM) cluster_nodes_llm(names, k): output harus JSON {nama: nomor_klaster}
+      Validator: semua nama harus terpetakan tepat sekali, nama hilang -> klaster 0, nomor di luar 0..k-1 -> dikoreksi ke 0, JSON rusak -> semua klaster 0 tanpa crash
+- [ ] 9.C Buat update_clusters_for_project(project_id)
+      method -> isi method_cluster | concept/variable -> isi object_cluster + zone_category
+      Label: "Cluster N: <kata kunci teratas>"
+      Selesai jika: jalan di proyek kecil (<3 node) dan besar tanpa error
 
-Fungsi: Mode fokus untuk hanya melihat pemetaan konseptual. Menyembunyikan elemen celah (Gap) agar peneliti bisa fokus melihat "bagaimana teori-teori ini saling terhubung".
-Integrasi Frontend-Backend: Frontend sekadar mematikan (menyembunyikan) tipe data yang bukan konsep. Backend memastikan setiap node yang dikirim memiliki label type yang eksplisit (misal: type: concept).
-Canvas GAP
+## 10. KOORDINAT & ZONA
+- [ ] 10.A Buat services/layout.py: compute_layout(nodes, edges)
+      Jalankan networkx.spring_layout(seed=42) TERPISAH per kelompok saturation_status
+      Skala tiap kelompok ke wilayahnya sendiri (contoh: none=kiri, low, medium, high=kanan), jarak antar wilayah minimal 100 unit
+      Rentang total 0-2000. Node tanpa edge tetap dapat posisi
+- [ ] 10.B Buat update_layout_for_project(project_id) menulis x dan y
+      Selesai jika: tidak ada x/y null, tidak ada dua node di koordinat identik
+- [ ] 10.C Buat compute_zones(nodes) -> [{saturation_status, min_x, max_x, min_y, max_y}], zona kosong dilewati
+      Selesai jika: ada unit test bahwa bounding box antar zona TIDAK saling overlap
+- [ ] 10.D Buat run_post_processing(project_id) dengan URUTAN TETAP: edges -> saturasi -> klaster -> layout -> zones
+      Urutan tidak boleh diubah: layout butuh saturasi + edge, zones butuh koordinat final
 
-Fungsi: Mode fokus untuk berburu peluang riset. Titik-titik Gap akan dibesarkan ukurannya. Mode ini juga ideal untuk memunculkan kotak "Zona Latar Belakang" (misal: Zona Hijau / Well-Studied Area).
-Integrasi Frontend-Backend: Frontend mengaktifkan layer tambahan untuk menggambar background bounding box. Backend bertanggung jawab mengirimkan data koordinat area (batas X dan Y untuk zona tersebut) dan atribut zone_category agar Frontend tahu di mana letak persis batas zona hijau, kuning, dan merah.
-Research GAP (Daftar Card Horizontal di Bawah Canvas)
+## 11. ENDPOINT
+- [ ] 11.A Endpoint proyek: tambah paper_count (count tabel referensi per proyek), hanya menambah field
+- [ ] 11.B Endpoint graf: kembalikan node (+field baru +evidence), edge, zones, gap_count. Struktur lama TIDAK boleh hilang
+      Selesai jika: respons lama valid, gap selalu punya confidence_score dan evidence tidak null
+- [ ] 11.C PATCH /gaps/{id}/validation body {status: accepted|rejected}, validasi nilai, 404 jika ID tidak ada
+- [ ] 11.D POST /gaps/synthesize body {gap_ids: [...]}: ambil gap+evidence, panggil AI generatif ("Buatkan 3 usulan judul tesis dan rumusan masalah murni berdasarkan celah berikut..."), return JSON terstruktur, 400 jika gap_ids kosong
+- [ ] 11.E Pastikan semua field baru mengikuti gaya penamaan dari 1.F. Kalau Frontend butuh camelCase, tambahkan alias di skema (hanya menambah), jangan ganti nama field lama.
 
-Fungsi: Daftar "keranjang belanja" celah riset. Setiap kartu menampilkan nama gap, jumlah paper pendukung, tingkat keyakinan (Confidence Score), dan tombol Detail.
-Integrasi Frontend-Backend: Frontend merender daftar horisontal berdasarkan data titik Gap yang terlihat di kanvas. Backend dan AI wajib memastikan atribut confidence_score (angka 0-100) dan array relasi paper pendukung tidak kosong/null.
-2. Modal Detail GAP (Muncul Saat Tombol 'Detail' Diklik)
-Ini adalah menu Bottom Sheet yang menjadi nyawa investigasi peneliti.
+## 12. VERIFIKASI AKHIR BACKEND (hanya setelah poin 1-11 selesai)
+- [ ] 12.A Jalankan semua test, bandingkan dengan baseline 1.D, tidak boleh ada test baru gagal
+- [ ] 12.B Nyalakan semua flag ENABLE_*_V2, proses 3 paper uji, cek:
+      [ ] ada node 6 tipe
+      [ ] semua gap_type valid
+      [ ] semua gap punya evidence + halaman, dan quote ada di teks paper
+      [ ] semua entitas punya edge mentioned_in ke paper
+      [ ] saturation_status terisi semua
+      [ ] x, y, klaster terisi semua
+      [ ] zona tidak saling overlap
+- [ ] 12.C Cocokkan nama field respons dengan yang dibaca Frontend (paperCount, GraphNodeType.researchGap, dll), hanya LAPORKAN, jangan ubah frontend
+- [ ] 12.D Matikan semua flag, uji ulang, perilaku harus sama seperti sebelum proyek ini
 
-Poin Fitur yang Wajib Ada:
-
-Judul/Pernyataan Gap: Penjelasan naratif tentang celah tersebut.
-Metadata Lencana (Badge): Informasi Tipe Gap (Metodologi, Dataset, dll), Tingkat Keyakinan AI, dan Area Cakupan (Saturasi).
-Daftar Bukti Autentik (Evidence List): Bukti dari mana AI menyimpulkan gap ini. Berisi: Judul Paper, Bagian Asli (misal: Future Work), Kutipan Teks Asli (Verbatim Quote), dan Nomor Halaman.
-Tombol Validasi (Terima/Tolak): Untuk menyortir gap yang benar-benar masuk akal.
-Tombol Sintesis Riset (Actionable): Mengeksekusi gap yang dipilih untuk dijadikan draf judul riset baru.
-Integrasi Frontend-Backend (Agar Berjalan 100%):
-
-AI & Backend: Merupakan tugas terberat AI di backend. AI tidak boleh asal merangkum, melainkan wajib mencatut kutipan asli (evidence_quote) dan melacak nomor halamannya dari tabel ekstraksi dasar PDF. Backend kemudian menyatukannya ke dalam properti evidence pada skema KnowledgeGraphNodeRead.
-Frontend: Membongkar struktur array evidence tersebut dan menampilkannya dengan rapi. Saat user menekan tombol Terima, Frontend menembak API (PATCH) ke Backend untuk mengubah status data di database.
-Sintesis: Saat user menekan "Sintesis Riset", Frontend mengirimkan kumpulan ID Gap yang diterima ke endpoint khusus. Backend akan memanggil AI Generatif dengan prompt khusus: "Buatkan 3 usulan judul tesis dan rumusan masalah murni berdasarkan celah penelitian ID sekian..."
-3. Filter Map (Menu Saringan Kanvas)
-Ini adalah panel kendali agar kanvas yang ruwet menjadi rapi dan spesifik.
-
-Poin Fitur yang Wajib Ada:
-
-Saring Tipe Node: Menampilkan/menyembunyikan Concept, Paper, Gap, Variable, Method, dan Result.
-Saring Tipe Celah: Saringan khusus kategori (Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, Empirical Gap).
-Saring Area Cakupan: Saringan rentang warna saturasi (Banyak diteliti, Cukup, Jarang, Belum).
-Saring Klaster Penelitian: Pemilihan dinamis (Dropdown) untuk melihat spesifik ke Method Cluster (Metodologi sejenis) atau Object Cluster (Objek/Subjek sejenis).
-Integrasi Frontend-Backend (Agar Berjalan 100%):
-
-Frontend: Bertugas sepenuhnya sebagai penjaga state lokal di memori. Saat kotak dicentang, Frontend langsung menjalankan logika AND lintas parameter (misal: "Hanya tampilkan Tipe Methodologi YANG banyak diteliti") dan langsung melukis ulang (repaint) kanvas tanpa perlu meminta data ulang (loading) ke Backend.
-Backend & AI: Agar Frontend bisa memfilter dengan presisi, Backend harus men-suplai 3 metrik kalkulatif sebelum data dikirim:
-AI harus mengekstrak tipe dan tipologi gap (gap_type) dengan klasifikasi ketat (tidak boleh salah ketik).
-Backend (bukan AI) harus menjalankan fungsi agregasi/skoring yang menghitung berapa kali sebuah entitas disinggung oleh banyak paper, lalu menetapkan rentang warnanya ke dalam properti saturation_status.
-Backend harus menjalankan algoritma kecerdasan buatan (clustering, seperti K-Means atau NLP Similarity) untuk mengelompokkan titik-titik yang maknanya berdekatan, lalu memberikan nama grupnya ke dalam kolom zone_category pada setiap titik.
+## 13. SESI FRONTEND (terpisah, HANYA setelah 11.B lolos verifikasi)
+Boleh sentuh: project_maps_detail_screen.dart dan file model Dart yang relevan. Aturan 0.A-0.J tetap berlaku.
+- [ ] 13.A Enum Dart untuk NodeType, GapType, SaturationStatus dengan fromJson(String),  TAMBAHKAN properti methodCluster (String?) dan objectCluster (String?) ke dalam kelas model Dart (GraphNode) agar bisa menangkap JSON klaster dari Backend. Nilai tak dikenal -> unknown, tidak crash. - [ ] 13.B Filter kanvas memakai enum. Pastikan Dropdown UI "Method Cluster" dan "Object Cluster" mengambil daftar unik (Set) langsung dari properti methodCluster dan objectCluster milik model Dart, BUKAN meraba-raba dari properti label. Label tampilan dibuat terpisah dari nilai filter.
+- [ ] 13.B Filter kanvas memakai enum (bukan string mentah). Label tampilan dibuat terpisah dari nilai filter.
+- [ ] 13.C Hapus/nonaktifkan filter untuk object dan researchArea di UI. Kode di _buildNodeWidget boleh dibiarkan.
+- [ ] 13.D Ikat kotak zona ke array zones dari backend. Buat fungsi skala koordinat backend (0-2000) ke ukuran kanvas. Zona dipetakan per saturation_status, warna tetap dari UI. Ganti posisi hardcoded (top: 500, left: 500).
+- [ ] 13.E Fallback: kalau zones kosong atau x/y null, sembunyikan zona dan jangan crash. Node tanpa koordinat tidak dilukis.
+      Selesai jika: layar terbuka tanpa error pada proyek yang BELUM diproses pasca-ekstraksi.
+- [ ] 13.F Ikat tombol Validasi (Terima/Tolak) dan tombol Sintesis Riset di Modal Detail GAP (UI Frontend) agar menembak endpoint 11.C dan 11.D. Pastikan UI Frontend menangkap dan menampilkan respons JSON (misal: draf 3 usulan judul tesis) di layar.
