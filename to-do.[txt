@@ -53,14 +53,14 @@
       Selesai jika: endpoint graf lama tetap sama + field baru null/kosong, test baseline tidak berubah
 
 ## 5. EKSTRAKSI AI: Variable, Method, Result
-- [ ] 5.A Di ai_extraction.py, JANGAN ubah prompt lama. Buat fungsi baru extract_entities_v2(paper_text) -> JSON valid saja: variables[], methods[], results[]
-- [ ] 5.B Buat parse_entities_v2(raw): strip ```json, tangkap error, return list kosong kalau gagal (tanpa exception)
+- [x] 5.A Di ai_extraction.py, JANGAN ubah prompt lama. Buat fungsi baru extract_entities_v2(paper_text) -> JSON valid saja: variables[], methods[], results[]
+- [x] 5.B Buat parse_entities_v2(raw): strip ```json, tangkap error, return list kosong kalau gagal (tanpa exception)
       Selesai jika: unit test 3 input (JSON valid, JSON berpagar markdown, teks sampah) tidak crash
-- [ ] 5.C Buat save_entities_v2(project_id, paper_id, parsed): simpan node variable/method/result, cek duplikat (lowercase+trim) per proyek
+- [x] 5.C Buat save_entities_v2(project_id, paper_id, parsed): simpan node variable/method/result, cek duplikat (lowercase+trim) per proyek
       Setelah menyimpan tiap entitas, KODE (BUKAN AI) otomatis membuat edge entitas -> node paper sumbernya dengan edge_type mentioned_in
       Cek duplikat edge (source, target, type) supaya tidak ganda
       Selesai jika: tiap node variable/method/result punya minimal 1 edge ke paper
-- [ ] 5.D Sambungkan ke pipa utama via flag ENABLE_ENTITY_V2 (default False)
+- [x] 5.D Sambungkan ke pipa utama via flag ENABLE_ENTITY_V2 (default False)
       Selesai jika: False = perilaku identik, True = node baru + edge mentioned_in muncul untuk 1 paper uji
 
 ## 6. KLASIFIKASI GAP + EVIDENCE

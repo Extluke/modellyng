@@ -219,12 +219,33 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
         } for c in components])
         
         # 2. Extract KG
-        from .ai_extraction import extract_knowledge_graph_from_results
+        from .ai_extraction import extract_knowledge_graph_from_results, extract_entities_v2, parse_entities_v2
         kg_extraction = extract_knowledge_graph_from_results(structured_data)
         
         # 3. Save to DB
         repository.save_knowledge_graph(project_id=project_id, extraction=kg_extraction)
-        
+
+        # 4. Optional V2 Entity Extraction
+        ENABLE_ENTITY_V2 = False
+        import os
+        if os.getenv("ENABLE_ENTITY_V2", "false").lower() == "true":
+            ENABLE_ENTITY_V2 = True
+            
+        if ENABLE_ENTITY_V2:
+            try:
+                blocks = repository.get_blocks(parsed_paper_id)
+                paper_text = "\n".join(b.get("text", "") for b in blocks)
+                raw_entities = extract_entities_v2(paper_text)
+                parsed_entities = parse_entities_v2(raw_entities)
+                repository.save_entities_v2(
+                    project_id=project_id,
+                    paper_id=parsed_paper_id,
+                    parsed_entities=parsed_entities,
+                    paper_title=paper.get("title")
+                )
+            except Exception as e:
+                print(f"Entity V2 extraction failed: {e}")
+
         self.update_state(
             state="PROGRESS",
             meta={"job_id": job_id, "stage": "knowledge_graph_complete", "progress": 1.0},

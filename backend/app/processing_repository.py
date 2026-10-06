@@ -435,3 +435,134 @@ class PdfProcessingRepository:
                     json=edge_rows,
                 )
             self._raise_for_error(response)
+
+    def save_entities_v2(
+        self,
+        *,
+        project_id: UUID,
+        paper_id: UUID,
+        parsed_entities: dict[str, list[str]],
+        paper_title: str | None = None
+    ) -> None:
+        """Save AI extracted entities (v2) and link them to the source paper."""
+        import httpx
+        
+        # Determine paper node
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.get(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers,
+                params={
+                    "project_id": f"eq.{project_id}",
+                    "node_type": "eq.paper",
+                    "detail": f"eq.{paper_id}",
+                }
+            )
+        self._raise_for_error(resp)
+        paper_nodes = resp.json()
+        
+        if paper_nodes:
+            paper_node_id = paper_nodes[0]["id"]
+        else:
+            # Create paper node
+            title = paper_title or f"Paper {paper_id}"
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(
+                    f"{self._rest_url}/knowledge_graph_nodes",
+                    headers={**self._headers, "Prefer": "return=representation"},
+                    json={
+                        "project_id": str(project_id),
+                        "node_type": "paper",
+                        "label": title[:100],
+                        "detail": str(paper_id),
+                        "status": "accepted"
+                    }
+                )
+            self._raise_for_error(resp)
+            paper_node_id = resp.json()[0]["id"]
+
+        # Fetch existing entity nodes for this project to deduplicate
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.get(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers,
+                params={
+                    "project_id": f"eq.{project_id}",
+                    "node_type": "in.(variable,method,result)",
+                }
+            )
+        self._raise_for_error(resp)
+        existing_nodes = resp.json()
+        
+        # Map label (lowercase) -> id
+        existing_map = {n["label"].strip().lower(): n["id"] for n in existing_nodes}
+        
+        node_rows_to_insert = []
+        for key, n_type in [("variables", "variable"), ("methods", "method"), ("results", "result")]:
+            for label in parsed_entities.get(key, []):
+                if not isinstance(label, str):
+                    continue
+                label = label.strip()
+                if not label:
+                    continue
+                lower_label = label.lower()
+                if lower_label not in existing_map:
+                    existing_map[lower_label] = None 
+                    node_rows_to_insert.append({
+                        "project_id": str(project_id),
+                        "node_type": n_type,
+                        "label": label[:100],
+                        "status": "accepted"
+                    })
+        
+        if node_rows_to_insert:
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(
+                    f"{self._rest_url}/knowledge_graph_nodes",
+                    headers={**self._headers, "Prefer": "return=representation"},
+                    json=node_rows_to_insert,
+                )
+            self._raise_for_error(resp)
+            for row in resp.json():
+                existing_map[row["label"].strip().lower()] = row["id"]
+                
+        # Now create edges: entity -> paper
+        edge_rows_to_insert = []
+        
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.get(
+                f"{self._rest_url}/knowledge_graph_edges",
+                headers=self._headers,
+                params={
+                    "project_id": f"eq.{project_id}",
+                    "target_id": f"eq.{paper_node_id}",
+                    "relation": "eq.mentioned_in",
+                }
+            )
+        self._raise_for_error(resp)
+        existing_edges = set(e["source_id"] for e in resp.json())
+        
+        for key in ["variables", "methods", "results"]:
+            for label in parsed_entities.get(key, []):
+                if not isinstance(label, str):
+                    continue
+                lower_label = label.strip().lower()
+                entity_id = existing_map.get(lower_label)
+                if entity_id and entity_id not in existing_edges:
+                    edge_rows_to_insert.append({
+                        "project_id": str(project_id),
+                        "source_id": entity_id,
+                        "target_id": paper_node_id,
+                        "relation": "mentioned_in",
+                        "detail": None
+                    })
+                    existing_edges.add(entity_id)
+                    
+        if edge_rows_to_insert:
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(
+                    f"{self._rest_url}/knowledge_graph_edges",
+                    headers={**self._headers, "Prefer": "return=minimal"},
+                    json=edge_rows_to_insert,
+                )
+            self._raise_for_error(resp)

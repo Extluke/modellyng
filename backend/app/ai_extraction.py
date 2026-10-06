@@ -629,3 +629,66 @@ ATURAN (Phase 2):
             last_exc = exc
             
     raise GeminiExtractionError(f"Gagal ekstrak Knowledge Graph: {last_exc}")
+
+import json
+
+class EntityExtractionV2(BaseModel):
+    variables: list[str] = Field(default_factory=list)
+    methods: list[str] = Field(default_factory=list)
+    results: list[str] = Field(default_factory=list)
+
+def extract_entities_v2(paper_text: str) -> str:
+    """Extract variables, methods, and results as raw JSON string."""
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        raise GeminiExtractionError("Gemini API key belum dikonfigurasi")
+    
+    prompt = f"""Anda adalah asisten AI akademik. Ekstrak 'variables', 'methods', dan 'results' utama dari teks karya ilmiah berikut.
+Jawab HANYA dalam format JSON dengan kunci: "variables", "methods", "results", di mana masing-masing adalah array of strings.
+Jangan tambahkan teks apapun selain JSON.
+
+Teks:
+{paper_text}
+"""
+    client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=120_000))
+    models = [settings.gemini_model]
+    if settings.gemini_fallback_model:
+        models.append(settings.gemini_fallback_model)
+        
+    last_exc = None
+    for model in models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=EntityExtractionV2.model_json_schema(),
+                ),
+            )
+            return response.text or "{}"
+        except Exception as exc:
+            last_exc = exc
+            
+    raise GeminiExtractionError(f"Gagal ekstrak Entities V2: {last_exc}")
+
+def parse_entities_v2(raw: str) -> dict:
+    if not raw:
+        return {"variables": [], "methods": [], "results": []}
+    raw = raw.strip()
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    elif raw.startswith("```"):
+        raw = raw[3:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+    raw = raw.strip()
+    try:
+        data = json.loads(raw)
+        return {
+            "variables": data.get("variables", []),
+            "methods": data.get("methods", []),
+            "results": data.get("results", [])
+        }
+    except Exception:
+        return {"variables": [], "methods": [], "results": []}
