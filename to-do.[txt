@@ -13,19 +13,19 @@
 - [ ] 0.J Laporan akhir: file diubah, file ditambah, hasil verifikasi, hal tidak yakin
 
 ## 1. RECON (HANYA BACA, dilarang edit apa pun)
-- [ ] 1.A Petakan file: model DB, skema KnowledgeGraphNodeRead, ai_extraction.py, endpoint graf, endpoint proyek
+- [x] 1.A Petakan file: model DB, skema KnowledgeGraphNodeRead, ai_extraction.py, endpoint graf, endpoint proyek
       Selesai jika: ada daftar path nyata, git status bersih
-- [ ] 1.B Catat kolom node/edge yang SUDAH ada vs BELUM (gap_type, saturation_status, zone_category, confidence_score, evidence, x, y)
+- [x] 1.B Catat kolom node/edge yang SUDAH ada vs BELUM (gap_type, saturation_status, zone_category, confidence_score, evidence, x, y)
       Selesai jika: ada tabel "ada / belum ada"
-- [ ] 1.C Baca ai_extraction.py: prompt sekarang, bentuk output JSON, fungsi simpan ke DB
+- [x] 1.C Baca ai_extraction.py: prompt sekarang, bentuk output JSON, fungsi simpan ke DB
       Catat juga: apakah teks hasil ekstraksi PDF masih menyimpan NOMOR HALAMAN per bagian
       Jika TIDAK ada nomor halaman: BERHENTI dan lapor, poin 6 tidak bisa jalan
       Selesai jika: ada ringkasan alur PDF -> teks -> prompt -> parse -> simpan + status nomor halaman
-- [ ] 1.D Cari cara migrasi (Alembic/lain) dan cara menjalankan test, jalankan test sekali sebagai BASELINE
+- [x] 1.D Cari cara migrasi (Alembic/lain) dan cara menjalankan test, jalankan test sekali sebagai BASELINE
       Selesai jika: ada perintah pasti + jumlah test lolos/gagal tercatat
-- [ ] 1.F Catat gaya penamaan field JSON yang dibaca Frontend (snake_case atau camelCase) dengan melihat model Dart / fromJson. Hanya BACA, jangan ubah frontend.
+- [x] 1.F Catat gaya penamaan field JSON yang dibaca Frontend (snake_case atau camelCase) dengan melihat model Dart / fromJson. Hanya BACA, jangan ubah frontend.
       Catat juga: apakah Pydantic sudah memakai alias camelCase
-- [ ] 1.E Tulis semua temuan (1.A-1.D, 1.F) ke docs/RECON.md (boleh sentuh: hanya file ini)
+- [x] 1.E Tulis semua temuan (1.A-1.D, 1.F) ke docs/RECON.md (boleh sentuh: hanya file ini)
 
 ## 2. KONSTANTA TUNGGAL
 - [ ] 2.A Buat file baru constants_graph.py berisi enum:
