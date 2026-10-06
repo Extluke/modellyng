@@ -145,8 +145,8 @@
 
 ## 13. SESI FRONTEND (terpisah, HANYA setelah 11.B lolos verifikasi)
 Boleh sentuh: project_maps_detail_screen.dart dan file model Dart yang relevan. Aturan 0.A-0.J tetap berlaku.
-- [ ] 13.A Enum Dart untuk NodeType, GapType, SaturationStatus dengan fromJson(String),  TAMBAHKAN properti methodCluster (String?) dan objectCluster (String?) ke dalam kelas model Dart (GraphNode) agar bisa menangkap JSON klaster dari Backend. Nilai tak dikenal -> unknown, tidak crash. - [ ] 13.B Filter kanvas memakai enum. Pastikan Dropdown UI "Method Cluster" dan "Object Cluster" mengambil daftar unik (Set) langsung dari properti methodCluster dan objectCluster milik model Dart, BUKAN meraba-raba dari properti label. Label tampilan dibuat terpisah dari nilai filter.
-- [ ] 13.B Filter kanvas memakai enum (bukan string mentah). Label tampilan dibuat terpisah dari nilai filter.
+- [ ] 13.A Enum Dart untuk NodeType, GapType, SaturationStatus dengan fromJson(String), TAMBAHKAN properti methodCluster (String?) dan objectCluster (String?) ke dalam kelas model Dart (GraphNode) agar bisa menangkap JSON klaster dari Backend. Nilai tak dikenal -> unknown, tidak crash.
+- [ ] 13.B Filter kanvas memakai enum (bukan string mentah). Pastikan Dropdown UI "Method Cluster" dan "Object Cluster" mengambil daftar unik (Set) langsung dari properti methodCluster dan objectCluster milik model Dart, BUKAN meraba-raba dari properti label. Label tampilan dibuat terpisah dari nilai filter.
 - [ ] 13.C Hapus/nonaktifkan filter untuk object dan researchArea di UI. Kode di _buildNodeWidget boleh dibiarkan.
 - [ ] 13.D Ikat kotak zona ke array zones dari backend. Buat fungsi skala koordinat backend (0-2000) ke ukuran kanvas. Zona dipetakan per saturation_status, warna tetap dari UI. Ganti posisi hardcoded (top: 500, left: 500).
 - [ ] 13.E Fallback: kalau zones kosong atau x/y null, sembunyikan zona dan jangan crash. Node tanpa koordinat tidak dilukis.
