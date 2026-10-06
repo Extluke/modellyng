@@ -48,8 +48,8 @@
       Selesai jika: upgrade -> downgrade -> upgrade sukses, test baseline tidak berubah
 
 ## 4. SKEMA RESPONS (hanya menambah field)
-- [ ] 4.A Di KnowledgeGraphNodeRead tambah field Optional (default None): gap_type, saturation_status, method_cluster, object_cluster, zone_category, x, y, confidence_score, validation_status
-- [ ] 4.B Buat skema EvidenceRead (paper_title, section, quote, page_number) + field evidence: list[EvidenceRead] = []
+- [x] 4.A Di KnowledgeGraphNodeRead tambah field Optional (default None): gap_type, saturation_status, method_cluster, object_cluster, zone_category, x, y, confidence_score, validation_status
+- [x] 4.B Buat skema EvidenceRead (paper_title, section, quote, page_number) + field evidence: list[EvidenceRead] = []
       Selesai jika: endpoint graf lama tetap sama + field baru null/kosong, test baseline tidak berubah
 
 ## 5. EKSTRAKSI AI: Variable, Method, Result

@@ -463,10 +463,11 @@ class SaturationStatus(StrEnum):
     NONE = "none"
 
 
-class KnowledgeGraphEvidence(BaseModel):
+class EvidenceRead(BaseModel):
     paper_title: str
     section: str | None = None
     quote: str
+    page_number: int | None = None
     paper_id: UUID | None = None
 
 
@@ -477,13 +478,17 @@ class KnowledgeGraphNodeRead(BaseModel):
     detail: str
     parent_id: str | None = None
     gap_typology: GapType | None = None
+    gap_type: str | None = None
     saturation_status: SaturationStatus | None = None
     confidence_score: float | None = Field(default=None, ge=0, le=1)
     zone_category: str | None = None
     x: float | None = None
     y: float | None = None
-    evidence: list[KnowledgeGraphEvidence] = Field(default_factory=list)
+    evidence: list[EvidenceRead] = Field(default_factory=list)
     status: VerificationStatus | None = None
+    method_cluster: str | None = None
+    object_cluster: str | None = None
+    validation_status: str | None = None
 
 
 class KnowledgeGraphEdgeRead(BaseModel):
