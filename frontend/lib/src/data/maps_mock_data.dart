@@ -52,6 +52,8 @@ class GraphNode {
     this.isValidated = false,
     this.evidence = const [],
     this.relatedConceptIds = const [],
+    this.saturationStatus,
+    this.zoneCategory,
   });
 
   final String id;
@@ -64,6 +66,8 @@ class GraphNode {
   final bool isValidated;
   final List<GapEvidence> evidence;
   final List<String> relatedConceptIds;
+  final String? saturationStatus;
+  final String? zoneCategory;
 }
 
 class GraphEdge {

@@ -1,12 +1,13 @@
 import 'dart:math';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:flutter/material.dart';
 
 import '../data/maps_mock_data.dart';
+import '../data/project_repository.dart';
+import '../models/research_models.dart';
 import '../theme/app_theme.dart';
-import 'package:graphview/GraphView.dart';
-
-class ProjectMapsDetailScreen extends StatefulWidget {
+class ProjectMapsDetailScreen extends ConsumerStatefulWidget {
   const ProjectMapsDetailScreen({
     required this.projectId,
     required this.projectTitle,
@@ -19,10 +20,10 @@ class ProjectMapsDetailScreen extends StatefulWidget {
   final String userId;
 
   @override
-  State<ProjectMapsDetailScreen> createState() => _ProjectMapsDetailScreenState();
+  ConsumerState<ProjectMapsDetailScreen> createState() => _ProjectMapsDetailScreenState();
 }
 
-class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
+class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScreen> {
   int _selectedMap = 0; // 0 for Concept Map, 1 for Gap Map
   final TransformationController _transformController = TransformationController();
   
@@ -43,25 +44,76 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
     GraphNodeType.researchArea,
     GraphNodeType.result,
   };
+  
+  final Set<GapType> _visibleGapTypes = GapType.values.toSet();
+  final Set<String> _visibleSaturationStatuses = {'high', 'medium', 'low', 'none'};
+  String? _selectedMethodCluster;
+  String? _selectedObjectCluster;
+
+  bool _isLoading = true;
+  String _errorMessage = '';
+  KnowledgeGraphMap? _graphMap;
 
   @override
   void initState() {
     super.initState();
-    _generateLayout();
-    _updateVisibleGraph();
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _centerView();
-    });
+    _loadGraphData();
   }
-  
+
+  Future<void> _loadGraphData() async {
+    try {
+      final repo = ref.read(projectRepositoryProvider);
+      final map = await repo.getKnowledgeGraph(widget.projectId);
+      if (!mounted) return;
+      
+      setState(() {
+        _graphMap = map;
+        _isLoading = false;
+      });
+      
+      _generateLayout();
+      _updateVisibleGraph();
+      
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _centerView();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
   void _centerView() {
     if (!mounted) return;
     final size = MediaQuery.of(context).size;
     const double scale = 0.5;
-    // Center at node c1 roughly (1150, 900)
-    final dx = (size.width / 2) - (1150 * scale);
-    final dy = (size.height / 2) - (900 * scale);
+    
+    double cx = 2500;
+    double cy = 2500;
+    
+    if (_visibleNodes.isNotEmpty) {
+      double sumX = 0;
+      double sumY = 0;
+      int count = 0;
+      for (final n in _visibleNodes) {
+        final pos = _nodePositions[n.id];
+        if (pos != null) {
+          sumX += pos.dx;
+          sumY += pos.dy;
+          count++;
+        }
+      }
+      if (count > 0) {
+        cx = sumX / count;
+        cy = sumY / count;
+      }
+    }
+
+    final dx = (size.width / 2) - (cx * scale);
+    final dy = (size.height / 2) - (cy * scale);
     
     final centerMatrix = Matrix4.identity()
       ..translate(dx, dy)
@@ -69,51 +121,88 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
     _transformController.value = centerMatrix;
   }
 
-  Graph _buildGraphViewGraph() {
-    final graph = Graph()..isTree = false;
-    final Map<String, Node> gvNodes = {};
-    for (final n in _visibleNodes) {
-      final node = Node.Id(n);
-      gvNodes[n.id] = node;
-      graph.addNode(node);
+  void _generateLayout() {
+    if (_graphMap == null) return;
+    
+    for (final node in _graphMap!.nodes) {
+      // Base offset 2500 to prevent negative coords from clipping top/left
+      final x = (node.x ?? 0.0) + 2500.0;
+      final y = (node.y ?? 0.0) + 2500.0;
+      _nodePositions[node.id] = Offset(x, y);
     }
-    for (final e in _visibleEdges) {
-      if (gvNodes.containsKey(e.sourceId) && gvNodes.containsKey(e.targetId)) {
-        graph.addEdge(gvNodes[e.sourceId]!, gvNodes[e.targetId]!, paint: Paint()..color = Colors.indigo.shade200..strokeWidth = 1.5..style = PaintingStyle.stroke);
-      }
-    }
-    return graph;
   }
 
-  void _generateLayout() {
-    // Hardcoded layout to perfectly match the wireframe
-    final manualOffsets = {
-      'pA': const Offset(800, 600),
-      'pB': const Offset(1500, 600),
-      'ra1': const Offset(800, 750),
-      'c1': const Offset(1150, 900),
-      'c2': const Offset(1500, 900),
-      'v1': const Offset(800, 1050),
-      'v2': const Offset(1500, 1050),
-      'm1': const Offset(800, 1200),
-      'o1': const Offset(1500, 1200),
-      'res1': const Offset(1150, 1350),
-      'g1': const Offset(1500, 1500),
-      'pC': const Offset(1150, 1500),
-    };
-    
-    for (final node in MapsMockData.nodes) {
-      _nodePositions[node.id] = manualOffsets[node.id] ?? const Offset(1000, 1000);
+  GraphNodeType _mapKindToNodeType(String kind) {
+    switch (kind) {
+      case 'gap': return GraphNodeType.researchGap;
+      case 'result': return GraphNodeType.result;
+      case 'method': return GraphNodeType.method;
+      case 'variable': return GraphNodeType.variable;
+      case 'paper': return GraphNodeType.paper;
+      default: return GraphNodeType.concept;
     }
   }
 
   void _updateVisibleGraph() {
     setState(() {
+      if (_graphMap == null) {
+        _visibleNodes = [];
+        _visibleEdges = [];
+        return;
+      }
+      
       final query = _searchController.text.toLowerCase();
       
-      _visibleNodes = MapsMockData.nodes.where((n) {
+      final allGraphNodes = _graphMap!.nodes.map((n) {
+        GapType? gapType;
+        if (n.kind == 'gap' && n.gapTypology != null) {
+          switch (n.gapTypology!.toLowerCase()) {
+            case 'unexplored_concept': gapType = GapType.unexploredConcept; break;
+            case 'population_gap': gapType = GapType.populationGap; break;
+            case 'missing_relationship': gapType = GapType.missingRelationship; break;
+            case 'dataset_gap': gapType = GapType.datasetGap; break;
+            case 'methodological_gap': gapType = GapType.methodologicalGap; break;
+            case 'empirical_gap': gapType = GapType.empiricalGap; break;
+          }
+        }
+        
+        return GraphNode(
+          id: n.id,
+          label: n.label,
+          type: _mapKindToNodeType(n.kind),
+          gapStatement: n.detail,
+          gapType: gapType,
+          confidence: n.confidenceScore != null ? GapConfidence.high : GapConfidence.medium,
+          evidence: n.evidence.map((e) => GapEvidence(
+            paperId: e.paperId,
+            paperTitle: e.paperTitle,
+            section: e.section ?? 'General',
+            quote: e.quote,
+          )).toList(),
+          saturationStatus: n.saturationStatus,
+          zoneCategory: n.zoneCategory,
+        );
+      }).toList();
+
+      _visibleNodes = allGraphNodes.where((n) {
         if (!_visibleNodeTypes.contains(n.type)) return false;
         
+        if (n.type == GraphNodeType.researchGap && n.gapType != null) {
+          if (!_visibleGapTypes.contains(n.gapType)) return false;
+        }
+
+        if (n.saturationStatus != null) {
+          if (!_visibleSaturationStatuses.contains(n.saturationStatus!.toLowerCase())) return false;
+        }
+
+        if (_selectedMethodCluster != null && _selectedMethodCluster!.isNotEmpty) {
+          if (n.type == GraphNodeType.method && n.label != _selectedMethodCluster) return false;
+        }
+        
+        if (_selectedObjectCluster != null && _selectedObjectCluster!.isNotEmpty) {
+          if (n.zoneCategory != null && n.zoneCategory != _selectedObjectCluster) return false;
+        }
+
         if (query.isNotEmpty && !n.label.toLowerCase().contains(query)) {
           return false;
         }
@@ -129,9 +218,13 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
 
       final visibleIds = _visibleNodes.map((n) => n.id).toSet();
       
-      _visibleEdges = MapsMockData.edges.where((e) {
-        return visibleIds.contains(e.sourceId) && visibleIds.contains(e.targetId);
-      }).toList();
+      _visibleEdges = _graphMap!.edges.where((e) {
+        return visibleIds.contains(e.source) && visibleIds.contains(e.target);
+      }).map<GraphEdge>((e) => GraphEdge(
+        sourceId: e.source, 
+        targetId: e.target, 
+        label: e.relation
+      )).toList();
     });
   }
 
@@ -170,24 +263,35 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         const SizedBox(height: 12),
                         LayoutBuilder(builder: (context, constraints) {
                           final width = (constraints.maxWidth - 12) / 2;
-                          final items = [
-                            {'icon': Icons.article_outlined, 'label': 'Paper Nodes'},
-                            {'icon': Icons.lightbulb_outline, 'label': 'Concept Nodes'},
-                            {'icon': Icons.data_object, 'label': 'Variable Nodes'},
-                            {'icon': Icons.warning_amber_rounded, 'label': 'Research GAP Nodes'},
-                            {'icon': Icons.public, 'label': 'Research Area'},
-                            {'icon': Icons.science_outlined, 'label': 'Method Nodes'},
-                          ];
+                          Widget buildNodeFilter(IconData icon, String label, GraphNodeType type) {
+                            return _buildFilterButton(
+                              width: width,
+                              icon: icon,
+                              label: label,
+                              isSelected: _visibleNodeTypes.contains(type),
+                              onTap: () {
+                                setModalState(() {
+                                  if (_visibleNodeTypes.contains(type)) {
+                                    _visibleNodeTypes.remove(type);
+                                  } else {
+                                    _visibleNodeTypes.add(type);
+                                  }
+                                });
+                                _updateVisibleGraph();
+                              },
+                            );
+                          }
                           return Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: items.map((item) => _buildFilterButton(
-                              width: width,
-                              icon: item['icon'] as IconData,
-                              label: item['label'] as String,
-                              isSelected: true,
-                              onTap: () {}, // TODO: state logic
-                            )).toList(),
+                            children: [
+                              buildNodeFilter(Icons.article_outlined, 'Paper Nodes', GraphNodeType.paper),
+                              buildNodeFilter(Icons.lightbulb_outline, 'Concept Nodes', GraphNodeType.concept),
+                              buildNodeFilter(Icons.data_object, 'Variable Nodes', GraphNodeType.variable),
+                              buildNodeFilter(Icons.warning_amber_rounded, 'Research GAP Nodes', GraphNodeType.researchGap),
+                              buildNodeFilter(Icons.public, 'Research Area', GraphNodeType.researchArea),
+                              buildNodeFilter(Icons.science_outlined, 'Method Nodes', GraphNodeType.method),
+                            ],
                           );
                         }),
                         
@@ -198,24 +302,37 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         const SizedBox(height: 12),
                         LayoutBuilder(builder: (context, constraints) {
                           final width = (constraints.maxWidth - 12) / 2;
-                          final items = [
-                            {'icon': Icons.travel_explore, 'label': 'Unexplored Concept'},
-                            {'icon': Icons.link_off, 'label': 'Missing Relation'},
-                            {'icon': Icons.science, 'label': 'Methodological'},
-                            {'icon': Icons.groups, 'label': 'Population Gap'},
-                            {'icon': Icons.dataset, 'label': 'Dataset Gap'},
-                            {'icon': Icons.analytics, 'label': 'Empirical Gap'},
-                          ];
+                          
+                          Widget buildGapFilter(IconData icon, String label, GapType type) {
+                            return _buildFilterButton(
+                              width: width,
+                              icon: icon,
+                              label: label,
+                              isSelected: _visibleGapTypes.contains(type),
+                              onTap: () {
+                                setModalState(() {
+                                  if (_visibleGapTypes.contains(type)) {
+                                    _visibleGapTypes.remove(type);
+                                  } else {
+                                    _visibleGapTypes.add(type);
+                                  }
+                                });
+                                _updateVisibleGraph();
+                              },
+                            );
+                          }
+                          
                           return Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: items.map((item) => _buildFilterButton(
-                              width: width,
-                              icon: item['icon'] as IconData,
-                              label: item['label'] as String,
-                              isSelected: true,
-                              onTap: () {},
-                            )).toList(),
+                            children: [
+                              buildGapFilter(Icons.travel_explore, 'Unexplored Concept', GapType.unexploredConcept),
+                              buildGapFilter(Icons.link_off, 'Missing Relation', GapType.missingRelationship),
+                              buildGapFilter(Icons.science, 'Methodological', GapType.methodologicalGap),
+                              buildGapFilter(Icons.groups, 'Population Gap', GapType.populationGap),
+                              buildGapFilter(Icons.dataset, 'Dataset Gap', GapType.datasetGap),
+                              buildGapFilter(Icons.analytics, 'Empirical Gap', GapType.empiricalGap),
+                            ],
                           );
                         }),
                         
@@ -226,23 +343,36 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         const SizedBox(height: 12),
                         LayoutBuilder(builder: (context, constraints) {
                           final width = (constraints.maxWidth - 12) / 2;
-                          final items = [
-                            {'color': Colors.green, 'label': 'Banyak di teliti'},
-                            {'color': Colors.yellow.shade700, 'label': 'Cukup di teliti'},
-                            {'color': Colors.orange, 'label': 'Jarang di teliti'},
-                            {'color': Colors.red, 'label': 'Belum di teliti'},
-                          ];
+                          
+                          Widget buildSatFilter(Color color, String label, String status) {
+                            return _buildFilterButton(
+                              width: width,
+                              icon: Icons.square,
+                              iconColor: color,
+                              label: label,
+                              isSelected: _visibleSaturationStatuses.contains(status),
+                              onTap: () {
+                                setModalState(() {
+                                  if (_visibleSaturationStatuses.contains(status)) {
+                                    _visibleSaturationStatuses.remove(status);
+                                  } else {
+                                    _visibleSaturationStatuses.add(status);
+                                  }
+                                });
+                                _updateVisibleGraph();
+                              },
+                            );
+                          }
+                          
                           return Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: items.map((item) => _buildFilterButton(
-                              width: width,
-                              icon: Icons.square,
-                              iconColor: item['color'] as Color,
-                              label: item['label'] as String,
-                              isSelected: true,
-                              onTap: () {},
-                            )).toList(),
+                            children: [
+                              buildSatFilter(Colors.green, 'Banyak di teliti', 'high'),
+                              buildSatFilter(Colors.yellow.shade700, 'Cukup di teliti', 'medium'),
+                              buildSatFilter(Colors.orange, 'Jarang di teliti', 'low'),
+                              buildSatFilter(Colors.red, 'Belum di teliti', 'none'),
+                            ],
                           );
                         }),
                         
@@ -251,9 +381,35 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         // 4. Saring Klaster Penelitian
                         const Text('Saring Klaster Penelitian', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted)),
                         const SizedBox(height: 12),
-                        _buildDropdownFilter(Icons.category, 'Method Cluster'),
+                        _buildDropdownFilter(
+                          icon: Icons.category, 
+                          label: 'Method Cluster',
+                          value: _selectedMethodCluster,
+                          items: _graphMap?.nodes
+                              .where((n) => _mapKindToNodeType(n.kind) == GraphNodeType.method)
+                              .map((n) => n.label)
+                              .toSet()
+                              .toList() ?? [],
+                          onChanged: (val) {
+                            setModalState(() => _selectedMethodCluster = val);
+                            _updateVisibleGraph();
+                          }
+                        ),
                         const SizedBox(height: 12),
-                        _buildDropdownFilter(Icons.interests, 'Object Cluster'),
+                        _buildDropdownFilter(
+                          icon: Icons.interests, 
+                          label: 'Object Cluster (Zone)',
+                          value: _selectedObjectCluster,
+                          items: _graphMap?.nodes
+                              .map((n) => n.zoneCategory)
+                              .whereType<String>()
+                              .toSet()
+                              .toList() ?? [],
+                          onChanged: (val) {
+                            setModalState(() => _selectedObjectCluster = val);
+                            _updateVisibleGraph();
+                          }
+                        ),
                         
                         const SizedBox(height: 48),
                       ],
@@ -316,7 +472,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
         width: width,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.indigo.withOpacity(0.08) : Colors.transparent,
+          color: isSelected ? Colors.indigo.withValues(alpha: 0.08) : Colors.transparent,
           border: Border.all(color: isSelected ? Colors.indigo.shade300 : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -342,7 +498,13 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
     );
   }
 
-  Widget _buildDropdownFilter(IconData icon, String hint) {
+  Widget _buildDropdownFilter({
+    required IconData icon, 
+    required String label, 
+    String? value,
+    required List<String> items,
+    required void Function(String?) onChanged,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -357,10 +519,20 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
           Expanded(
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                hint: Text(hint, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                hint: Text(label, style: const TextStyle(fontSize: 13, color: Colors.black87)),
                 isExpanded: true,
-                items: const [],
-                onChanged: (value) {},
+                value: value,
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text("Semua"),
+                  ),
+                  ...items.map((e) => DropdownMenuItem(
+                        value: e,
+                        child: Text(e, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      )),
+                ],
+                onChanged: onChanged,
               ),
             ),
           ),
@@ -433,9 +605,9 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.indigo.withOpacity(0.04),
+                      color: Colors.indigo.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.indigo.withOpacity(0.15)),
+                      border: Border.all(color: Colors.indigo.withValues(alpha: 0.15)),
                     ),
                     child: Text(
                       node.gapType?.name.toUpperCase() ?? 'MISSING CONCEPT RELATIONSHIP',
@@ -452,7 +624,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           decoration: BoxDecoration(
-                            color: Colors.indigo.withOpacity(0.1),
+                            color: Colors.indigo.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -482,7 +654,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           decoration: BoxDecoration(
-                            color: node.isValidated ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                            color: node.isValidated ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -601,7 +773,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                               width: itemWidth,
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
-                                color: Colors.indigo.withOpacity(0.08),
+                                color: Colors.indigo.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(24),
                               ),
                               child: Row(
@@ -707,12 +879,12 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withOpacity(0.4), width: isGap ? 2 : 1),
+          border: Border.all(color: color.withValues(alpha: 0.4), width: isGap ? 2 : 1),
         ),
         child: Row(
           children: [
@@ -783,9 +955,27 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.projectTitle)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.projectTitle)),
+        body: Center(child: Text('Gagal memuat graph: $_errorMessage', style: const TextStyle(color: Colors.red))),
+      );
+    }
+
     final visibleGapNodes = _visibleNodes.where((n) => n.type == GraphNodeType.researchGap).toList();
-    final totalPapers = MapsMockData.nodes.where((n) => n.type == GraphNodeType.paper).length;
-    final totalGaps = MapsMockData.nodes.where((n) => n.type == GraphNodeType.researchGap).length;
+    
+    final projectsAsync = ref.watch(projectsProvider(widget.userId));
+    final project = projectsAsync.value?.where((p) => p.id == widget.projectId).firstOrNull;
+    final totalPapers = project?.paperCount ?? 0;
+    
+    final totalGaps = visibleGapNodes.length;
     
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -838,7 +1028,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.indigo.withOpacity(0.1),
+                              color: Colors.indigo.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.description_outlined, color: Colors.indigo, size: 20),
@@ -872,7 +1062,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.indigo.withOpacity(0.1),
+                              color: Colors.indigo.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.track_changes_outlined, color: Colors.indigo, size: 20),
@@ -927,8 +1117,8 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                         maxScale: 2.0,
                         constrained: false,
                         child: SizedBox(
-                          width: 2000,
-                          height: 2000,
+                          width: 5000,
+                          height: 5000,
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
@@ -941,8 +1131,8 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                                   height: 600,
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.05),
-                                      border: Border(top: BorderSide(color: Colors.green.withOpacity(0.3), width: 2)),
+                                      color: Colors.green.withValues(alpha: 0.05),
+                                      border: Border(top: BorderSide(color: Colors.green.withValues(alpha: 0.3), width: 2)),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16),
@@ -960,8 +1150,8 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                                   height: 600,
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.amber.withOpacity(0.05),
-                                      border: Border(top: BorderSide(color: Colors.amber.withOpacity(0.3), width: 2)),
+                                      color: Colors.amber.withValues(alpha: 0.05),
+                                      border: Border(top: BorderSide(color: Colors.amber.withValues(alpha: 0.3), width: 2)),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16),
@@ -973,22 +1163,27 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                                   ),
                                 ),
                               ],
-                              // GraphView to render nodes and edges with Sugiyama auto layout
+                              // 1. Draw Edges with CustomPainter
                               Positioned.fill(
-                                child: GraphView(
-                                  graph: _buildGraphViewGraph(),
-                                  algorithm: SugiyamaAlgorithm(SugiyamaConfiguration()
-                                    ..nodeSeparation = 120
-                                    ..levelSeparation = 300
-                                    ..orientation = SugiyamaConfiguration.ORIENTATION_LEFT_RIGHT
+                                child: CustomPaint(
+                                  painter: _GraphEdgePainter(
+                                    edges: _visibleEdges,
+                                    positions: _nodePositions,
                                   ),
-                                  paint: Paint()..color = Colors.indigo.shade200..strokeWidth = 1.5..style = PaintingStyle.stroke,
-                                  builder: (Node node) {
-                                    final graphNode = node.key!.value as GraphNode;
-                                    return _buildNodeWidget(graphNode);
-                                  },
                                 ),
                               ),
+                              // 2. Draw Nodes
+                              ..._visibleNodes.map((node) {
+                                final pos = _nodePositions[node.id] ?? const Offset(2500, 2500);
+                                return Positioned(
+                                  left: pos.dx,
+                                  top: pos.dy,
+                                  child: FractionalTranslation(
+                                    translation: const Offset(-0.5, -0.5),
+                                    child: _buildNodeWidget(node),
+                                  ),
+                                );
+                              }),
                             ],
                           ),
                         ),
@@ -1003,7 +1198,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
                           ],
                           border: Border.all(color: Colors.grey.shade200),
                         ),
@@ -1071,7 +1266,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.grey.shade200),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
                           ],
                         ),
                         child: Column(
@@ -1082,7 +1277,7 @@ class _ProjectMapsDetailScreenState extends State<ProjectMapsDetailScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.indigo.withOpacity(0.1),
+                                    color: Colors.indigo.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Icon(Icons.warning_amber_rounded, color: Colors.indigo, size: 20),
@@ -1203,7 +1398,7 @@ class _GraphEdgePainter extends CustomPainter {
         text: edge.label,
         style: TextStyle(
           color: Colors.grey.shade600,
-          backgroundColor: Colors.white.withOpacity(0.9),
+          backgroundColor: Colors.white.withValues(alpha: 0.9),
           fontSize: 10,
         ),
       );

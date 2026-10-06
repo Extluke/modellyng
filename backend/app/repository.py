@@ -1530,4 +1530,162 @@ class SupabaseProjectRepository:
         raise RepositoryError(f"Supabase request failed: {detail}")
 
 
+    async def get_knowledge_graph(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> 'KnowledgeGraphMapRead':
+        project = await self.get_project(user, project_id)
+
+        # 1. Fetch nodes and edges from Supabase
+        with httpx.Client(timeout=15.0) as client:
+            nodes_resp = client.get(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers(user),
+                params={"project_id": f"eq.{project_id}"}
+            )
+            self._raise_for_repository_error(nodes_resp)
+            edges_resp = client.get(
+                f"{self._rest_url}/knowledge_graph_edges",
+                headers=self._headers(user),
+                params={"project_id": f"eq.{project_id}"}
+            )
+            self._raise_for_repository_error(edges_resp)
+            
+        nodes_data = nodes_resp.json()
+        edges_data = edges_resp.json()
+
+        # 2. Calculate Saturation
+        from .intelligence_service import calculate_node_saturation
+        calculate_node_saturation(nodes_data)
+
+        # 3. NetworkX Layouting
+        import networkx as nx
+        
+        G = nx.DiGraph()
+        
+        # Mapping partitions for zone_category
+        # 0: research_area / concept -> Zone: Dasar
+        # 1: variable / method -> Zone: Metodologi
+        # 2: result -> Zone: Temuan
+        # 3: gap -> Zone: Peluang (Celah)
+        
+        def get_partition(node_type: str) -> tuple[int, str]:
+            nt = (node_type or "").lower()
+            if nt in ("gap",):
+                return 3, "Peluang (Celah)"
+            elif nt in ("result",):
+                return 2, "Temuan"
+            elif nt in ("variable", "method"):
+                return 1, "Metodologi"
+            else:
+                return 0, "Dasar Konsep"
+
+        for node in nodes_data:
+            partition_idx, zone_name = get_partition(node.get("node_type"))
+            node["zone_category"] = zone_name
+            G.add_node(node["id"], partition=partition_idx)
+
+        for edge in edges_data:
+            G.add_edge(edge["source_id"], edge["target_id"])
+
+        # Layout computation
+        try:
+            pos = nx.multipartite_layout(G, subset_key="partition", align="vertical", scale=1000)
+            for node in nodes_data:
+                coords = pos.get(node["id"])
+                if coords is not None:
+                    node["x"] = float(coords[0])
+                    node["y"] = float(coords[1])
+        except Exception as e:
+            # Fallback spring layout
+            try:
+                pos = nx.spring_layout(G, scale=1000)
+                for node in nodes_data:
+                    coords = pos.get(node["id"])
+                    if coords is not None:
+                        node["x"] = float(coords[0])
+                        node["y"] = float(coords[1])
+            except Exception:
+                # Pure Python grid fallback layout
+                from collections import defaultdict
+                part_counts = defaultdict(list)
+                for node in nodes_data:
+                    p = get_partition(node.get("node_type"))[0]
+                    part_counts[p].append(node)
+                
+                # Assign X based on partition (0 to 3) => -500, -166, 166, 500
+                # Assign Y based on index in partition
+                for p_idx, p_nodes in part_counts.items():
+                    x_pos = -500 + (p_idx * 333)
+                    total = len(p_nodes)
+                    for i, node in enumerate(p_nodes):
+                        y_pos = (i * 150) - ((total * 150) / 2)
+                        node["x"] = float(x_pos)
+                        node["y"] = float(y_pos)
+        # 4. Map back to edges format expected by schema
+        edges_formatted = []
+        for e in edges_data:
+            edges_formatted.append({
+                "source": e["source_id"],
+                "target": e["target_id"],
+                "relation": e["relation"],
+                "detail": e.get("detail")
+            })
+
+        # 5. Format nodes to match schemas
+        ALLOWED_GAPS = {"population", "methodological", "empirical", "theoretical", "conceptual", "unexplored_concept", "missing_relation", "dataset", "other"}
+        ALLOWED_STATUS = {"needs_review", "verified", "edited", "unsupported", "rejected"}
+        
+        nodes_formatted = []
+        for n in nodes_data:
+            # 1. Sanitize gap_typology
+            gap = n.get("gap_typology")
+            if gap and gap not in ALLOWED_GAPS:
+                gap = "other"
+                
+            # 2. Sanitize confidence_score
+            score = n.get("confidence_score")
+            if score is not None:
+                score = float(score)
+                if score > 1.0:
+                    score = score / 100.0
+                    
+            # 3. Sanitize evidence
+            evidence_list = n.get("evidence") or []
+            sanitized_evidence = []
+            for ev in evidence_list:
+                if isinstance(ev, dict):
+                    if "paper_title" not in ev:
+                        ev["paper_title"] = "Unknown Source"
+                    sanitized_evidence.append(ev)
+                    
+            # 4. Sanitize status
+            status = n.get("status")
+            if status == "pending" or (status and status not in ALLOWED_STATUS):
+                status = "needs_review"
+
+            nodes_formatted.append({
+                "id": n["id"],
+                "kind": n["node_type"],
+                "label": n["label"],
+                "detail": n.get("detail", ""),
+                "parent_id": n.get("parent_id"),
+                "gap_typology": gap,
+                "saturation_status": n.get("saturation_status"),
+                "confidence_score": score,
+                "zone_category": n.get("zone_category"),
+                "x": n.get("x"),
+                "y": n.get("y"),
+                "evidence": sanitized_evidence,
+                "status": status
+            })
+
+        from .schemas import KnowledgeGraphMapRead
+        return KnowledgeGraphMapRead(
+            project_id=project.id,
+            project_title=project.title,
+            nodes=nodes_formatted,
+            edges=edges_formatted
+        )
+
 project_repository = SupabaseProjectRepository()
+

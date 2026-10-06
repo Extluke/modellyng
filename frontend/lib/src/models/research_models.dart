@@ -315,3 +315,129 @@ class AiResearchSynthesis {
     );
   }
 }
+
+
+class KnowledgeGraphEvidence {
+  const KnowledgeGraphEvidence({
+    required this.paperId,
+    required this.paperTitle,
+    this.section,
+    required this.quote,
+  });
+
+  final String paperId;
+  final String paperTitle;
+  final String? section;
+  final String quote;
+
+  factory KnowledgeGraphEvidence.fromJson(Map<String, dynamic> json) {
+    return KnowledgeGraphEvidence(
+      paperId: json['paper_id']?.toString() ?? '',
+      paperTitle: json['paper_title']?.toString() ?? 'Unknown Paper',
+      section: json['section']?.toString(),
+      quote: json['quote']?.toString() ?? '',
+    );
+  }
+}
+
+class KnowledgeGraphNode {
+  const KnowledgeGraphNode({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.detail,
+    this.parentId,
+    this.gapTypology,
+    this.saturationStatus,
+    this.confidenceScore,
+    this.zoneCategory,
+    this.x,
+    this.y,
+    this.evidence = const [],
+  });
+
+  final String id;
+  final String kind;
+  final String label;
+  final String detail;
+  final String? parentId;
+  final String? gapTypology;
+  final String? saturationStatus;
+  final double? confidenceScore;
+  final String? zoneCategory;
+  final double? x;
+  final double? y;
+  final List<KnowledgeGraphEvidence> evidence;
+
+  factory KnowledgeGraphNode.fromJson(Map<String, dynamic> json) {
+    return KnowledgeGraphNode(
+      id: json['id']?.toString() ?? '',
+      kind: json['kind']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      detail: json['detail']?.toString() ?? '',
+      parentId: json['parent_id']?.toString(),
+      gapTypology: json['gap_typology']?.toString(),
+      saturationStatus: json['saturation_status']?.toString(),
+      confidenceScore: (json['confidence_score'] as num?)?.toDouble(),
+      zoneCategory: json['zone_category']?.toString(),
+      x: (json['x'] as num?)?.toDouble(),
+      y: (json['y'] as num?)?.toDouble(),
+      evidence: (json['evidence'] as List<dynamic>?)
+              ?.map((e) => KnowledgeGraphEvidence.fromJson(e as Map<String, dynamic>))
+              .toList(growable: false) ??
+          const [],
+    );
+  }
+}
+
+class KnowledgeGraphEdge {
+  const KnowledgeGraphEdge({
+    required this.source,
+    required this.target,
+    required this.relation,
+    this.detail,
+  });
+
+  final String source;
+  final String target;
+  final String relation;
+  final String? detail;
+
+  factory KnowledgeGraphEdge.fromJson(Map<String, dynamic> json) {
+    return KnowledgeGraphEdge(
+      source: json['source']?.toString() ?? '',
+      target: json['target']?.toString() ?? '',
+      relation: json['relation']?.toString() ?? '',
+      detail: json['detail']?.toString(),
+    );
+  }
+}
+
+class KnowledgeGraphMap {
+  const KnowledgeGraphMap({
+    required this.projectId,
+    required this.projectTitle,
+    required this.nodes,
+    required this.edges,
+  });
+
+  final String projectId;
+  final String projectTitle;
+  final List<KnowledgeGraphNode> nodes;
+  final List<KnowledgeGraphEdge> edges;
+
+  factory KnowledgeGraphMap.fromJson(Map<String, dynamic> json) {
+    return KnowledgeGraphMap(
+      projectId: json['project_id']?.toString() ?? '',
+      projectTitle: json['project_title']?.toString() ?? '',
+      nodes: (json['nodes'] as List<dynamic>?)
+              ?.map((e) => KnowledgeGraphNode.fromJson(e))
+              .toList(growable: false) ??
+          [],
+      edges: (json['edges'] as List<dynamic>?)
+              ?.map((e) => KnowledgeGraphEdge.fromJson(e))
+              .toList(growable: false) ??
+          [],
+    );
+  }
+}

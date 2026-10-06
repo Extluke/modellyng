@@ -36,6 +36,7 @@ from .schemas import (
     ComparativeSynthesisCreate,
     ConceptEvidenceMapRead,
     ResearchGapMapRead,
+    KnowledgeGraphMapRead,
     ResearchGapDecisionCreate,
     ResearchGapDecisionRead,
     ExtractionParameter,
@@ -53,6 +54,7 @@ from .schemas import (
     AccountSettingsRead,
     AccountSettingsUpdate,
     AiResearchSynthesis,
+    GraphNodeSynthesisRequest,
 )
 from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
 from .source_verification import VerificationRequest, SourceVerificationRead, SourceReviewCreate, SourceReviewRead
@@ -396,6 +398,28 @@ async def generate_research_formulation_synthesis(
     return await synthesize_gaps(current_user, project_id)
 
 
+
+@api.get(
+    "/projects/{project_id}/knowledge-graph",
+    response_model=KnowledgeGraphMapRead,
+    tags=["projects"],
+)
+async def get_knowledge_graph_map(
+    project_id: UUID, current_user: CurrentUser
+) -> KnowledgeGraphMapRead:
+    return await project_repository.get_knowledge_graph(current_user, project_id)
+
+
+@api.post(
+    "/projects/{project_id}/synthesize-graph-nodes",
+    response_model=AiResearchSynthesis,
+    tags=["projects"],
+)
+async def synthesize_graph_nodes_endpoint(
+    project_id: UUID, payload: GraphNodeSynthesisRequest, current_user: CurrentUser
+) -> AiResearchSynthesis:
+    from .synthesis_service import synthesize_graph_nodes
+    return await synthesize_graph_nodes(current_user, project_id, payload.node_ids)
 @api.get(
     "/projects/{project_id}/intelligence-report",
     response_model=IntelligenceReportRead,

@@ -68,4 +68,18 @@ class ProjectRepository {
     }
     return 'Proyek belum dapat disimpan. Silakan coba kembali.';
   }
+
+  Future<KnowledgeGraphMap> getKnowledgeGraph(String projectId) async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/v1/projects/$projectId/knowledge-graph');
+    return KnowledgeGraphMap.fromJson(response.data!);
+  }
+
+  Future<AiResearchSynthesis> synthesizeGraphNodes(String projectId, List<String> nodeIds) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/v1/projects/$projectId/synthesize-graph-nodes',
+      data: {'node_ids': nodeIds},
+    );
+    return AiResearchSynthesis.fromJson(response.data!);
+  }
+
 }

@@ -67,3 +67,59 @@ Gunakan bahasa Indonesia yang akademis dan profesional.
     )
     
     return AiResearchSynthesis.model_validate_json(response.text)
+
+async def synthesize_graph_nodes(user: AuthenticatedUser, project_id: UUID, node_ids: list[str]) -> AiResearchSynthesis:
+    # 1. Fetch the nodes from the knowledge graph
+    with httpx.Client(timeout=15.0) as client:
+        nodes_resp = client.get(
+            f"{project_repository._rest_url}/knowledge_graph_nodes",
+            headers=project_repository._headers(user),
+            params={"project_id": f"eq.{project_id}"}
+        )
+        project_repository._raise_for_repository_error(nodes_resp)
+        all_nodes = nodes_resp.json()
+        
+    selected_nodes = [n for n in all_nodes if n["id"] in node_ids]
+    if not selected_nodes:
+        raise ValueError("Node yang dipilih tidak ditemukan di dalam proyek.")
+        
+    # Kumpulkan teks gap dan konsep dari node
+    node_texts = []
+    for n in selected_nodes:
+        kind = str(n.get("node_type") or "concept").upper()
+        label = n.get("label") or "Tanpa Label"
+        detail = n.get("detail") or "Tanpa Detail"
+        node_texts.append(f"- [{kind}] {label}: {detail}")
+        
+    compiled_nodes = "\n".join(node_texts)
+    
+    # 2. Panggil Gemini
+    settings = get_settings()
+    client = genai.Client(api_key=settings.gemini_api_key)
+    
+    prompt = f"""
+Berdasarkan kumpulan entitas Knowledge Graph (seperti celah/gap, metodologi, dan variabel) berikut, posisikan diri Anda sebagai dosen pembimbing tesis yang ahli.
+
+KUMPULAN ENTITAS GRAPH TERPILIH:
+{compiled_nodes}
+
+Tugas Anda:
+1. Rumuskan 3 usulan judul baru yang kuat dan menarik untuk penelitian tesis yang akan datang.
+2. Rumuskan 2-3 pertanyaan penelitian (Research Questions) yang spesifik dan langsung memecahkan gap yang dipilih.
+3. Buat satu paragraf narasi (pernyataan novelty) yang menjelaskan letak kebaruan penelitian ini.
+4. Buat narasi penjelasan mengapa usulan ini sangat relevan.
+
+Gunakan bahasa Indonesia yang akademis dan profesional. Output WAJIB dalam format JSON.
+"""
+    
+    response = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=AiResearchSynthesis,
+            temperature=0.7,
+        ),
+    )
+    
+    return AiResearchSynthesis.model_validate_json(response.text)

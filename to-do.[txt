@@ -1,43 +1,89 @@
-1. EPIC: Arsitektur Knowledge Graph & Actionable Canvas (Backend & AI Extraction Enhancement)
-Visi utama dari UI Canvas Maps adalah menjadi alat sintesis visual yang actionable (bisa dieksekusi langsung). Untuk mendukung filter, detail gap, dan pemetaan hubungan yang komprehensif, Backend dan AI harus di-upgrade untuk menyediakan data berikut:
+1. Data untuk "Tampilkan Tipe Node" (Ekstraksi Entitas)
+UI meminta 6 tipe node untuk bisa disaring dan ditampilkan:
 
-a. Ekstraksi Node & Edge Lengkap (Comprehensive Relationship Mapping):
-   - Kondisi saat ini: AI HANYA mengekstrak Node Paper, Node Konsep, dan Node Gap secara terbatas.
-   - Kebutuhan: AI harus mampu mengekstrak tambahan tipe node (Variabel, Metode, Hasil, dan Area Riset).
-   - Kebutuhan: AI wajib mengekstrak GARIS RELASI (Edges) lintas entitas (misal: Metode A -> Hasil B -> memunculkan Gap C) agar kanvas terhubung menjadi satu jaring laba-laba yang utuh.
+Paper Nodes (Sudah ada)
+Concept Nodes (Sudah ada)
+Research GAP Nodes (Sudah ada)
+🔴 Variable Nodes (Data belum diekstrak AI)
+🔴 Method Nodes (Data belum diekstrak AI)
+🔴 Research Area Nodes / Result (Data belum diekstrak AI) Kebutuhan Backend: AI (Prompt) di ai_extraction.py harus di-upgrade agar tidak hanya membaca Konsep dan Gap, tapi juga mengekstrak Variabel, Metode, dan Temuan.
+2. Data untuk "Saring Tipe Celah" (Klasifikasi Gap)
+UI menyediakan filter spesifik untuk 6 tipe celah:
 
-b. Klasifikasi & Representasi Hierarkis (Gap Typology & Sub-concepts):
-   - Kebutuhan: AI harus membedakan secara eksplisit mana "Konsep Utama/Payung" dan "Sub-konsep" (misalnya dengan penambahan `parent_id`), karena skema saat ini terlalu datar (flat).
-   - Kebutuhan: AI harus mampu mengklasifikasi tipe celah secara spesifik (Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, Empirical Gap) untuk filter "Saring Tipe Celah".
+Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, dan Empirical Gap. Kebutuhan Backend: AI harus mampu secara akurat mengklasifikasikan gap_type ke dalam salah satu dari 6 kategori wajib tersebut setiap kali ia menemukan sebuah kelemahan/celah di dalam paper, dan menyimpannya di database.
+3. Data untuk "Saring Area Cakupan" (Kalkulasi Saturasi / Heatmap)
+UI membutuhkan indikator warna cakupan riset:
 
-c. Kalkulasi Saturasi Riset (Mengetahui Topik Jenuh vs Peluang):
-   - Kebutuhan: Backend harus memiliki algoritma kalkulasi/scoring agregasi lintas paper untuk sebuah konsep. Tujuannya mengirimkan data saturasi riset (Banyak diteliti/Hijau, Cukup/Kuning, Jarang/Oranye, Belum diteliti/Merah) untuk mendukung filter "Saring Area Cakupan".
+🟢 Banyak diteliti (High)
+🟡 Cukup diteliti (Medium)
+🟠 Jarang diteliti (Low)
+🔴 Belum diteliti (None) Kebutuhan Backend: Harus ada algoritma kalkulasi (bukan AI ekstraksi, melainkan hitungan logis di backend) yang menghitung seberapa sering sebuah konsep/metode diulang oleh berbagai paper dalam satu proyek. Hasil hitungan ini disuntikkan ke kolom saturation_status agar UI tahu warna apa yang harus digambar.
+4. Data untuk "Saring Klaster Penelitian" (Zonasi & Pengelompokan)
+UI memiliki 2 dropdown penyaringan klaster:
 
-d. Bukti Pendukung & Clustering (Rich Supporting Evidence):
-   - Kondisi saat ini: Skema gap (ConceptMapNodeRead) tidak memiliki nilai Confidence (%) real, dan hanya memuat 1 referensi `paper_id`.
-   - Kebutuhan: Menyediakan angka persentase riil untuk Confidence Score AI.
-   - Kebutuhan: Schema harus memuat Array of Evidence, di mana setiap bukti memuat: (1) Judul Paper, (2) Section sumber, dan (3) Kutipan Asli (Quote).
-   - Kebutuhan: Algoritma clustering untuk mengelompokkan paper ke dalam Method Cluster atau Object Cluster.
+🔴 Method Cluster: Mengelompokkan berdasarkan metodologi yang mirip.
+🔴 Object Cluster (Zone): Mengelompokkan berdasarkan objek/subjek riset yang mirip. Kebutuhan Backend: Harus ada algoritma pengelompokan (K-Means/Clustering) di backend yang mengisi kolom zone_category pada setiap node agar UI tahu node ini masuk ke klaster mana.
+5. Kebutuhan Fundamental untuk Melukis Kanvas (Relasi & Koordinat)
+Agar titik-titik tersebut tidak saling menumpuk dan bisa membentuk "Jaring Laba-laba" serta menempati zonanya masing-masing, kita butuh:
 
-e. Actionable Canvas & Sintesis Riset Terpusat:
-   - Kebutuhan (Validasi): Endpoint validasi (Terima/Tolak) harus didesain agar update-nya bisa langsung me-refresh state/warna node di kanvas dari Pending ke Validated secara real-time saat BottomSheet digunakan.
-   - Kebutuhan (Sintesis): Membuat endpoint "Sintesis Riset" baru di backend yang menerima input berupa Node GAP yang sudah divalidasi/dipilih oleh user (bukan paper ID), untuk kemudian menghasilkan usulan Judul, Rumusan Masalah, dan Narasi Novelty yang sangat tajam berdasarkan celah tersebut.
+🔴 Edges (Garis Relasi Lintas Entitas): AI harus bisa menemukan benang merah antar entitas. (Misal: Metode A menghasilkan Temuan B, yang memunculkan Gap C).
+🔴 Koordinat Spasial (X & Y): Backend (misalnya menggunakan algoritma NetworkX) harus menghitung dan memberikan titik koordinat x dan y yang rapi sebelum data dikirim ke frontend, sehingga UI tahu persis di piksel mana ia harus menggambar zona Hijau/Kuning/Merah dan menempatkan node-nya.
 
-f. Tata Letak Spasial & Zonasi (Spatial Layout & Zoning):
-   - Kondisi saat ini: Algoritma Sugiyama di frontend tidak mendukung pembuatan compound/cluster box (seperti zona hijau/kuning) secara otomatis karena murni hanya merapikan garis. Jika koordinat tidak di-hardcode, desain zona akan berantakan.
-   - Kebutuhan: AI/Backend harus menyematkan atribut `zone_category` pada setiap node.
-   - Kebutuhan: Backend wajib menghitung koordinat layout secara algoritmik (misal dengan NetworkX atau Graphviz) dan mengirimkan koordinat pasti (X, Y) ke Frontend, sehingga Frontend hanya bertugas "menggambar" titik dan zona tanpa perlu menghitung layout Sugiyama sendiri.
+1. Halaman Awal Research GAP
+Ini adalah dasbor utama visualisasi pengetahuan (Knowledge Graph).
 
-2. PROTOKOL ANTI-DOMINO EFFECT (Aturan Mutlak Eksekusi Backend)
-DILARANG KERAS merusak hasil ekstraksi yang sudah stabil (seperti Hasil PDF, Tabel Evidence, dan Metodologi) demi memenuhi kebutuhan Knowledge Graph di atas. Semua eksekusi harus mematuhi aturan berikut:
+Card Paper
 
-a. Isolasi Prompt AI (Separation of Concerns):
-   - Jangan menyatukan prompt ekstraksi Knowledge Graph dengan prompt ekstraksi dasar (judul, tujuan, metodologi).
-   - Ekstraksi Graph (node, edge, saturasi, dll) harus menjadi PHASE KE-2 (Secondary Pipeline) yang berjalan SETELAH ekstraksi dasar berhasil dan aman, menggunakan prompt yang terpisah 100%.
+Fungsi: Menampilkan total seluruh paper/literatur yang sedang dianalisis dalam proyek tersebut.
+Integrasi Frontend-Backend: Frontend membaca atribut statis paperCount dari data proyek secara global. Backend cukup melakukan count (perhitungan baris) pada tabel referensi di database untuk proyek terkait dan mengirimkannya melalui endpoint utama proyek.
+Card Gaps
 
-b. Isolasi Skema Data (Non-Destructive Schema Update):
-   - Dilarang memodifikasi secara destruktif skema inti yang dipakai oleh layar Hasil PDF.
-   - Jika diperlukan, buat skema turunan BARU (contoh: `KnowledgeGraphNodeRead` turunan dari `ConceptMapNodeRead`) khusus untuk melayani halaman Maps, sehingga perubahan atribut (seperti `zone_category`, array of evidence) tidak membuat API layar lain crash.
+Fungsi: Menampilkan total jumlah celah penelitian (Research Gaps) yang berhasil diekstrak dari kumpulan paper. Angka ini dinamis mengikuti filter yang sedang aktif.
+Integrasi Frontend-Backend: Frontend menghitung jumlah titik di memori yang berstatus GraphNodeType.researchGap. Backend menyuplainya melalui endpoint graf setelah pipa AI (ekstraksi sekunder) selesai menambang data celah dari semua paper.
+Canvas Semua (All Map)
 
-c. Penggunaan Data Referensi:
-   - Untuk membangun Graph dan Relasi, AI harus membaca dari data hasil ekstraksi dasar yang sudah ada di database (hasil tabel metodologi, dll), BUKAN membaca ulang PDF mentah dari nol yang berisiko menghasilkan output yang berbeda/labil.
+Fungsi: Mode default untuk melihat seluruh jaring laba-laba. Menampilkan semua entitas sekaligus (Konsep, Celah, Kertas, Variabel, Metode) berserta garis relasinya.
+Integrasi Frontend-Backend: Frontend menggunakan kanvas interaktif (InteractiveViewer) untuk melukis data. Backend memikul beban komputasi berat: memetakan relasi (siapa terhubung ke siapa) dan menggunakan algoritma layouting (NetworkX) untuk menghitung titik koordinat X dan Y yang rapi agar titik tidak menumpuk saat dikirim ke Frontend.
+Canvas Concept
+
+Fungsi: Mode fokus untuk hanya melihat pemetaan konseptual. Menyembunyikan elemen celah (Gap) agar peneliti bisa fokus melihat "bagaimana teori-teori ini saling terhubung".
+Integrasi Frontend-Backend: Frontend sekadar mematikan (menyembunyikan) tipe data yang bukan konsep. Backend memastikan setiap node yang dikirim memiliki label type yang eksplisit (misal: type: concept).
+Canvas GAP
+
+Fungsi: Mode fokus untuk berburu peluang riset. Titik-titik Gap akan dibesarkan ukurannya. Mode ini juga ideal untuk memunculkan kotak "Zona Latar Belakang" (misal: Zona Hijau / Well-Studied Area).
+Integrasi Frontend-Backend: Frontend mengaktifkan layer tambahan untuk menggambar background bounding box. Backend bertanggung jawab mengirimkan data koordinat area (batas X dan Y untuk zona tersebut) dan atribut zone_category agar Frontend tahu di mana letak persis batas zona hijau, kuning, dan merah.
+Research GAP (Daftar Card Horizontal di Bawah Canvas)
+
+Fungsi: Daftar "keranjang belanja" celah riset. Setiap kartu menampilkan nama gap, jumlah paper pendukung, tingkat keyakinan (Confidence Score), dan tombol Detail.
+Integrasi Frontend-Backend: Frontend merender daftar horisontal berdasarkan data titik Gap yang terlihat di kanvas. Backend dan AI wajib memastikan atribut confidence_score (angka 0-100) dan array relasi paper pendukung tidak kosong/null.
+2. Modal Detail GAP (Muncul Saat Tombol 'Detail' Diklik)
+Ini adalah menu Bottom Sheet yang menjadi nyawa investigasi peneliti.
+
+Poin Fitur yang Wajib Ada:
+
+Judul/Pernyataan Gap: Penjelasan naratif tentang celah tersebut.
+Metadata Lencana (Badge): Informasi Tipe Gap (Metodologi, Dataset, dll), Tingkat Keyakinan AI, dan Area Cakupan (Saturasi).
+Daftar Bukti Autentik (Evidence List): Bukti dari mana AI menyimpulkan gap ini. Berisi: Judul Paper, Bagian Asli (misal: Future Work), Kutipan Teks Asli (Verbatim Quote), dan Nomor Halaman.
+Tombol Validasi (Terima/Tolak): Untuk menyortir gap yang benar-benar masuk akal.
+Tombol Sintesis Riset (Actionable): Mengeksekusi gap yang dipilih untuk dijadikan draf judul riset baru.
+Integrasi Frontend-Backend (Agar Berjalan 100%):
+
+AI & Backend: Merupakan tugas terberat AI di backend. AI tidak boleh asal merangkum, melainkan wajib mencatut kutipan asli (evidence_quote) dan melacak nomor halamannya dari tabel ekstraksi dasar PDF. Backend kemudian menyatukannya ke dalam properti evidence pada skema KnowledgeGraphNodeRead.
+Frontend: Membongkar struktur array evidence tersebut dan menampilkannya dengan rapi. Saat user menekan tombol Terima, Frontend menembak API (PATCH) ke Backend untuk mengubah status data di database.
+Sintesis: Saat user menekan "Sintesis Riset", Frontend mengirimkan kumpulan ID Gap yang diterima ke endpoint khusus. Backend akan memanggil AI Generatif dengan prompt khusus: "Buatkan 3 usulan judul tesis dan rumusan masalah murni berdasarkan celah penelitian ID sekian..."
+3. Filter Map (Menu Saringan Kanvas)
+Ini adalah panel kendali agar kanvas yang ruwet menjadi rapi dan spesifik.
+
+Poin Fitur yang Wajib Ada:
+
+Saring Tipe Node: Menampilkan/menyembunyikan Concept, Paper, Gap, Variable, Method, dan Result.
+Saring Tipe Celah: Saringan khusus kategori (Unexplored Concept, Missing Relation, Methodological, Population Gap, Dataset Gap, Empirical Gap).
+Saring Area Cakupan: Saringan rentang warna saturasi (Banyak diteliti, Cukup, Jarang, Belum).
+Saring Klaster Penelitian: Pemilihan dinamis (Dropdown) untuk melihat spesifik ke Method Cluster (Metodologi sejenis) atau Object Cluster (Objek/Subjek sejenis).
+Integrasi Frontend-Backend (Agar Berjalan 100%):
+
+Frontend: Bertugas sepenuhnya sebagai penjaga state lokal di memori. Saat kotak dicentang, Frontend langsung menjalankan logika AND lintas parameter (misal: "Hanya tampilkan Tipe Methodologi YANG banyak diteliti") dan langsung melukis ulang (repaint) kanvas tanpa perlu meminta data ulang (loading) ke Backend.
+Backend & AI: Agar Frontend bisa memfilter dengan presisi, Backend harus men-suplai 3 metrik kalkulatif sebelum data dikirim:
+AI harus mengekstrak tipe dan tipologi gap (gap_type) dengan klasifikasi ketat (tidak boleh salah ketik).
+Backend (bukan AI) harus menjalankan fungsi agregasi/skoring yang menghitung berapa kali sebuah entitas disinggung oleh banyak paper, lalu menetapkan rentang warnanya ke dalam properti saturation_status.
+Backend harus menjalankan algoritma kecerdasan buatan (clustering, seperti K-Means atau NLP Similarity) untuk mengelompokkan titik-titik yang maknanya berdekatan, lalu memberikan nama grupnya ke dalam kolom zone_category pada setiap titik.

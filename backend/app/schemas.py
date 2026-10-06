@@ -67,6 +67,9 @@ class GapType(StrEnum):
     EMPIRICAL = "empirical"
     THEORETICAL = "theoretical"
     CONCEPTUAL = "conceptual"
+    UNEXPLORED_CONCEPT = "unexplored_concept"
+    MISSING_RELATION = "missing_relation"
+    DATASET = "dataset"
     OTHER = "other"
 
 
@@ -453,6 +456,43 @@ class ConceptMapEdgeRead(BaseModel):
     relation: str
 
 
+class SaturationStatus(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    NONE = "none"
+
+
+class KnowledgeGraphEvidence(BaseModel):
+    paper_title: str
+    section: str | None = None
+    quote: str
+    paper_id: UUID | None = None
+
+
+class KnowledgeGraphNodeRead(BaseModel):
+    id: str
+    kind: str
+    label: str
+    detail: str
+    parent_id: str | None = None
+    gap_typology: GapType | None = None
+    saturation_status: SaturationStatus | None = None
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    zone_category: str | None = None
+    x: float | None = None
+    y: float | None = None
+    evidence: list[KnowledgeGraphEvidence] = Field(default_factory=list)
+    status: VerificationStatus | None = None
+
+
+class KnowledgeGraphEdgeRead(BaseModel):
+    source: str
+    target: str
+    relation: str
+    detail: str | None = None
+
+
 class ConceptEvidenceMapRead(BaseModel):
     project_id: UUID
     project_title: str
@@ -586,3 +626,12 @@ class AiResearchSynthesis(BaseModel):
     pernyataan_novelty: str = Field(description="Narasi 1 paragraf yang menjelaskan kebaruan penelitian ini berdasarkan gap yang dipilih")
     alasan_pemilihan: str = Field(description="Narasi mengapa usulan judul-judul ini relevan dan kuat berdasarkan gap yang ada")
 
+
+class KnowledgeGraphMapRead(BaseModel):
+    project_id: UUID
+    project_title: str
+    nodes: list[KnowledgeGraphNodeRead] = Field(default_factory=list)
+    edges: list[KnowledgeGraphEdgeRead] = Field(default_factory=list)
+
+class GraphNodeSynthesisRequest(BaseModel):
+    node_ids: list[str] = Field(description="Daftar ID node (terutama Gap dan konteksnya) untuk disintesis.")
