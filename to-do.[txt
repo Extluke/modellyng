@@ -64,16 +64,16 @@
       Selesai jika: False = perilaku identik, True = node baru + edge mentioned_in muncul untuk 1 paper uji
 
 ## 6. KLASIFIKASI GAP + EVIDENCE
-- [ ] 6.A Buat extract_gaps_v2(paper_text_with_pages). Output per gap: statement, gap_type, confidence_score, evidence[{section, quote, page_number}]
+- [x] 6.A Buat extract_gaps_v2(paper_text_with_pages). Output per gap: statement, gap_type, confidence_score, evidence[{section, quote, page_number}]
       Prompt wajib menyebut 6 nilai gap_type persis dan melarang nilai lain
-- [ ] 6.B Buat normalize_gap_type(value): valid -> enum, mirip (huruf besar/spasi/hyphen) -> petakan, tak dikenal -> None + log warning
+- [x] 6.B Buat normalize_gap_type(value): valid -> enum, mirip (huruf besar/spasi/hyphen) -> petakan, tak dikenal -> None + log warning
       Selesai jika: test untuk "Methodological", "dataset gap", "ngawur"
-- [ ] 6.C Validator evidence:
+- [x] 6.C Validator evidence:
       - tolak simpan kalau quote kosong atau page_number kosong
       - tolak simpan kalau quote (dinormalisasi spasi + huruf besar/kecil) TIDAK ditemukan sebagai substring di teks paper
       - confidence_score dipaksa ke rentang 0-100
       Selesai jika: ada unit test untuk quote asli (lolos) dan quote karangan (ditolak)
-- [ ] 6.D Buat save_gaps_v2 (isi gap_evidence + node gap). Gap juga otomatis dapat edge mentioned_in ke paper sumbernya (dibuat oleh kode, bukan AI)
+- [x] 6.D Buat save_gaps_v2 (isi gap_evidence + node gap). Gap juga otomatis dapat edge mentioned_in ke paper sumbernya (dibuat oleh kode, bukan AI)
       Sambungkan via flag ENABLE_GAP_V2 (default False)
       Selesai jika: False = tidak berubah, True = 1 paper uji hasilkan gap dengan gap_type valid + min 1 evidence + edge ke paper
 

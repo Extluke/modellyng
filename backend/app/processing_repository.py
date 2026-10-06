@@ -566,3 +566,95 @@ class PdfProcessingRepository:
                     json=edge_rows_to_insert,
                 )
             self._raise_for_error(resp)
+
+    def save_gaps_v2(
+        self,
+        *,
+        project_id: UUID,
+        paper_id: UUID,
+        valid_gaps: list[dict],
+        paper_title: str | None = None
+    ) -> None:
+        """Save AI extracted gaps (v2) and link them to the source paper."""
+        if not valid_gaps:
+            return
+            
+        import httpx
+        
+        # Determine paper node
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.get(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers,
+                params={
+                    "project_id": f"eq.{project_id}",
+                    "node_type": "eq.paper",
+                    "detail": f"eq.{paper_id}",
+                }
+            )
+        self._raise_for_error(resp)
+        paper_nodes = resp.json()
+        
+        if paper_nodes:
+            paper_node_id = paper_nodes[0]["id"]
+        else:
+            # Create paper node
+            title = paper_title or f"Paper {paper_id}"
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(
+                    f"{self._rest_url}/knowledge_graph_nodes",
+                    headers={**self._headers, "Prefer": "return=representation"},
+                    json={
+                        "project_id": str(project_id),
+                        "node_type": "paper",
+                        "label": title[:100],
+                        "detail": str(paper_id),
+                        "status": "accepted"
+                    }
+                )
+            self._raise_for_error(resp)
+            paper_node_id = resp.json()[0]["id"]
+
+        node_rows_to_insert = []
+        for g in valid_gaps:
+            node_rows_to_insert.append({
+                "project_id": str(project_id),
+                "node_type": "research_gap",
+                "label": g["statement"][:200],
+                "detail": g["statement"],
+                "gap_typology": g["gap_type"],
+                "confidence_score": g["confidence_score"],
+                "evidence": [g["evidence"]],
+                "status": "accepted"
+            })
+            
+        if node_rows_to_insert:
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(
+                    f"{self._rest_url}/knowledge_graph_nodes",
+                    headers={**self._headers, "Prefer": "return=representation"},
+                    json=node_rows_to_insert,
+                )
+            self._raise_for_error(resp)
+            inserted_nodes = resp.json()
+            
+            # create mentioned_in edges
+            edge_rows_to_insert = []
+            for node in inserted_nodes:
+                edge_rows_to_insert.append({
+                    "project_id": str(project_id),
+                    "source_id": node["id"],
+                    "target_id": paper_node_id,
+                    "relation": "mentioned_in",
+                    "detail": None
+                })
+                
+            if edge_rows_to_insert:
+                with httpx.Client(timeout=60.0) as client:
+                    resp = client.post(
+                        f"{self._rest_url}/knowledge_graph_edges",
+                        headers={**self._headers, "Prefer": "return=minimal"},
+                        json=edge_rows_to_insert,
+                    )
+                self._raise_for_error(resp)
+
