@@ -353,6 +353,7 @@ class KnowledgeGraphNode {
     this.zoneCategory,
     this.x,
     this.y,
+    this.validationStatus,
     this.evidence = const [],
   });
 
@@ -367,6 +368,7 @@ class KnowledgeGraphNode {
   final String? zoneCategory;
   final double? x;
   final double? y;
+  final String? validationStatus;
   final List<KnowledgeGraphEvidence> evidence;
 
   factory KnowledgeGraphNode.fromJson(Map<String, dynamic> json) {
@@ -382,6 +384,7 @@ class KnowledgeGraphNode {
       zoneCategory: json['zone_category']?.toString(),
       x: (json['x'] as num?)?.toDouble(),
       y: (json['y'] as num?)?.toDouble(),
+      validationStatus: json['validation_status']?.toString(),
       evidence: (json['evidence'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphEvidence.fromJson(e as Map<String, dynamic>))
               .toList(growable: false) ??

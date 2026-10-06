@@ -139,6 +139,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       case 'method': return GraphNodeType.method;
       case 'variable': return GraphNodeType.variable;
       case 'paper': return GraphNodeType.paper;
+      case 'research_area': return GraphNodeType.researchArea;
+      case 'object': return GraphNodeType.object;
       default: return GraphNodeType.concept;
     }
   }
@@ -159,9 +161,11 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           switch (n.gapTypology!.toLowerCase()) {
             case 'unexplored_concept': gapType = GapType.unexploredConcept; break;
             case 'population_gap': gapType = GapType.populationGap; break;
-            case 'missing_relationship': gapType = GapType.missingRelationship; break;
+            case 'missing_relationship': 
+            case 'missing_relation': gapType = GapType.missingRelationship; break;
             case 'dataset_gap': gapType = GapType.datasetGap; break;
-            case 'methodological_gap': gapType = GapType.methodologicalGap; break;
+            case 'methodological_gap': 
+            case 'methodological': gapType = GapType.methodologicalGap; break;
             case 'empirical_gap': gapType = GapType.empiricalGap; break;
           }
         }
@@ -179,6 +183,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
             section: e.section ?? 'General',
             quote: e.quote,
           )).toList(),
+          isValidated: n.validationStatus == 'accepted',
           saturationStatus: n.saturationStatus,
           zoneCategory: n.zoneCategory,
         );
