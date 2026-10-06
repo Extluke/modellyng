@@ -225,47 +225,40 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
         # 3. Save to DB
         repository.save_knowledge_graph(project_id=project_id, extraction=kg_extraction)
 
-        # 4. Optional V2 Entity Extraction
-        ENABLE_ENTITY_V2 = False
-        ENABLE_GAP_V2 = False
-        import os
-        if os.getenv("ENABLE_ENTITY_V2", "false").lower() == "true":
-            ENABLE_ENTITY_V2 = True
-        if os.getenv("ENABLE_GAP_V2", "false").lower() == "true":
-            ENABLE_GAP_V2 = True
+        # 4. Optional V2 Entity & Gap Extraction (Combined for Token Efficiency)
+        ENABLE_ENTITY_V2 = os.getenv("ENABLE_ENTITY_V2", "false").lower() == "true"
+        ENABLE_GAP_V2 = os.getenv("ENABLE_GAP_V2", "false").lower() == "true"
             
         if ENABLE_ENTITY_V2 or ENABLE_GAP_V2:
             blocks = repository.get_blocks(parsed_paper_id)
             paper_text = "\n".join(b.get("text", "") for b in blocks)
             paper_title = paper.get("title")
 
-            if ENABLE_ENTITY_V2:
-                try:
-                    from .ai_extraction import extract_entities_v2, parse_entities_v2
-                    raw_entities = extract_entities_v2(paper_text)
-                    parsed_entities = parse_entities_v2(raw_entities)
+            try:
+                from .ai_extraction import extract_entities_and_gaps_v2, parse_entities_v2, parse_and_validate_gaps_v2
+                # Forensic 5: One prompt for both entities and gaps
+                raw_json = extract_entities_and_gaps_v2(paper_text)
+                
+                if ENABLE_ENTITY_V2:
+                    parsed_entities = parse_entities_v2(raw_json)
                     repository.save_entities_v2(
                         project_id=project_id,
                         paper_id=parsed_paper_id,
                         parsed_entities=parsed_entities,
                         paper_title=paper_title
                     )
-                except Exception as e:
-                    print(f"Entity V2 extraction failed: {e}")
 
-            if ENABLE_GAP_V2:
-                try:
-                    from .ai_extraction import extract_gaps_v2, parse_and_validate_gaps_v2
-                    raw_gaps = extract_gaps_v2(paper_text)
-                    valid_gaps = parse_and_validate_gaps_v2(raw_gaps, paper_text)
+                if ENABLE_GAP_V2:
+                    valid_gaps = parse_and_validate_gaps_v2(raw_json, paper_text)
                     repository.save_gaps_v2(
                         project_id=project_id,
                         paper_id=parsed_paper_id,
                         valid_gaps=valid_gaps,
                         paper_title=paper_title
                     )
-                except Exception as e:
-                    print(f"Gap V2 extraction failed: {e}")
+            except Exception as exc:
+                # Forensic 3: No more silent fail. Let it retry via Celery.
+                raise self.retry(exc=exc, max_retries=3, countdown=30)
 
         self.update_state(
             state="PROGRESS",

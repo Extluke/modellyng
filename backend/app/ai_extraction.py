@@ -637,18 +637,46 @@ class EntityExtractionV2(BaseModel):
     methods: list[str] = Field(default_factory=list)
     results: list[str] = Field(default_factory=list)
 
-def extract_entities_v2(paper_text: str) -> str:
-    """Extract variables, methods, and results as raw JSON string."""
+def extract_entities_and_gaps_v2(paper_text: str) -> str:
+    """Extract variables, methods, results, and research gaps in a single prompt with retry loop."""
     settings = get_settings()
     if not settings.gemini_api_key:
         raise GeminiExtractionError("Gemini API key belum dikonfigurasi")
     
-    prompt = f"""Anda adalah asisten AI akademik. Ekstrak 'variables', 'methods', dan 'results' utama dari teks karya ilmiah berikut.
-Jawab HANYA dalam format JSON dengan kunci: "variables", "methods", "results", di mana masing-masing adalah array of strings.
+    prompt = f"""Anda adalah asisten AI akademik yang ahli dalam mengekstrak pengetahuan dari karya ilmiah.
+
+TUGAS ANDA:
+1. Ekstrak 'variables', 'methods', dan 'results' utama dari teks karya ilmiah.
+2. Temukan SEMUA research gap yang disebutkan secara eksplisit oleh penulis.
+
+Untuk setiap gap, berikan:
+- "statement": Deskripsi gap dalam bahasa Indonesia.
+- "gap_type": JENIS GAP WAJIB SATU DARI INI (DILARANG MENGGUNAKAN NILAI LAIN): unexplored_concept, missing_relation, methodological, population_gap, dataset_gap, empirical_gap.
+- "confidence_score": 0-100 (angka).
+- "evidence": Objek berisi {{ "section": "nama bab", "quote": "kutipan asli verbatim", "page_number": angka_halaman }}.
+
+Jawab HANYA dalam format JSON dengan skema berikut:
+{{
+    "variables": ["var1", "var2"],
+    "methods": ["method1"],
+    "results": ["result1"],
+    "gaps": [
+        {{
+            "statement": "Penelitian ini belum mengukur...",
+            "gap_type": "empirical_gap",
+            "confidence_score": 90,
+            "evidence": {{
+                "section": "Conclusion",
+                "quote": "Future studies should investigate...",
+                "page_number": 12
+            }}
+        }}
+    ]
+}}
 Jangan tambahkan teks apapun selain JSON.
 
 Teks:
-{paper_text}
+{paper_text[:settings.gemini_max_input_chars]}
 """
     client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=120_000))
     models = [settings.gemini_model]
@@ -656,23 +684,28 @@ Teks:
         models.append(settings.gemini_fallback_model)
         
     last_exc = None
-    for model in models:
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_json_schema=EntityExtractionV2.model_json_schema(),
-                ),
-            )
-            return response.text or "{}"
-        except Exception as exc:
-            last_exc = exc
-            
-    raise GeminiExtractionError(f"Gagal ekstrak Entities V2: {last_exc}")
+    
+    # Forensic 1: Retry Loop Implementation
+    for attempt in range(3):
+        for model in models:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    ),
+                )
+                return response.text or "{}"
+            except Exception as exc:
+                last_exc = exc
+                import time
+                time.sleep(2 ** attempt)  # Exponential backoff
+                
+    raise GeminiExtractionError(f"Gagal ekstrak Entities & Gaps V2 setelah 3 percobaan: {last_exc}")
 
 def parse_entities_v2(raw: str) -> dict:
+    import json
     if not raw:
         return {"variables": [], "methods": [], "results": []}
     raw = raw.strip()
@@ -692,53 +725,6 @@ def parse_entities_v2(raw: str) -> dict:
         }
     except Exception:
         return {"variables": [], "methods": [], "results": []}
-
-# --- Phase 6: GAP Extraction V2 ---
-def extract_gaps_v2(paper_text: str) -> str:
-    """Extract strictly gap categories and evidences."""
-    settings = get_settings()
-    if not settings.gemini_api_key:
-        raise GeminiExtractionError("Gemini API key belum dikonfigurasi")
-    
-    prompt = f"""Anda adalah asisten AI yang fokus HANYA mencari celah penelitian (Research Gap) dari teks paper akademik berikut.
-    
-TUGAS:
-1. Temukan SEMUA research gap yang disebutkan secara eksplisit oleh penulis (biasanya di bagian conclusion, discussion, atau future work).
-2. Untuk setiap gap, berikan:
-   - "statement": Deskripsi gap dalam bahasa Indonesia.
-   - "gap_type": JENIS GAP WAJIB SATU DARI INI (DILARANG MENGGUNAKAN NILAI LAIN): unexplored_concept, missing_relation, methodological, population_gap, dataset_gap, empirical_gap.
-   - "confidence_score": 0-100 (angka).
-   - "evidence": Objek berisi {{ "section": "nama bab", "quote": "kutipan asli verbatim bahasa asli", "page_number": angka_halaman }}.
-
-FORMAT OUTPUT WAJIB BERUPA JSON VALID. Contoh:
-{{
-    "gaps": [
-        {{
-            "statement": "Penelitian ini belum mengukur dampak jangka panjang dari model.",
-            "gap_type": "empirical_gap",
-            "confidence_score": 90,
-            "evidence": {{
-                "section": "Conclusion",
-                "quote": "Future studies should investigate the long-term impacts...",
-                "page_number": 12
-            }}
-        }}
-    ]
-}}
-
-TEKS PAPER:
-{paper_text[:settings.gemini_max_input_chars]}
-"""
-    
-    client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=120_000))
-    response = client.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-        ),
-    )
-    return response.text or ""
 
 def normalize_gap_type(value: str | None) -> str | None:
     from .constants_graph import GapType
@@ -772,6 +758,8 @@ def normalize_gap_type(value: str | None) -> str | None:
 
 def validate_evidence(text: str, quote: str | None, page_number: int | str | None) -> bool:
     import re
+    from rapidfuzz import fuzz
+    
     if not quote or not str(quote).strip():
         return False
     if not page_number:
@@ -780,10 +768,15 @@ def validate_evidence(text: str, quote: str | None, page_number: int | str | Non
     norm_text = re.sub(r'\s+', ' ', text).lower()
     norm_quote = re.sub(r'\s+', ' ', str(quote)).lower()
     
-    if norm_quote not in norm_text:
-        return False
+    # Forensic 4: Fuzzy Matcher to handle hyphenation and slight PDF artifacts
+    if norm_quote in norm_text:
+        return True
         
-    return True
+    similarity = fuzz.partial_ratio(norm_quote, norm_text)
+    if similarity > 85:
+        return True
+        
+    return False
 
 def parse_and_validate_gaps_v2(raw_json: str, paper_text: str) -> list[dict]:
     import json
