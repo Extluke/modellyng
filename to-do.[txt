@@ -78,16 +78,16 @@
       Selesai jika: False = tidak berubah, True = 1 paper uji hasilkan gap dengan gap_type valid + min 1 evidence + edge ke paper
 
 ## 7. EDGES ANTAR ENTITAS (edge ke paper sudah dibuat kode di 5.C dan 6.D)
-- [ ] 7.A Buat extract_edges_v2(paper_text, entities_of_that_paper)
+- [x] 7.A Buat extract_edges_v2(paper_text, entities_of_that_paper)
       Dijalankan PER PAPER, teks paper WAJIB disertakan di prompt
       Edge hanya boleh menghubungkan entitas dari paper itu
       Output: [{source, target, edge_type, quote_basis}], edge_type dari EdgeType (selain mentioned_in)
-- [ ] 7.B Validator: buang edge jika
+- [x] 7.B Validator: buang edge jika
       - source/target tidak ada di node proyek
       - edge_type tidak valid
       - source sama dengan target (self-loop)
       - quote_basis kosong
-- [ ] 7.C Simpan ke tabel edge yang sudah ada (cek RECON.md), flag ENABLE_EDGE_V2 (default False)
+- [x] 7.C Simpan ke tabel edge yang sudah ada (cek RECON.md), flag ENABLE_EDGE_V2 (default False)
       Selesai jika: tidak ada edge yatim (orphan) di 1 proyek uji
 
 ## 8. SATURASI (backend, TANPA AI)

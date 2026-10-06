@@ -228,33 +228,52 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
         # 4. Optional V2 Entity & Gap Extraction (Combined for Token Efficiency)
         ENABLE_ENTITY_V2 = os.getenv("ENABLE_ENTITY_V2", "false").lower() == "true"
         ENABLE_GAP_V2 = os.getenv("ENABLE_GAP_V2", "false").lower() == "true"
+        ENABLE_EDGE_V2 = os.getenv("ENABLE_EDGE_V2", "false").lower() == "true"
             
-        if ENABLE_ENTITY_V2 or ENABLE_GAP_V2:
+        if ENABLE_ENTITY_V2 or ENABLE_GAP_V2 or ENABLE_EDGE_V2:
             blocks = repository.get_blocks(parsed_paper_id)
             paper_text = "\n".join(b.get("text", "") for b in blocks)
             paper_title = paper.get("title")
+            
+            extracted_valid_entities_for_edge = []
 
             try:
-                from .ai_extraction import extract_entities_and_gaps_v2, parse_entities_v2, parse_and_validate_gaps_v2
-                # Forensic 5: One prompt for both entities and gaps
-                raw_json = extract_entities_and_gaps_v2(paper_text)
-                
-                if ENABLE_ENTITY_V2:
-                    parsed_entities = parse_entities_v2(raw_json)
-                    repository.save_entities_v2(
-                        project_id=project_id,
-                        paper_id=parsed_paper_id,
-                        parsed_entities=parsed_entities,
-                        paper_title=paper_title
-                    )
+                if ENABLE_ENTITY_V2 or ENABLE_GAP_V2:
+                    from .ai_extraction import extract_entities_and_gaps_v2, parse_entities_v2, parse_and_validate_gaps_v2
+                    # Forensic 5: One prompt for both entities and gaps
+                    raw_json = extract_entities_and_gaps_v2(paper_text)
+                    
+                    if ENABLE_ENTITY_V2:
+                        parsed_entities = parse_entities_v2(raw_json)
+                        repository.save_entities_v2(
+                            project_id=project_id,
+                            paper_id=parsed_paper_id,
+                            parsed_entities=parsed_entities,
+                            paper_title=paper_title
+                        )
+                        extracted_valid_entities_for_edge.extend(parsed_entities.get("variables", []))
+                        extracted_valid_entities_for_edge.extend(parsed_entities.get("methods", []))
+                        extracted_valid_entities_for_edge.extend(parsed_entities.get("results", []))
 
-                if ENABLE_GAP_V2:
-                    valid_gaps = parse_and_validate_gaps_v2(raw_json, paper_text)
-                    repository.save_gaps_v2(
+                    if ENABLE_GAP_V2:
+                        valid_gaps = parse_and_validate_gaps_v2(raw_json, paper_text)
+                        repository.save_gaps_v2(
+                            project_id=project_id,
+                            paper_id=parsed_paper_id,
+                            valid_gaps=valid_gaps,
+                            paper_title=paper_title
+                        )
+                        for g in valid_gaps:
+                            extracted_valid_entities_for_edge.append(g["statement"])
+                
+                # Phase 7: Edge Extraction
+                if ENABLE_EDGE_V2 and extracted_valid_entities_for_edge:
+                    from .ai_extraction import extract_edges_v2, parse_and_validate_edges_v2
+                    raw_edges = extract_edges_v2(paper_text, extracted_valid_entities_for_edge)
+                    valid_edges = parse_and_validate_edges_v2(raw_edges, paper_text, extracted_valid_entities_for_edge)
+                    repository.save_edges_v2(
                         project_id=project_id,
-                        paper_id=parsed_paper_id,
-                        valid_gaps=valid_gaps,
-                        paper_title=paper_title
+                        valid_edges=valid_edges
                     )
             except Exception as exc:
                 # Forensic 3: No more silent fail. Let it retry via Celery.
