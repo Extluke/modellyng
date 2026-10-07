@@ -521,7 +521,7 @@ async def test_comparative_matrix_uses_latest_reviewed_values_and_evidence(
     monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
     matrix = await repository.get_comparative_matrix(user, project_id)
 
-    assert len(matrix.rows) == 10
+    assert len(matrix.rows) == 11
     methodology = next(row for row in matrix.rows if row.parameter.value == "methodology")
     assert methodology.cells[0].final_value == "Human method"
     assert methodology.cells[0].ai_value == "AI method"

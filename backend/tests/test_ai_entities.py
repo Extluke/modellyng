@@ -7,19 +7,19 @@ from app.ai_extraction import parse_entities_v2
 def test_parse_entities_v2_valid():
     raw = '{"variables": ["A", "B"], "methods": ["C"], "results": []}'
     res = parse_entities_v2(raw)
-    assert res == {"variables": ["A", "B"], "methods": ["C"], "results": []}
+    assert res == {"variables": ["A", "B"], "methods": ["C"], "results": [], "research_areas": [], "objects": []}
     print("Valid JSON: OK")
 
 def test_parse_entities_v2_markdown():
     raw = '```json\n{"variables": ["A"], "methods": [], "results": ["B"]}\n```'
     res = parse_entities_v2(raw)
-    assert res == {"variables": ["A"], "methods": [], "results": ["B"]}
+    assert res == {"variables": ["A"], "methods": [], "results": ["B"], "research_areas": [], "objects": []}
     print("Markdown JSON: OK")
 
 def test_parse_entities_v2_garbage():
     raw = 'this is not json'
     res = parse_entities_v2(raw)
-    assert res == {"variables": [], "methods": [], "results": []}
+    assert res == {"variables": [], "methods": [], "results": [], "research_areas": [], "objects": []}
     print("Garbage JSON: OK")
 
 if __name__ == '__main__':

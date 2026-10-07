@@ -632,11 +632,23 @@ class AiResearchSynthesis(BaseModel):
     alasan_pemilihan: str = Field(description="Narasi mengapa usulan judul-judul ini relevan dan kuat berdasarkan gap yang ada")
 
 
+class ZoneRead(BaseModel):
+    saturation_status: str
+    min_x: float
+    max_x: float
+    min_y: float
+    max_y: float
+
 class KnowledgeGraphMapRead(BaseModel):
     project_id: UUID
     project_title: str
     nodes: list[KnowledgeGraphNodeRead] = Field(default_factory=list)
     edges: list[KnowledgeGraphEdgeRead] = Field(default_factory=list)
+    zones: list[ZoneRead] = Field(default_factory=list)
+    gap_count: int = 0
 
 class GraphNodeSynthesisRequest(BaseModel):
     node_ids: list[str] = Field(description="Daftar ID node (terutama Gap dan konteksnya) untuk disintesis.")
+
+class GapValidationRequest(BaseModel):
+    status: Literal["accepted", "rejected"]

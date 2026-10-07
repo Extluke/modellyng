@@ -7,6 +7,8 @@ class NodeType(StrEnum):
     VARIABLE = "variable"
     METHOD = "method"
     RESULT = "result"
+    RESEARCH_AREA = "research_area"
+    OBJECT = "object"
 
 class GapType(StrEnum):
     UNEXPLORED_CONCEPT = "unexplored_concept"

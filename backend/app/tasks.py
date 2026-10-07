@@ -212,6 +212,23 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
             raise RuntimeError("Gagal mengambil extracted components untuk fase 2")
             
         components = response.json()
+        
+        with httpx.Client(timeout=15.0) as client:
+            gap_response = client.get(
+                f"{settings.supabase_url}/rest/v1/research_gaps",
+                headers={
+                    "apikey": settings.supabase_service_role_key,
+                    "Authorization": f"Bearer {settings.supabase_service_role_key}"
+                },
+                params={"paper_id": f"eq.{paper_id}", "is_active": "eq.true"}
+            )
+            
+        if gap_response.is_success:
+            for gap in gap_response.json():
+                components.append({
+                    "parameter": "research_gap",
+                    "ai_value": f"Tipe: {gap.get('gap_type')}, Pernyataan: {gap.get('gap_statement')}"
+                })
         import json
         structured_data = json.dumps([{
             "parameter": c["parameter"],
@@ -254,6 +271,31 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
                         extracted_valid_entities_for_edge.extend(parsed_entities.get("variables", []))
                         extracted_valid_entities_for_edge.extend(parsed_entities.get("methods", []))
                         extracted_valid_entities_for_edge.extend(parsed_entities.get("results", []))
+                        extracted_valid_entities_for_edge.extend(parsed_entities.get("research_areas", []))
+                        extracted_valid_entities_for_edge.extend(parsed_entities.get("objects", []))
+
+                        # Forensic 5: Fetch concepts for this paper
+                        try:
+                            with httpx.Client(timeout=10.0) as client:
+                                resp = client.get(
+                                    f"{settings.supabase_url}/rest/v1/knowledge_graph_nodes",
+                                    headers={
+                                        "apikey": settings.supabase_service_role_key,
+                                        "Authorization": f"Bearer {settings.supabase_service_role_key}"
+                                    },
+                                    params={
+                                        "project_id": f"eq.{project_id}",
+                                        "node_type": "eq.concept",
+                                        "select": "label"
+                                    }
+                                )
+                                if resp.is_success:
+                                    for node in resp.json():
+                                        extracted_valid_entities_for_edge.append(node["label"])
+                        except Exception:
+                            pass
+
+
 
                     if ENABLE_GAP_V2:
                         valid_gaps = parse_and_validate_gaps_v2(raw_json, paper_text)
@@ -275,6 +317,10 @@ def extract_knowledge_graph_task(self, job_id: str, paper_id: str) -> dict[str, 
                         project_id=project_id,
                         valid_edges=valid_edges
                     )
+                
+                # Phase 10: Run Post-Processing Pipeline (Saturation -> Clusters -> Layout -> Zones)
+                from .post_processing import run_post_processing
+                run_post_processing(project_id)
             except Exception as exc:
                 # Forensic 3: No more silent fail. Let it retry via Celery.
                 raise self.retry(exc=exc, max_retries=3, countdown=30)

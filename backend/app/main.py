@@ -55,6 +55,7 @@ from .schemas import (
     AccountSettingsUpdate,
     AiResearchSynthesis,
     GraphNodeSynthesisRequest,
+    GapValidationRequest,
 )
 from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
 from .source_verification import VerificationRequest, SourceVerificationRead, SourceReviewCreate, SourceReviewRead
@@ -420,6 +421,24 @@ async def synthesize_graph_nodes_endpoint(
 ) -> AiResearchSynthesis:
     from .synthesis_service import synthesize_graph_nodes
     return await synthesize_graph_nodes(current_user, project_id, payload.node_ids)
+
+
+@api.patch(
+    "/projects/{project_id}/gaps/{gap_id}/validation",
+    status_code=204,
+    tags=["projects"],
+)
+async def update_gap_validation_status(
+    project_id: UUID,
+    gap_id: UUID,
+    payload: GapValidationRequest,
+    current_user: CurrentUser,
+) -> None:
+    await project_repository.update_gap_validation_with_check(
+        current_user, project_id, gap_id, payload.status
+    )
+
+
 @api.get(
     "/projects/{project_id}/intelligence-report",
     response_model=IntelligenceReportRead,
@@ -653,9 +672,29 @@ async def review_source_verification(project_id: UUID, paper_id: UUID, verificat
 
 app.include_router(api)
 
-from .synthesis_service import synthesize_gaps
+from .synthesis_service import synthesize_gaps, synthesize_graph_nodes
 
 @app.post("/projects/{project_id}/synthesize_gaps", response_model=AiResearchSynthesis)
 async def synthesize_research_gaps(project_id: UUID, user: CurrentUser) -> AiResearchSynthesis:
     return await synthesize_gaps(user, project_id)
+
+
+@app.patch("/projects/{project_id}/gaps/{gap_id}/validation")
+async def validate_gap_status(
+    project_id: UUID, gap_id: UUID, payload: GapValidationRequest, user: CurrentUser
+):
+    from .repository import project_repository
+    # Returns 404 if not found
+    node = await project_repository.update_gap_validation_with_check(
+        user, project_id, gap_id, payload.status
+    )
+    return {"id": node["id"], "status": node["status"]}
+
+@app.post("/projects/{project_id}/gaps/synthesize", response_model=AiResearchSynthesis)
+async def synthesize_selected_gaps(
+    project_id: UUID, payload: GraphNodeSynthesisRequest, user: CurrentUser
+) -> AiResearchSynthesis:
+    if not payload.node_ids:
+        raise HTTPException(status_code=400, detail="gap_ids (node_ids) tidak boleh kosong")
+    return await synthesize_graph_nodes(user, project_id, payload.node_ids)
 

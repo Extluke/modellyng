@@ -392,6 +392,7 @@ class PdfProcessingRepository:
                 "label": node.label,
                 "detail": node.detail,
                 "gap_typology": node.gap_typology,
+                "saturation_status": node.saturation_status,
                 "confidence_score": node.confidence_score,
                 "evidence": [{"quote": node.evidence_quote}] if node.evidence_quote else [],
                 "status": "pending"
@@ -405,7 +406,8 @@ class PdfProcessingRepository:
             with httpx.Client(timeout=60.0) as client:
                 response = client.post(
                     f"{self._rest_url}/knowledge_graph_nodes",
-                    headers={**self._headers, "Prefer": "return=representation"},
+                    headers={**self._headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+                    params={"on_conflict": "project_id,node_type,label"},
                     json=node_rows,
                 )
             self._raise_for_error(response)
@@ -496,7 +498,7 @@ class PdfProcessingRepository:
 
         # Forensic 6: Upsert nodes to prevent race conditions
         node_rows_to_upsert = []
-        for key, n_type in [("variables", "variable"), ("methods", "method"), ("results", "result")]:
+        for key, n_type in [("variables", "variable"), ("methods", "method"), ("results", "result"), ("research_areas", "research_area"), ("objects", "object")]:
             for label in parsed_entities.get(key, []):
                 if not isinstance(label, str) or not label.strip():
                     continue
@@ -539,7 +541,7 @@ class PdfProcessingRepository:
         existing_edges = set(e["source_id"] for e in resp.json())
         
         edge_rows_to_insert = []
-        for key in ["variables", "methods", "results"]:
+        for key in ["variables", "methods", "results", "research_areas", "objects"]:
             for label in parsed_entities.get(key, []):
                 if not isinstance(label, str) or not label.strip():
                     continue

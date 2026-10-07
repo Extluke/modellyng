@@ -45,8 +45,13 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
     GraphNodeType.result,
   };
   
-  final Set<GapType> _visibleGapTypes = GapType.values.toSet();
-  final Set<String> _visibleSaturationStatuses = {'high', 'medium', 'low', 'none'};
+  final Set<GraphGapType> _visibleGapTypes = GraphGapType.values.where((e) => e != GraphGapType.other).toSet();
+  final Set<GraphSaturationStatus> _visibleSaturationStatuses = {
+    GraphSaturationStatus.high,
+    GraphSaturationStatus.medium,
+    GraphSaturationStatus.low,
+    GraphSaturationStatus.none,
+  };
   String? _selectedMethodCluster;
   String? _selectedObjectCluster;
 
@@ -120,30 +125,91 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       ..scale(scale);
     _transformController.value = centerMatrix;
   }
+  Future<void> _handleGapValidation(String gapId, String status) async {
+    try {
+      await ref.read(projectRepositoryProvider).updateGapValidation(widget.projectId, gapId, status);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gap $status')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: ${ProjectRepository.readableError(e)}')));
+      }
+    }
+  }
+
+  Future<void> _handleSynthesizeGap(String gapId) async {
+    try {
+      final res = await ref.read(projectRepositoryProvider).synthesizeGraphNodes(widget.projectId, [gapId]);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Hasil Sintesis Riset'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Usulan Judul Tesis:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...res.usulanJudul.map((t) => Text('- $t')),
+                const SizedBox(height: 16),
+                const Text('Rumusan Masalah:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...res.rumusanMasalah.map((p) => Text('- $p')),
+                const SizedBox(height: 16),
+                const Text('Pernyataan Novelty:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(res.pernyataanNovelty),
+                const SizedBox(height: 16),
+                const Text('Alasan Pemilihan:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(res.alasanPemilihan),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Tutup'),
+            )
+          ],
+        )
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal sintesis: ${ProjectRepository.readableError(e)}')));
+      }
+    }
+  }
 
   void _generateLayout() {
     if (_graphMap == null) return;
     
+    int index = 0;
+    final totalNodes = _graphMap!.nodes.length;
+    
     for (final node in _graphMap!.nodes) {
+      double xVal;
+      double yVal;
+      
+      if (node.x == null || node.y == null) {
+        // Fallback: arrange in a circle if no coordinates are provided
+        final radius = 600.0 + (index % 3) * 200.0;
+        final angle = (index / totalNodes) * 2 * pi;
+        xVal = cos(angle) * radius;
+        yVal = sin(angle) * radius;
+        index++;
+      } else {
+        xVal = node.x!;
+        yVal = node.y!;
+      }
+      
       // Base offset 2500 to prevent negative coords from clipping top/left
-      final x = (node.x ?? 0.0) + 2500.0;
-      final y = (node.y ?? 0.0) + 2500.0;
+      final x = xVal + 2500.0;
+      final y = yVal + 2500.0;
       _nodePositions[node.id] = Offset(x, y);
     }
   }
 
-  GraphNodeType _mapKindToNodeType(String kind) {
-    switch (kind) {
-      case 'gap': return GraphNodeType.researchGap;
-      case 'result': return GraphNodeType.result;
-      case 'method': return GraphNodeType.method;
-      case 'variable': return GraphNodeType.variable;
-      case 'paper': return GraphNodeType.paper;
-      case 'research_area': return GraphNodeType.researchArea;
-      case 'object': return GraphNodeType.object;
-      default: return GraphNodeType.concept;
-    }
-  }
+  // Removed _mapKindToNodeType
 
   void _updateVisibleGraph() {
     setState(() {
@@ -156,24 +222,17 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       final query = _searchController.text.toLowerCase();
       
       final allGraphNodes = _graphMap!.nodes.map((n) {
-        GapType? gapType;
-        if (n.kind == 'gap' && n.gapTypology != null) {
-          switch (n.gapTypology!.toLowerCase()) {
-            case 'unexplored_concept': gapType = GapType.unexploredConcept; break;
-            case 'population_gap': gapType = GapType.populationGap; break;
-            case 'missing_relationship': 
-            case 'missing_relation': gapType = GapType.missingRelationship; break;
-            case 'dataset_gap': gapType = GapType.datasetGap; break;
-            case 'methodological_gap': 
-            case 'methodological': gapType = GapType.methodologicalGap; break;
-            case 'empirical_gap': gapType = GapType.empiricalGap; break;
-          }
+        final nodeType = GraphNodeType.fromJson(n.kind);
+        
+        GraphGapType? gapType;
+        if (nodeType == GraphNodeType.researchGap) {
+          gapType = GraphGapType.fromJson(n.gapTypology);
         }
         
         return GraphNode(
           id: n.id,
           label: n.label,
-          type: _mapKindToNodeType(n.kind),
+          type: nodeType,
           gapStatement: n.detail,
           gapType: gapType,
           confidence: n.confidenceScore != null ? GapConfidence.high : GapConfidence.medium,
@@ -186,6 +245,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           isValidated: n.validationStatus == 'accepted',
           saturationStatus: n.saturationStatus,
           zoneCategory: n.zoneCategory,
+          methodCluster: n.methodCluster,
+          objectCluster: n.objectCluster,
         );
       }).toList();
 
@@ -197,11 +258,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         }
 
         if (n.saturationStatus != null) {
-          if (!_visibleSaturationStatuses.contains(n.saturationStatus!.toLowerCase())) return false;
+          final satEnum = GraphSaturationStatus.fromJson(n.saturationStatus!);
+          if (!_visibleSaturationStatuses.contains(satEnum)) return false;
         }
 
         if (_selectedMethodCluster != null && _selectedMethodCluster!.isNotEmpty) {
-          if (n.type == GraphNodeType.method && n.label != _selectedMethodCluster) return false;
+          if (n.type == GraphNodeType.method && n.methodCluster != _selectedMethodCluster) return false;
         }
         
         if (_selectedObjectCluster != null && _selectedObjectCluster!.isNotEmpty) {
@@ -294,7 +356,6 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                               buildNodeFilter(Icons.lightbulb_outline, 'Concept Nodes', GraphNodeType.concept),
                               buildNodeFilter(Icons.data_object, 'Variable Nodes', GraphNodeType.variable),
                               buildNodeFilter(Icons.warning_amber_rounded, 'Research GAP Nodes', GraphNodeType.researchGap),
-                              buildNodeFilter(Icons.public, 'Research Area', GraphNodeType.researchArea),
                               buildNodeFilter(Icons.science_outlined, 'Method Nodes', GraphNodeType.method),
                             ],
                           );
@@ -308,7 +369,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                         LayoutBuilder(builder: (context, constraints) {
                           final width = (constraints.maxWidth - 12) / 2;
                           
-                          Widget buildGapFilter(IconData icon, String label, GapType type) {
+                          Widget buildGapFilter(IconData icon, String label, GraphGapType type) {
                             return _buildFilterButton(
                               width: width,
                               icon: icon,
@@ -331,12 +392,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                             spacing: 12,
                             runSpacing: 12,
                             children: [
-                              buildGapFilter(Icons.travel_explore, 'Unexplored Concept', GapType.unexploredConcept),
-                              buildGapFilter(Icons.link_off, 'Missing Relation', GapType.missingRelationship),
-                              buildGapFilter(Icons.science, 'Methodological', GapType.methodologicalGap),
-                              buildGapFilter(Icons.groups, 'Population Gap', GapType.populationGap),
-                              buildGapFilter(Icons.dataset, 'Dataset Gap', GapType.datasetGap),
-                              buildGapFilter(Icons.analytics, 'Empirical Gap', GapType.empiricalGap),
+                              buildGapFilter(Icons.travel_explore, 'Unexplored Concept', GraphGapType.unexploredConcept),
+                              buildGapFilter(Icons.link_off, 'Missing Relation', GraphGapType.missingRelation),
+                              buildGapFilter(Icons.science, 'Methodological', GraphGapType.methodological),
+                              buildGapFilter(Icons.groups, 'Population Gap', GraphGapType.populationGap),
+                              buildGapFilter(Icons.dataset, 'Dataset Gap', GraphGapType.datasetGap),
+                              buildGapFilter(Icons.analytics, 'Empirical Gap', GraphGapType.empiricalGap),
                             ],
                           );
                         }),
@@ -349,7 +410,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                         LayoutBuilder(builder: (context, constraints) {
                           final width = (constraints.maxWidth - 12) / 2;
                           
-                          Widget buildSatFilter(Color color, String label, String status) {
+                          Widget buildSatFilter(Color color, String label, GraphSaturationStatus status) {
                             return _buildFilterButton(
                               width: width,
                               icon: Icons.square,
@@ -373,10 +434,10 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                             spacing: 12,
                             runSpacing: 12,
                             children: [
-                              buildSatFilter(Colors.green, 'Banyak di teliti', 'high'),
-                              buildSatFilter(Colors.yellow.shade700, 'Cukup di teliti', 'medium'),
-                              buildSatFilter(Colors.orange, 'Jarang di teliti', 'low'),
-                              buildSatFilter(Colors.red, 'Belum di teliti', 'none'),
+                              buildSatFilter(Colors.green, 'Banyak di teliti', GraphSaturationStatus.high),
+                              buildSatFilter(Colors.yellow.shade700, 'Cukup di teliti', GraphSaturationStatus.medium),
+                              buildSatFilter(Colors.orange, 'Jarang di teliti', GraphSaturationStatus.low),
+                              buildSatFilter(Colors.red, 'Belum di teliti', GraphSaturationStatus.none),
                             ],
                           );
                         }),
@@ -391,8 +452,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                           label: 'Method Cluster',
                           value: _selectedMethodCluster,
                           items: _graphMap?.nodes
-                              .where((n) => _mapKindToNodeType(n.kind) == GraphNodeType.method)
-                              .map((n) => n.label)
+                              .map((n) => n.methodCluster)
+                              .whereType<String>()
                               .toSet()
                               .toList() ?? [],
                           onChanged: (val) {
@@ -406,7 +467,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                           label: 'Object Cluster (Zone)',
                           value: _selectedObjectCluster,
                           items: _graphMap?.nodes
-                              .map((n) => n.zoneCategory)
+                              .map((n) => n.objectCluster)
                               .whereType<String>()
                               .toSet()
                               .toList() ?? [],
@@ -802,20 +863,70 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                     },
                   ),
                   
-                  const SizedBox(height: 48),
-                  
-                  // 6. Button Baca Sumber
+                  // 6. Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _handleGapValidation(node.id, 'rejected');
+                          },
+                          icon: const Icon(Icons.close, color: Colors.red),
+                          label: const Text('TOLAK GAP', style: TextStyle(color: Colors.red)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _handleGapValidation(node.id, 'accepted');
+                          },
+                          icon: const Icon(Icons.check),
+                          label: const Text('TERIMA GAP'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _handleSynthesizeGap(node.id);
+                      },
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('SINTESIS RISET (AI)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.indigo,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
                       onPressed: () {
                         // Aksi baca sumber paper
                       },
                       icon: const Icon(Icons.description_outlined),
                       label: const Text('BACA PAPER SUMBER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      style: FilledButton.styleFrom(
+                      style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.indigo,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
@@ -867,10 +978,40 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         icon = Icons.lightbulb_outline_rounded;
         color = Colors.deepPurple;
         break;
+      case GraphNodeType.unknown:
+      default:
+        icon = Icons.help_outline;
+        color = Colors.grey;
+        break;
     }
 
     // Gaps are rendered larger as requested in wireframe
     final isGap = node.type == GraphNodeType.researchGap;
+
+    // Saturation Status Indicator
+    Widget? saturationIndicator;
+    if (node.saturationStatus != null) {
+      Color satColor;
+      switch (node.saturationStatus?.toLowerCase()) {
+        case 'high': satColor = Colors.green; break;
+        case 'medium': satColor = Colors.yellow.shade700; break;
+        case 'low': satColor = Colors.orange; break;
+        case 'none': satColor = Colors.red; break;
+        default: satColor = Colors.grey;
+      }
+      saturationIndicator = Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: satColor,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: [
+            BoxShadow(color: satColor.withValues(alpha: 0.4), blurRadius: 4, spreadRadius: 1)
+          ]
+        ),
+      );
+    }
 
     return GestureDetector(
       onTap: () {
@@ -893,7 +1034,18 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 20),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, color: color, size: 20),
+                if (saturationIndicator != null)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: saturationIndicator,
+                  ),
+              ],
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1128,46 +1280,55 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                             clipBehavior: Clip.none,
                             children: [
                               // Zone Backgrounds if Gap Map is active
-                              if (_selectedMap == 2) ...[
-                                Positioned(
-                                  top: 500,
-                                  left: 500,
-                                  right: 0,
-                                  height: 600,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.withValues(alpha: 0.05),
-                                      border: Border(top: BorderSide(color: Colors.green.withValues(alpha: 0.3), width: 2)),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Text(
-                                        '🟩 ZONA: WELL-STUDIED AREA',
-                                        style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 18),
+                              if (_selectedMap == 2 && _graphMap != null) 
+                                ..._graphMap!.zones.map((zone) {
+                                  final left = zone.minX + 2500.0;
+                                  final top = zone.minY + 2500.0;
+                                  final width = zone.maxX - zone.minX;
+                                  final height = zone.maxY - zone.minY;
+
+                                  Color color;
+                                  String label;
+                                  switch (GraphSaturationStatus.fromJson(zone.saturationStatus)) {
+                                    case GraphSaturationStatus.high:
+                                      color = Colors.green;
+                                      label = '🟩 ZONA: BANYAK DITELITI';
+                                      break;
+                                    case GraphSaturationStatus.medium:
+                                      color = Colors.yellow.shade700;
+                                      label = '🟨 ZONA: CUKUP DITELITI';
+                                      break;
+                                    case GraphSaturationStatus.low:
+                                      color = Colors.orange;
+                                      label = '🟧 ZONA: JARANG DITELITI';
+                                      break;
+                                    case GraphSaturationStatus.none:
+                                    default:
+                                      color = Colors.red;
+                                      label = '🟥 ZONA: BELUM DITELITI';
+                                      break;
+                                  }
+
+                                  return Positioned(
+                                    left: left,
+                                    top: top,
+                                    width: width > 0 ? width : 500,
+                                    height: height > 0 ? height : 500,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.05),
+                                        border: Border(top: BorderSide(color: color.withValues(alpha: 0.3), width: 2)),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Text(
+                                          label,
+                                          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 1100,
-                                  left: 500,
-                                  right: 0,
-                                  height: 600,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(alpha: 0.05),
-                                      border: Border(top: BorderSide(color: Colors.amber.withValues(alpha: 0.3), width: 2)),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Text(
-                                        '🟨 ZONA: UNDER-STUDIED AREA',
-                                        style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold, fontSize: 18),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                  );
+                                }),
                               // 1. Draw Edges with CustomPainter
                               Positioned.fill(
                                 child: CustomPaint(
@@ -1178,8 +1339,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                                 ),
                               ),
                               // 2. Draw Nodes
-                              ..._visibleNodes.map((node) {
-                                final pos = _nodePositions[node.id] ?? const Offset(2500, 2500);
+                              ..._visibleNodes.where((node) => _nodePositions.containsKey(node.id)).map((node) {
+                                final pos = _nodePositions[node.id]!;
                                 return Positioned(
                                   left: pos.dx,
                                   top: pos.dy,

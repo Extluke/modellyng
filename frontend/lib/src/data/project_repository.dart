@@ -82,4 +82,10 @@ class ProjectRepository {
     return AiResearchSynthesis.fromJson(response.data!);
   }
 
+  Future<void> updateGapValidation(String projectId, String gapId, String status) async {
+    await _dio.patch(
+      '/api/v1/projects/$projectId/gaps/$gapId/validation',
+      data: {'status': status},
+    );
+  }
 }

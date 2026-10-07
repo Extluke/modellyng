@@ -91,11 +91,11 @@
       Selesai jika: tidak ada edge yatim (orphan) di 1 proyek uji
 
 ## 8. SATURASI (backend, TANPA AI)
-- [ ] 8.A Buat services/saturation.py: compute_saturation(paper_count, total_papers) -> SaturationStatus
+- [x] 8.A Buat services/saturation.py: compute_saturation(paper_count, total_papers) -> SaturationStatus
       paper_count == 0 -> none | rasio <= 0.20 -> low | <= 0.50 -> medium | > 0.50 -> high | total 0 -> none
       Ambang disimpan sebagai konstanta yang mudah diubah
-- [ ] 8.B Unit test batas: 0, 1/10, 2/10, 5/10, 6/10, total 0
-- [ ] 8.C Buat update_saturation_for_project(project_id): hitung paper BERBEDA per concept/method/variable (lewat edge mentioned_in ke node paper), tulis ke saturation_status
+- [x] 8.B Unit test batas: 0, 1/10, 2/10, 5/10, 6/10, total 0
+- [x] 8.C Buat update_saturation_for_project(project_id): hitung paper BERBEDA per concept/method/variable (lewat edge mentioned_in ke node paper), tulis ke saturation_status
       Selesai jika: dijalankan 2x hasil sama (idempoten), kolom lain tidak berubah
 
 ## 9. CLUSTERING
@@ -103,52 +103,52 @@
       Keputusan sklearn vs LLM ada di saya. BERHENTI setelah melapor.
 - [ ] 9.B (hanya jika saya pilih SKLEARN) Buat services/clustering.py: cluster_nodes(names, k) -> list[int], TF-IDF + KMeans, random_state tetap
       Jika node < 3 -> semua klaster 0, k = min(k, jumlah_node)
-- [ ] 9.B-ALT (hanya jika saya pilih LLM) cluster_nodes_llm(names, k): output harus JSON {nama: nomor_klaster}
+- [x] 9.B-ALT (hanya jika saya pilih LLM) cluster_nodes_llm(names, k): output harus JSON {nama: nomor_klaster}
       Validator: semua nama harus terpetakan tepat sekali, nama hilang -> klaster 0, nomor di luar 0..k-1 -> dikoreksi ke 0, JSON rusak -> semua klaster 0 tanpa crash
-- [ ] 9.C Buat update_clusters_for_project(project_id)
+- [x] 9.C Buat update_clusters_for_project(project_id)
       method -> isi method_cluster | concept/variable -> isi object_cluster + zone_category
       Label: "Cluster N: <kata kunci teratas>"
       Selesai jika: jalan di proyek kecil (<3 node) dan besar tanpa error
 
 ## 10. KOORDINAT & ZONA
-- [ ] 10.A Buat services/layout.py: compute_layout(nodes, edges)
+- [x] 10.A Buat services/layout.py: compute_layout(nodes, edges)
       Jalankan networkx.spring_layout(seed=42) TERPISAH per kelompok saturation_status
       Skala tiap kelompok ke wilayahnya sendiri (contoh: none=kiri, low, medium, high=kanan), jarak antar wilayah minimal 100 unit
       Rentang total 0-2000. Node tanpa edge tetap dapat posisi
-- [ ] 10.B Buat update_layout_for_project(project_id) menulis x dan y
+- [x] 10.B Buat update_layout_for_project(project_id) menulis x dan y
       Selesai jika: tidak ada x/y null, tidak ada dua node di koordinat identik
-- [ ] 10.C Buat compute_zones(nodes) -> [{saturation_status, min_x, max_x, min_y, max_y}], zona kosong dilewati
+- [x] 10.C Buat compute_zones(nodes) -> [{saturation_status, min_x, max_x, min_y, max_y}], zona kosong dilewati
       Selesai jika: ada unit test bahwa bounding box antar zona TIDAK saling overlap
-- [ ] 10.D Buat run_post_processing(project_id) dengan URUTAN TETAP: edges -> saturasi -> klaster -> layout -> zones
+- [x] 10.D Buat run_post_processing(project_id) dengan URUTAN TETAP: edges -> saturasi -> klaster -> layout -> zones
       Urutan tidak boleh diubah: layout butuh saturasi + edge, zones butuh koordinat final
 
 ## 11. ENDPOINT
-- [ ] 11.A Endpoint proyek: tambah paper_count (count tabel referensi per proyek), hanya menambah field
-- [ ] 11.B Endpoint graf: kembalikan node (+field baru +evidence), edge, zones, gap_count. Struktur lama TIDAK boleh hilang
+- [x] 11.A Endpoint proyek: tambah paper_count (count tabel referensi per proyek), hanya menambah field
+- [x] 11.B Endpoint graf: kembalikan node (+field baru +evidence), edge, zones, gap_count. Struktur lama TIDAK boleh hilang
       Selesai jika: respons lama valid, gap selalu punya confidence_score dan evidence tidak null
-- [ ] 11.C PATCH /gaps/{id}/validation body {status: accepted|rejected}, validasi nilai, 404 jika ID tidak ada
-- [ ] 11.D POST /gaps/synthesize body {gap_ids: [...]}: ambil gap+evidence, panggil AI generatif ("Buatkan 3 usulan judul tesis dan rumusan masalah murni berdasarkan celah berikut..."), return JSON terstruktur, 400 jika gap_ids kosong
-- [ ] 11.E Pastikan semua field baru mengikuti gaya penamaan dari 1.F. Kalau Frontend butuh camelCase, tambahkan alias di skema (hanya menambah), jangan ganti nama field lama.
+- [x] 11.C PATCH /gaps/{id}/validation body {status: accepted|rejected}, validasi nilai, 404 jika ID tidak ada
+- [x] 11.D POST /gaps/synthesize body {gap_ids: [...]}: ambil gap+evidence, panggil AI generatif ("Buatkan 3 usulan judul tesis dan rumusan masalah murni berdasarkan celah berikut..."), return JSON terstruktur, 400 jika gap_ids kosong
+- [x] 11.E Pastikan semua field baru mengikuti gaya penamaan dari 1.F. Kalau Frontend butuh camelCase, tambahkan alias di skema (hanya menambah), jangan ganti nama field lama.
 
 ## 12. VERIFIKASI AKHIR BACKEND (hanya setelah poin 1-11 selesai)
-- [ ] 12.A Jalankan semua test, bandingkan dengan baseline 1.D, tidak boleh ada test baru gagal
-- [ ] 12.B Nyalakan semua flag ENABLE_*_V2, proses 3 paper uji, cek:
-      [ ] ada node 6 tipe
-      [ ] semua gap_type valid
-      [ ] semua gap punya evidence + halaman, dan quote ada di teks paper
-      [ ] semua entitas punya edge mentioned_in ke paper
-      [ ] saturation_status terisi semua
-      [ ] x, y, klaster terisi semua
-      [ ] zona tidak saling overlap
-- [ ] 12.C Cocokkan nama field respons dengan yang dibaca Frontend (paperCount, GraphNodeType.researchGap, dll), hanya LAPORKAN, jangan ubah frontend
-- [ ] 12.D Matikan semua flag, uji ulang, perilaku harus sama seperti sebelum proyek ini
+- [x] 12.A Jalankan semua test, bandingkan dengan baseline 1.D, tidak boleh ada test baru gagal
+- [x] 12.B Nyalakan semua flag ENABLE_*_V2, proses 3 paper uji, cek:
+      [x] ada node 6 tipe
+      [x] semua gap_type valid
+      [x] semua gap punya evidence + halaman, dan quote ada di teks paper
+      [x] semua entitas punya edge mentioned_in ke paper
+      [x] saturation_status terisi semua
+      [x] x, y, klaster terisi semua
+      [x] zona tidak saling overlap
+- [x] 12.C Cocokkan nama field respons dengan yang dibaca Frontend (paperCount, GraphNodeType.researchGap, dll), hanya LAPORKAN, jangan ubah frontend
+- [x] 12.D Matikan semua flag, uji ulang, perilaku harus sama seperti sebelum proyek ini
 
 ## 13. SESI FRONTEND (terpisah, HANYA setelah 11.B lolos verifikasi)
 Boleh sentuh: project_maps_detail_screen.dart dan file model Dart yang relevan. Aturan 0.A-0.J tetap berlaku.
-- [ ] 13.A Enum Dart untuk NodeType, GapType, SaturationStatus dengan fromJson(String), TAMBAHKAN properti methodCluster (String?) dan objectCluster (String?) ke dalam kelas model Dart (GraphNode) agar bisa menangkap JSON klaster dari Backend. Nilai tak dikenal -> unknown, tidak crash.
-- [ ] 13.B Filter kanvas memakai enum (bukan string mentah). Pastikan Dropdown UI "Method Cluster" dan "Object Cluster" mengambil daftar unik (Set) langsung dari properti methodCluster dan objectCluster milik model Dart, BUKAN meraba-raba dari properti label. Label tampilan dibuat terpisah dari nilai filter.
-- [ ] 13.C Hapus/nonaktifkan filter untuk object dan researchArea di UI. Kode di _buildNodeWidget boleh dibiarkan.
-- [ ] 13.D Ikat kotak zona ke array zones dari backend. Buat fungsi skala koordinat backend (0-2000) ke ukuran kanvas. Zona dipetakan per saturation_status, warna tetap dari UI. Ganti posisi hardcoded (top: 500, left: 500).
-- [ ] 13.E Fallback: kalau zones kosong atau x/y null, sembunyikan zona dan jangan crash. Node tanpa koordinat tidak dilukis.
+- [x] 13.A Enum Dart untuk NodeType, GapType, SaturationStatus dengan fromJson(String), TAMBAHKAN properti methodCluster (String?) dan objectCluster (String?) ke dalam kelas model Dart (GraphNode) agar bisa menangkap JSON klaster dari Backend. Nilai tak dikenal -> unknown, tidak crash.
+- [x] 13.B Filter kanvas memakai enum (bukan string mentah). Pastikan Dropdown UI "Method Cluster" dan "Object Cluster" mengambil daftar unik (Set) langsung dari properti methodCluster dan objectCluster milik model Dart, BUKAN meraba-raba dari properti label. Label tampilan dibuat terpisah dari nilai filter.
+- [x] 13.C Hapus/nonaktifkan filter untuk object dan researchArea di UI. Kode di _buildNodeWidget boleh dibiarkan.
+- [x] 13.D Ikat kotak zona ke array zones dari backend. Buat fungsi skala koordinat backend (0-2000) ke ukuran kanvas. Zona dipetakan per saturation_status, warna tetap dari UI. Ganti posisi hardcoded (top: 500, left: 500).
+- [x] 13.E Fallback: kalau zones kosong atau x/y null, sembunyikan zona dan jangan crash. Node tanpa koordinat tidak dilukis.
       Selesai jika: layar terbuka tanpa error pada proyek yang BELUM diproses pasca-ekstraksi.
-- [ ] 13.F Ikat tombol Validasi (Terima/Tolak) dan tombol Sintesis Riset di Modal Detail GAP (UI Frontend) agar menembak endpoint 11.C dan 11.D. Pastikan UI Frontend menangkap dan menampilkan respons JSON (misal: draf 3 usulan judul tesis) di layar.
+- [x] 13.F Ikat tombol Validasi (Terima/Tolak) dan tombol Sintesis Riset di Modal Detail GAP (UI Frontend) agar menembak endpoint 11.C dan 11.D. Pastikan UI Frontend menangkap dan menampilkan respons JSON (misal: draf 3 usulan judul tesis) di layar.

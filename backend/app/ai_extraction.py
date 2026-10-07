@@ -252,7 +252,7 @@ def extract_academic_components(
             message = str(exc)
             transient = isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)) or any(
                 marker in message.upper()
-                for marker in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE")
+                for marker in ("429", "503", "504", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED")
             )
             if transient and index < len(models) - 1:
                 last_transient = exc
@@ -273,9 +273,9 @@ def extract_academic_components(
                 "Kuota Gemini sedang habis. Menunggu sebelum mencoba lagi.",
                 transient=True,
             ) from exc
-        if "503" in message or "UNAVAILABLE" in message.upper():
+        if "503" in message or "504" in message or "UNAVAILABLE" in message.upper() or "DEADLINE_EXCEEDED" in message.upper():
             raise GeminiExtractionError(
-                "Gemini sedang sibuk. Modellyng akan mencoba lagi otomatis.",
+                "Gemini sedang sibuk atau timeout. Modellyng akan mencoba lagi otomatis.",
                 transient=True,
             ) from exc
         if "API_KEY" in message.upper() or "401" in message or "403" in message:
@@ -574,6 +574,7 @@ class AiKnowledgeGraphNode(BaseModel):
     detail: str = Field(description="Penjelasan.")
     parent_label: str | None = Field(default=None, description="Jika ini sub-konsep, tulis label node induknya (Konsep Payung).")
     gap_typology: str | None = Field(default=None, description="Tipe celah jika node ini adalah 'gap'. (unexplored_concept, missing_relation, dll)")
+    saturation_status: str | None = Field(default=None, description="Tingkat kejenuhan riset: 'high' (banyak diteliti), 'medium' (cukup), 'low' (jarang), 'none' (belum).")
     confidence_score: int = Field(default=95, ge=0, le=100, description="Tingkat keyakinan (0-100).")
     evidence_quote: str | None = Field(default=None, description="Kutipan terkait dari input JSON.")
 
@@ -600,7 +601,8 @@ ATURAN (Phase 2):
 2. Temukan hubungan antar entitas tersebut (misal Method A -> Result B -> Gap C) dan buat sebagai Edges. Pastikan saling terhubung.
 3. Tentukan `parent_label` jika sebuah node merupakan sub-bagian dari node lain.
 4. Jika node adalah gap, berikan `gap_typology` secara spesifik.
-5. Anda WAJIB memberikan format JSON sesuai schema. Anda membaca dari data hasil ekstraksi tahap 1 di bawah ini:
+5. WAJIB ISI `saturation_status` ('high', 'medium', 'low', 'none') khususnya untuk research_area, gap, dan concept berdasarkan tren/celah di data JSON.
+6. Anda WAJIB memberikan format JSON sesuai schema. Anda membaca dari data hasil ekstraksi tahap 1 di bawah ini:
 
 --- DATA TAHAP 1 ---
 {extracted_data_json}
@@ -646,7 +648,7 @@ def extract_entities_and_gaps_v2(paper_text: str) -> str:
     prompt = f"""Anda adalah asisten AI akademik yang ahli dalam mengekstrak pengetahuan dari karya ilmiah.
 
 TUGAS ANDA:
-1. Ekstrak 'variables', 'methods', dan 'results' utama dari teks karya ilmiah.
+1. Ekstrak 'variables', 'methods', 'results', 'research_areas', dan 'objects' utama dari teks karya ilmiah.
 2. Temukan SEMUA research gap yang disebutkan secara eksplisit oleh penulis.
 
 Untuk setiap gap, berikan:
@@ -660,6 +662,8 @@ Jawab HANYA dalam format JSON dengan skema berikut:
     "variables": ["var1", "var2"],
     "methods": ["method1"],
     "results": ["result1"],
+    "research_areas": ["area1"],
+    "objects": ["object1"],
     "gaps": [
         {{
             "statement": "Penelitian ini belum mengukur...",
@@ -707,7 +711,7 @@ Teks:
 def parse_entities_v2(raw: str) -> dict:
     import json
     if not raw:
-        return {"variables": [], "methods": [], "results": []}
+        return {"variables": [], "methods": [], "results": [], "research_areas": [], "objects": []}
     raw = raw.strip()
     if raw.startswith("```json"):
         raw = raw[7:]
@@ -721,10 +725,12 @@ def parse_entities_v2(raw: str) -> dict:
         return {
             "variables": data.get("variables", []),
             "methods": data.get("methods", []),
-            "results": data.get("results", [])
+            "results": data.get("results", []),
+            "research_areas": data.get("research_areas", []),
+            "objects": data.get("objects", [])
         }
     except Exception:
-        return {"variables": [], "methods": [], "results": []}
+        return {"variables": [], "methods": [], "results": [], "research_areas": [], "objects": []}
 
 def normalize_gap_type(value: str | None) -> str | None:
     from .constants_graph import GapType

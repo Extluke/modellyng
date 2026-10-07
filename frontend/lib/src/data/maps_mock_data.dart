@@ -1,24 +1,5 @@
 import 'package:flutter/material.dart';
-
-enum GraphNodeType {
-  paper,
-  concept,
-  variable,
-  method,
-  object,
-  researchArea,
-  researchGap,
-  result,
-}
-
-enum GapType {
-  unexploredConcept,
-  populationGap,
-  missingRelationship,
-  datasetGap,
-  methodologicalGap,
-  empiricalGap,
-}
+import '../models/research_models.dart';
 
 enum GapConfidence {
   high,
@@ -54,6 +35,8 @@ class GraphNode {
     this.relatedConceptIds = const [],
     this.saturationStatus,
     this.zoneCategory,
+    this.methodCluster,
+    this.objectCluster,
   });
 
   final String id;
@@ -61,13 +44,15 @@ class GraphNode {
   final GraphNodeType type;
   
   final String? gapStatement;
-  final GapType? gapType;
+  final GraphGapType? gapType;
   final GapConfidence? confidence;
   final bool isValidated;
   final List<GapEvidence> evidence;
   final List<String> relatedConceptIds;
   final String? saturationStatus;
   final String? zoneCategory;
+  final String? methodCluster;
+  final String? objectCluster;
 }
 
 class GraphEdge {
@@ -102,7 +87,7 @@ abstract final class MapsMockData {
       label: 'Missing relation AI & Motivation',
       type: GraphNodeType.researchGap,
       gapStatement: 'Belum banyak penelitian yang menghubungkan AI dengan Student Motivation secara empiris.',
-      gapType: GapType.missingRelationship,
+      gapType: GraphGapType.missingRelation,
       confidence: GapConfidence.high,
       isValidated: true,
       relatedConceptIds: ['c1', 'v2'],

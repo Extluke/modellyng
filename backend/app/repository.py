@@ -1553,75 +1553,7 @@ class SupabaseProjectRepository:
         nodes_data = nodes_resp.json()
         edges_data = edges_resp.json()
 
-        # 2. Calculate Saturation
-        from .intelligence_service import calculate_node_saturation
-        calculate_node_saturation(nodes_data)
-
-        # 3. NetworkX Layouting
-        import networkx as nx
-        
-        G = nx.DiGraph()
-        
-        # Mapping partitions for zone_category
-        # 0: research_area / concept -> Zone: Dasar
-        # 1: variable / method -> Zone: Metodologi
-        # 2: result -> Zone: Temuan
-        # 3: gap -> Zone: Peluang (Celah)
-        
-        def get_partition(node_type: str) -> tuple[int, str]:
-            nt = (node_type or "").lower()
-            if nt in ("gap",):
-                return 3, "Peluang (Celah)"
-            elif nt in ("result",):
-                return 2, "Temuan"
-            elif nt in ("variable", "method"):
-                return 1, "Metodologi"
-            else:
-                return 0, "Dasar Konsep"
-
-        for node in nodes_data:
-            partition_idx, zone_name = get_partition(node.get("node_type"))
-            node["zone_category"] = zone_name
-            G.add_node(node["id"], partition=partition_idx)
-
-        for edge in edges_data:
-            G.add_edge(edge["source_id"], edge["target_id"])
-
-        # Layout computation
-        try:
-            pos = nx.multipartite_layout(G, subset_key="partition", align="vertical", scale=1000)
-            for node in nodes_data:
-                coords = pos.get(node["id"])
-                if coords is not None:
-                    node["x"] = float(coords[0])
-                    node["y"] = float(coords[1])
-        except Exception as e:
-            # Fallback spring layout
-            try:
-                pos = nx.spring_layout(G, scale=1000)
-                for node in nodes_data:
-                    coords = pos.get(node["id"])
-                    if coords is not None:
-                        node["x"] = float(coords[0])
-                        node["y"] = float(coords[1])
-            except Exception:
-                # Pure Python grid fallback layout
-                from collections import defaultdict
-                part_counts = defaultdict(list)
-                for node in nodes_data:
-                    p = get_partition(node.get("node_type"))[0]
-                    part_counts[p].append(node)
-                
-                # Assign X based on partition (0 to 3) => -500, -166, 166, 500
-                # Assign Y based on index in partition
-                for p_idx, p_nodes in part_counts.items():
-                    x_pos = -500 + (p_idx * 333)
-                    total = len(p_nodes)
-                    for i, node in enumerate(p_nodes):
-                        y_pos = (i * 150) - ((total * 150) / 2)
-                        node["x"] = float(x_pos)
-                        node["y"] = float(y_pos)
-        # 4. Map back to edges format expected by schema
+        # 2. Map back to edges format expected by schema
         edges_formatted = []
         for e in edges_data:
             edges_formatted.append({
@@ -1631,11 +1563,12 @@ class SupabaseProjectRepository:
                 "detail": e.get("detail")
             })
 
-        # 5. Format nodes to match schemas
-        ALLOWED_GAPS = {"population", "methodological", "empirical", "theoretical", "conceptual", "unexplored_concept", "missing_relation", "dataset", "other"}
-        ALLOWED_STATUS = {"needs_review", "verified", "edited", "unsupported", "rejected"}
+        # 3. Format nodes to match schemas
+        ALLOWED_GAPS = {"population_gap", "methodological", "empirical_gap", "theoretical", "conceptual", "unexplored_concept", "missing_relation", "dataset_gap", "other"}
+        ALLOWED_STATUS = {"needs_review", "verified", "edited", "unsupported", "rejected", "accepted"}
         
         nodes_formatted = []
+        gap_count = 0
         for n in nodes_data:
             # 1. Sanitize gap_typology
             gap = n.get("gap_typology")
@@ -1662,10 +1595,14 @@ class SupabaseProjectRepository:
             status = n.get("status")
             if status == "pending" or (status and status not in ALLOWED_STATUS):
                 status = "needs_review"
+                
+            kind = n.get("node_type")
+            if kind in ("gap", "research_gap"):
+                gap_count += 1
 
             nodes_formatted.append({
                 "id": n["id"],
-                "kind": n["node_type"],
+                "kind": kind,
                 "label": n["label"],
                 "detail": n.get("detail", ""),
                 "parent_id": n.get("parent_id"),
@@ -1676,16 +1613,71 @@ class SupabaseProjectRepository:
                 "x": n.get("x"),
                 "y": n.get("y"),
                 "evidence": sanitized_evidence,
-                "status": status
+                "status": status,
+                "validation_status": status,
+                "method_cluster": n.get("method_cluster"),
+                "object_cluster": n.get("object_cluster"),
             })
+
+        # 4. Compute Zones
+        from .layout import compute_zones
+        zones = compute_zones(nodes_formatted)
 
         from .schemas import KnowledgeGraphMapRead
         return KnowledgeGraphMapRead(
             project_id=project.id,
             project_title=project.title,
             nodes=nodes_formatted,
-            edges=edges_formatted
+            edges=edges_formatted,
+            zones=zones,
+            gap_count=gap_count
         )
+
+    async def update_gap_validation(
+        self, user: AuthenticatedUser, project_id: UUID, gap_id: UUID, status: str
+    ) -> None:
+        if status not in ("accepted", "rejected"):
+            raise ValueError("Status must be accepted or rejected")
+            
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers(user),
+                params={
+                    "id": f"eq.{gap_id}",
+                    "project_id": f"eq.{project_id}",
+                    "node_type": "in.(gap,research_gap)"
+                },
+                json={"status": status}
+            )
+            
+        self._raise_for_repository_error(response)
+        # If no rows were updated, either it doesn't exist, isn't a gap, or user lacks access
+        # but supabase patch doesn't return 404 for empty match unless we use return=representation
+        # Let's check with a select first or use return=representation.
+        
+    async def update_gap_validation_with_check(
+        self, user: AuthenticatedUser, project_id: UUID, gap_id: UUID, status: str
+    ) -> dict:
+        if status not in ("accepted", "rejected"):
+            raise ValueError("Status must be accepted or rejected")
+            
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers(user, return_representation=True),
+                params={
+                    "id": f"eq.{gap_id}",
+                    "project_id": f"eq.{project_id}"
+                },
+                json={"status": status}
+            )
+            
+        self._raise_for_repository_error(response)
+        data = response.json()
+        if not data:
+            raise EntityNotFoundError(f"Gap with id {gap_id} not found")
+        return data[0]
 
 project_repository = SupabaseProjectRepository()
 

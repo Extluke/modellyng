@@ -8,6 +8,74 @@ enum PaperJobStatus { queued, processing, completed, failed, cancelled }
 
 enum VerificationStatus { verified, needsReview, edited, unsupported, rejected }
 
+enum GraphNodeType {
+  paper,
+  concept,
+  researchGap,
+  variable,
+  method,
+  result,
+  researchArea,
+  object,
+  unknown;
+
+  static GraphNodeType fromJson(String? value) {
+    return switch (value) {
+      'paper' => GraphNodeType.paper,
+      'concept' => GraphNodeType.concept,
+      'gap' || 'research_gap' => GraphNodeType.researchGap,
+      'variable' => GraphNodeType.variable,
+      'method' => GraphNodeType.method,
+      'result' => GraphNodeType.result,
+      'research_area' => GraphNodeType.researchArea,
+      'object' => GraphNodeType.object,
+      _ => GraphNodeType.unknown,
+    };
+  }
+}
+
+enum GraphGapType {
+  unexploredConcept,
+  missingRelation,
+  methodological,
+  populationGap,
+  datasetGap,
+  empiricalGap,
+  other;
+
+  static GraphGapType fromJson(String? value) {
+    if (value == null) return GraphGapType.other;
+    return switch (value) {
+      'unexplored_concept' => GraphGapType.unexploredConcept,
+      'missing_relation' => GraphGapType.missingRelation,
+      'methodological' => GraphGapType.methodological,
+      'population_gap' => GraphGapType.populationGap,
+      'dataset_gap' => GraphGapType.datasetGap,
+      'empirical_gap' => GraphGapType.empiricalGap,
+      _ => GraphGapType.other,
+    };
+  }
+}
+
+enum GraphSaturationStatus {
+  high,
+  medium,
+  low,
+  none,
+  unknown;
+
+  static GraphSaturationStatus fromJson(String? value) {
+    if (value == null) return GraphSaturationStatus.unknown;
+    return switch (value) {
+      'high' => GraphSaturationStatus.high,
+      'medium' => GraphSaturationStatus.medium,
+      'low' => GraphSaturationStatus.low,
+      'none' => GraphSaturationStatus.none,
+      _ => GraphSaturationStatus.unknown,
+    };
+  }
+}
+
 class ResearchProject {
   const ResearchProject({
     required this.id,
@@ -354,6 +422,8 @@ class KnowledgeGraphNode {
     this.x,
     this.y,
     this.validationStatus,
+    this.methodCluster,
+    this.objectCluster,
     this.evidence = const [],
   });
 
@@ -369,6 +439,8 @@ class KnowledgeGraphNode {
   final double? x;
   final double? y;
   final String? validationStatus;
+  final String? methodCluster;
+  final String? objectCluster;
   final List<KnowledgeGraphEvidence> evidence;
 
   factory KnowledgeGraphNode.fromJson(Map<String, dynamic> json) {
@@ -385,6 +457,8 @@ class KnowledgeGraphNode {
       x: (json['x'] as num?)?.toDouble(),
       y: (json['y'] as num?)?.toDouble(),
       validationStatus: json['validation_status']?.toString(),
+      methodCluster: json['method_cluster']?.toString(),
+      objectCluster: json['object_cluster']?.toString(),
       evidence: (json['evidence'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphEvidence.fromJson(e as Map<String, dynamic>))
               .toList(growable: false) ??
@@ -416,18 +490,46 @@ class KnowledgeGraphEdge {
   }
 }
 
+class KnowledgeGraphZone {
+  const KnowledgeGraphZone({
+    required this.saturationStatus,
+    required this.minX,
+    required this.maxX,
+    required this.minY,
+    required this.maxY,
+  });
+
+  final String saturationStatus;
+  final double minX;
+  final double maxX;
+  final double minY;
+  final double maxY;
+
+  factory KnowledgeGraphZone.fromJson(Map<String, dynamic> json) {
+    return KnowledgeGraphZone(
+      saturationStatus: json['saturation_status']?.toString() ?? 'none',
+      minX: (json['min_x'] as num?)?.toDouble() ?? 0.0,
+      maxX: (json['max_x'] as num?)?.toDouble() ?? 0.0,
+      minY: (json['min_y'] as num?)?.toDouble() ?? 0.0,
+      maxY: (json['max_y'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class KnowledgeGraphMap {
   const KnowledgeGraphMap({
     required this.projectId,
     required this.projectTitle,
     required this.nodes,
     required this.edges,
+    required this.zones,
   });
 
   final String projectId;
   final String projectTitle;
   final List<KnowledgeGraphNode> nodes;
   final List<KnowledgeGraphEdge> edges;
+  final List<KnowledgeGraphZone> zones;
 
   factory KnowledgeGraphMap.fromJson(Map<String, dynamic> json) {
     return KnowledgeGraphMap(
@@ -439,6 +541,10 @@ class KnowledgeGraphMap {
           [],
       edges: (json['edges'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphEdge.fromJson(e))
+              .toList(growable: false) ??
+          [],
+      zones: (json['zones'] as List<dynamic>?)
+              ?.map((e) => KnowledgeGraphZone.fromJson(e))
               .toList(growable: false) ??
           [],
     );
