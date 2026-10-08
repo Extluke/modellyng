@@ -32,6 +32,14 @@ final dioProvider = Provider<Dio>((ref) {
         options.headers['Authorization'] = 'Bearer ${session.accessToken}';
         handler.next(options);
       },
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401) {
+          try {
+            await ref.read(authRepositoryProvider).signOut();
+          } catch (_) {}
+        }
+        handler.next(error);
+      },
     ),
   );
 
