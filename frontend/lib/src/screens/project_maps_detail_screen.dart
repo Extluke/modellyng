@@ -444,40 +444,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                         
                         const SizedBox(height: 32),
                         
-                        // 4. Saring Klaster Penelitian
-                        const Text('Saring Klaster Penelitian', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted)),
-                        const SizedBox(height: 12),
-                        _buildDropdownFilter(
-                          icon: Icons.category, 
-                          label: 'Method Cluster',
-                          value: _selectedMethodCluster,
-                          items: _graphMap?.nodes
-                              .map((n) => n.methodCluster)
-                              .whereType<String>()
-                              .toSet()
-                              .toList() ?? [],
-                          onChanged: (val) {
-                            setModalState(() => _selectedMethodCluster = val);
-                            _updateVisibleGraph();
-                          }
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDropdownFilter(
-                          icon: Icons.interests, 
-                          label: 'Object Cluster (Zone)',
-                          value: _selectedObjectCluster,
-                          items: _graphMap?.nodes
-                              .map((n) => n.objectCluster)
-                              .whereType<String>()
-                              .toSet()
-                              .toList() ?? [],
-                          onChanged: (val) {
-                            setModalState(() => _selectedObjectCluster = val);
-                            _updateVisibleGraph();
-                          }
-                        ),
-                        
-                        const SizedBox(height: 48),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
