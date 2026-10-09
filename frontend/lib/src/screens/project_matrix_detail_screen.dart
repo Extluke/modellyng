@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -695,13 +696,79 @@ class _ExpandableTextCell extends StatefulWidget {
 
 class _ExpandableTextCellState extends State<_ExpandableTextCell> {
   bool _isExpanded = false;
+  late String _formattedText;
+
+  @override
+  void initState() {
+    super.initState();
+    _formattedText = _formatText(widget.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExpandableTextCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _formattedText = _formatText(widget.text);
+    }
+  }
+
+  String _formatText(String rawText) {
+    try {
+      final trimmed = rawText.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        final data = jsonDecode(trimmed);
+        if (data is Map<String, dynamic>) {
+          final buffer = StringBuffer();
+          
+          if (data.containsKey('pengembangan')) {
+            buffer.writeln(data['pengembangan']);
+            buffer.writeln();
+          }
+          
+          if (data.containsKey('recommendations') && data['recommendations'] is List) {
+            final recs = data['recommendations'] as List;
+            for (var i = 0; i < recs.length; i++) {
+              final rec = recs[i];
+              if (rec is Map) {
+                final rank = rec['rank'] ?? (i + 1);
+                final judul = rec['judul'] ?? '';
+                buffer.writeln('$rank. $judul');
+                if (rec['alasan'] != null) buffer.writeln('   Alasan: ${rec['alasan']}');
+                if (rec['metode'] != null) buffer.writeln('   Metode: ${rec['metode']}');
+                if (rec['dampak'] != null) buffer.writeln('   Dampak: ${rec['dampak']}');
+                buffer.writeln();
+              }
+            }
+          }
+          
+          if (buffer.isEmpty) {
+            data.forEach((key, value) {
+              if (value is String) {
+                buffer.writeln('${key.toUpperCase()}: $value\n');
+              } else if (value is List) {
+                buffer.writeln('${key.toUpperCase()}:');
+                for (var item in value) {
+                  buffer.writeln(' - $item');
+                }
+                buffer.writeln();
+              }
+            });
+          }
+          
+          return buffer.toString().trim();
+        }
+      }
+    } catch (_) {
+    }
+    return rawText;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bool isLongText = widget.text.length > 150;
+    final bool isLongText = _formattedText.length > 150;
     final String displayText = _isExpanded || !isLongText
-        ? widget.text
-        : '${widget.text.substring(0, 150)}...';
+        ? _formattedText
+        : '${_formattedText.substring(0, 150)}...';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
