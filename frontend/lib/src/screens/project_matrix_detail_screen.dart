@@ -195,13 +195,14 @@ class _ProjectMatrixDetailScreenState
   // --- KOMPONEN TABEL ROW-BY-ROW ---
 
   Widget _buildTableRow(String headerText, List<Widget> cells, {bool isHeader = false}) {
+    final formattedHeader = headerText.replaceAll(' ', '\n');
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Sticky Column (Kolom Parameter)
           Container(
-            width: 150,
+            width: 115,
             decoration: BoxDecoration(
               color: isHeader ? AppColors.primarySoft : Colors.white,
               border: const Border(
@@ -209,10 +210,10 @@ class _ProjectMatrixDetailScreenState
                 bottom: BorderSide(color: AppColors.border),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             alignment: Alignment.centerLeft,
             child: Text(
-              headerText,
+              formattedHeader,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ),
