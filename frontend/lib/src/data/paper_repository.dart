@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide MultipartFile;
 
@@ -81,12 +83,7 @@ class PaperRepository {
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
       allowMultiple: true,
-      withData: true,
-    ).timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => throw const PaperUploadException(
-        'Pemilih file tidak merespons. Tutup dialog file lalu coba lagi.',
-      ),
+      withData: kIsWeb,
     );
     if (result == null) return null;
 
@@ -111,17 +108,23 @@ class PaperRepository {
     int completedFiles = 0;
 
     for (final selected in result.files) {
-      final bytes = selected.bytes;
-      if (bytes == null) {
+      if (kIsWeb && selected.bytes == null) {
         throw const PaperUploadException(
           'Salah satu file tidak dapat dibaca. Silakan pilih PDF kembali.',
         );
       }
+      if (!kIsWeb && selected.path == null) {
+        throw const PaperUploadException(
+          'Path file tidak ditemukan. Silakan pilih PDF kembali.',
+        );
+      }
       
-      final paper = await uploadPdfBytes(
+      final paper = await uploadPdf(
         project: project,
         originalFilename: selected.name,
-        bytes: bytes,
+        bytes: selected.bytes,
+        path: selected.path,
+        size: selected.size,
         onProgress: (progress) {
           final overallProgress = (completedFiles + progress) / totalFiles;
           onProgress?.call(overallProgress);
@@ -134,13 +137,15 @@ class PaperRepository {
     return uploadedPapers;
   }
 
-  Future<ProjectPaper> uploadPdfBytes({
+  Future<ProjectPaper> uploadPdf({
     required ResearchProject project,
     required String originalFilename,
-    required Uint8List bytes,
+    Uint8List? bytes,
+    String? path,
+    int? size,
     void Function(double progress)? onProgress,
   }) async {
-    _validatePdf(originalFilename, bytes.length, bytes);
+    await _validatePdf(originalFilename, size, bytes: bytes, path: path);
 
     final user = _supabase.auth.currentUser;
     if (user == null) {
@@ -151,8 +156,13 @@ class PaperRepository {
 
     try {
       onProgress?.call(0.05);
+      
+      final multipartFile = bytes != null
+          ? MultipartFile.fromBytes(bytes, filename: originalFilename)
+          : await MultipartFile.fromFile(path!, filename: originalFilename);
+
       final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(bytes, filename: originalFilename),
+        'file': multipartFile,
       });
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/v1/projects/${project.id}/papers/upload',
@@ -174,25 +184,45 @@ class PaperRepository {
     }
   }
 
-  static void _validatePdf(String name, int size, Uint8List bytes) {
+  static Future<void> _validatePdf(String name, int? size, {Uint8List? bytes, String? path}) async {
     if (!name.toLowerCase().endsWith('.pdf')) {
       throw const PaperUploadException('Hanya file PDF yang dapat diunggah.');
     }
-    if (size <= 0 || bytes.isEmpty) {
+    
+    int actualSize = size ?? 0;
+    List<int> signatureBytes = [];
+
+    if (bytes != null) {
+      actualSize = bytes.length;
+      if (bytes.length >= 5) {
+        signatureBytes = bytes.sublist(0, 5);
+      }
+    } else if (path != null) {
+      final file = File(path);
+      actualSize = await file.length();
+      final stream = file.openRead(0, 5);
+      await for (final chunk in stream) {
+        signatureBytes.addAll(chunk);
+        if (signatureBytes.length >= 5) break;
+      }
+    }
+
+    if (actualSize <= 0 || signatureBytes.isEmpty) {
       throw const PaperUploadException(
         'File PDF kosong dan tidak dapat diproses.',
       );
     }
-    if (size > maxPdfSizeBytes) {
+    if (actualSize > maxPdfSizeBytes) {
       throw const PaperUploadException(
         'Ukuran PDF melebihi batas 50 MB per file.',
       );
     }
+    
     const signature = [0x25, 0x50, 0x44, 0x46, 0x2D];
-    if (bytes.length < signature.length ||
+    if (signatureBytes.length < 5 ||
         !List.generate(
-          signature.length,
-          (index) => bytes[index] == signature[index],
+          5,
+          (index) => signatureBytes[index] == signature[index],
         ).every((matches) => matches)) {
       throw const PaperUploadException(
         'Isi file tidak dikenali sebagai dokumen PDF yang valid.',

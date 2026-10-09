@@ -26,6 +26,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
   bool _uploading = false;
   double _uploadProgress = 0;
   Timer? _pollingTimer;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -54,6 +56,14 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
       _uploading = true;
       _uploadProgress = 0;
     });
+    
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
     try {
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
       final query = (userId: userId!, projectId: widget.project.id);
@@ -222,6 +232,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
         ),
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(24, 30, 24, 40),
         child: Center(
           child: ConstrainedBox(
