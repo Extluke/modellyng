@@ -41,7 +41,7 @@
     #modellyng-loading .content { text-align: center; }
     #modellyng-loading .logo {
       width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 15px;
-      display: grid; place-items: center; color: white; font-size: 26px;
+      display: block; object-fit: cover;
       background: #5748e5; box-shadow: 0 12px 28px rgba(87,72,229,.25);
     }
     #modellyng-loading .spinner {
@@ -55,7 +55,7 @@
 <body>
   <div id="modellyng-loading" role="status" aria-live="polite">
     <div class="content">
-      <div class="logo">◆</div>
+      <img class="logo" src="icons/Icon-192.png" alt="">
       <strong>Modellyng</strong>
       <div>Menyiapkan workspace riset…</div>
       <div class="spinner" aria-hidden="true"></div>

@@ -101,6 +101,11 @@ class _DashboardContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _SmartActionBanner(
+          projects: projects,
+          onOpenProject: onOpenProject,
+          onOpenReview: onOpenReview,
+        ),
         _DashboardMetrics(
           projectCount: projects.length,
           paperCount: paperCount,
@@ -134,26 +139,12 @@ class _DashboardContent extends StatelessWidget {
             onOpenProject: onOpenProject,
           ),
         const SizedBox(height: 26),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: AppColors.primarySoft,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.verified_user_outlined, color: AppColors.primary),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Data dashboard berasal dari akun dan proyek Anda. Hasil Gemini baru menjadi knowledge node setelah Anda menerima atau mengoreksinya di halaman Review.',
-                ),
-              ),
-            ],
-          ),
+        const SectionHeading(
+          title: 'Aktivitas Terbaru',
+          subtitle: 'Pembaruan terkini dari workspace Anda.',
         ),
+        const SizedBox(height: 14),
+        _RecentActivityFeed(projects: projects),
       ],
     );
   }
@@ -287,7 +278,9 @@ class _ProjectGrid extends ConsumerWidget {
                   child: const Text('Batal'),
                 ),
                 FilledButton.icon(
-                  onPressed: isMatched ? () => Navigator.pop(context, true) : null,
+                  onPressed: isMatched
+                      ? () => Navigator.pop(context, true)
+                      : null,
                   icon: const Icon(Icons.delete_forever),
                   label: const Text('Hapus Permanen'),
                   style: FilledButton.styleFrom(backgroundColor: AppColors.red),
@@ -303,12 +296,12 @@ class _ProjectGrid extends ConsumerWidget {
 
     try {
       await ref.read(projectRepositoryProvider).deleteProject(project.id);
-      
+
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
       if (userId != null) {
         ref.invalidate(projectsProvider(userId));
       }
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Proyek "${project.title}" telah dihapus.')),
@@ -405,10 +398,17 @@ class _ProjectCard extends StatelessWidget {
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'delete',
-                          child: Text('Hapus Proyek', style: TextStyle(color: AppColors.red)),
+                          child: Text(
+                            'Hapus Proyek',
+                            style: TextStyle(color: AppColors.red),
+                          ),
                         ),
                       ],
-                      icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+                      icon: const Icon(
+                        Icons.more_vert,
+                        size: 20,
+                        color: AppColors.muted,
+                      ),
                     ),
                   ],
                 ],
@@ -429,22 +429,44 @@ class _ProjectCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 18),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '${project.paperCount} paper',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '${project.readyCount} / ${project.paperCount} siap',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        project.updatedLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(
-                    project.updatedLabel,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.muted,
-                    ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: project.paperCount > 0
+                        ? (project.readyCount / project.paperCount).clamp(
+                            0.0,
+                            1.0,
+                          )
+                        : 0.0,
+                    backgroundColor: AppColors.muted.withValues(alpha: 0.2),
+                    color:
+                        project.readyCount == project.paperCount &&
+                            project.paperCount > 0
+                        ? AppColors.green
+                        : AppColors.primary,
+                    borderRadius: BorderRadius.circular(4),
+                    minHeight: 6,
                   ),
                 ],
               ),
@@ -475,5 +497,202 @@ class _LoadError extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _SmartActionBanner extends StatelessWidget {
+  const _SmartActionBanner({
+    required this.projects,
+    required this.onOpenProject,
+    required this.onOpenReview,
+  });
+
+  final List<ResearchProject> projects;
+  final ValueChanged<ResearchProject> onOpenProject;
+  final VoidCallback onOpenReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final processingProjects = projects
+        .where((p) => p.status == ProjectStatus.processing)
+        .toList();
+    if (processingProjects.isNotEmpty) {
+      final p = processingProjects.first;
+      return _ActionBannerWrapper(
+        icon: Icons.auto_awesome,
+        message: '🤖 Gemini sedang mengekstrak paper di proyek "${p.title}"...',
+        actionLabel: 'Lihat Status',
+        onTap: () => onOpenProject(p),
+        isProcessing: true,
+      );
+    }
+
+    final reviewProjects = projects.where((p) => p.reviewCount > 0).toList();
+    if (reviewProjects.isNotEmpty) {
+      final totalReview = reviewProjects.fold<int>(
+        0,
+        (sum, p) => sum + p.reviewCount,
+      );
+      return _ActionBannerWrapper(
+        icon: Icons.fact_check_outlined,
+        message:
+            'Terdapat $totalReview ekstraksi baru yang menunggu review Anda.',
+        actionLabel: 'Mulai Review',
+        onTap: onOpenReview,
+        isProcessing: false,
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class _ActionBannerWrapper extends StatelessWidget {
+  const _ActionBannerWrapper({
+    required this.icon,
+    required this.message,
+    required this.actionLabel,
+    required this.onTap,
+    required this.isProcessing,
+  });
+
+  final IconData icon;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onTap;
+  final bool isProcessing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isProcessing
+              ? [AppColors.blue.withValues(alpha: 0.1), AppColors.primarySoft]
+              : [
+                  AppColors.orange.withValues(alpha: 0.1),
+                  AppColors.primarySoft,
+                ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isProcessing
+              ? AppColors.blue.withValues(alpha: 0.3)
+              : AppColors.orange.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (isProcessing)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(icon, color: AppColors.orange),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton.tonal(
+            onPressed: onTap,
+            style: FilledButton.styleFrom(
+              backgroundColor: isProcessing ? AppColors.blue : AppColors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentActivityFeed extends StatelessWidget {
+  const _RecentActivityFeed({required this.projects});
+
+  final List<ResearchProject> projects;
+
+  @override
+  Widget build(BuildContext context) {
+    if (projects.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Text('Belum ada aktivitas.'),
+      );
+    }
+
+    final sorted = List<ResearchProject>.from(projects)
+      ..sort((a, b) {
+        final aTime = a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+
+    final recent = sorted.take(3).toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < recent.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == recent.length - 1 ? 0 : 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _getActivityText(recent[i]),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  Text(
+                    recent[i].updatedLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _getActivityText(ResearchProject p) {
+    if (p.status == ProjectStatus.processing) {
+      return 'Sedang mengekstrak paper di proyek "${p.title}"';
+    } else if (p.reviewCount > 0) {
+      return 'Terdapat ${p.reviewCount} paper menunggu review di "${p.title}"';
+    } else if (p.readyCount > 0) {
+      return 'Proses ekstraksi selesai untuk ${p.readyCount} paper di "${p.title}"';
+    }
+    return 'Pembaruan aktivitas di proyek "${p.title}"';
   }
 }

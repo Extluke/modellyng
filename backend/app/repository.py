@@ -1564,14 +1564,28 @@ class SupabaseProjectRepository:
             })
 
         # 3. Format nodes to match schemas
-        ALLOWED_GAPS = {"population_gap", "methodological", "empirical_gap", "theoretical", "conceptual", "unexplored_concept", "missing_relation", "dataset_gap", "other"}
-        ALLOWED_STATUS = {"needs_review", "verified", "edited", "unsupported", "rejected", "accepted"}
+        # Older knowledge-graph rows used *_gap labels, while the API contract
+        # uses the shared GapType values.
+        GAP_ALIASES = {
+            "population_gap": "population",
+            "methodological_gap": "methodological",
+            "empirical_gap": "empirical",
+            "theoretical_gap": "theoretical",
+            "conceptual_gap": "conceptual",
+            "dataset_gap": "dataset",
+        }
+        ALLOWED_GAPS = {
+            "population", "methodological", "empirical", "theoretical",
+            "conceptual", "unexplored_concept", "missing_relation", "dataset", "other",
+        }
+        ALLOWED_STATUS = {"needs_review", "verified", "edited", "unsupported", "rejected"}
         
         nodes_formatted = []
         gap_count = 0
         for n in nodes_data:
             # 1. Sanitize gap_typology
             gap = n.get("gap_typology")
+            gap = GAP_ALIASES.get(gap, gap)
             if gap and gap not in ALLOWED_GAPS:
                 gap = "other"
                 
@@ -1592,9 +1606,18 @@ class SupabaseProjectRepository:
                     sanitized_evidence.append(ev)
                     
             # 4. Sanitize status
-            status = n.get("status")
-            if status == "pending" or (status and status not in ALLOWED_STATUS):
-                status = "needs_review"
+            stored_status = n.get("status")
+            # Gap validation is a separate state from component verification.
+            # Preserve it in validation_status and expose accepted gaps as
+            # verified nodes to satisfy the public response model.
+            validation_status = n.get("validation_status")
+            if stored_status in ("accepted", "rejected"):
+                validation_status = stored_status
+                status = "verified" if stored_status == "accepted" else "rejected"
+            else:
+                status = stored_status
+                if status == "pending" or (status and status not in ALLOWED_STATUS):
+                    status = "needs_review"
                 
             kind = n.get("node_type")
             if kind in ("gap", "research_gap"):
@@ -1604,7 +1627,7 @@ class SupabaseProjectRepository:
                 "id": n["id"],
                 "kind": kind,
                 "label": n["label"],
-                "detail": n.get("detail", ""),
+                "detail": n.get("detail") or "",
                 "parent_id": n.get("parent_id"),
                 "gap_typology": gap,
                 "saturation_status": n.get("saturation_status"),
@@ -1614,7 +1637,7 @@ class SupabaseProjectRepository:
                 "y": n.get("y"),
                 "evidence": sanitized_evidence,
                 "status": status,
-                "validation_status": status,
+                "validation_status": validation_status,
                 "method_cluster": n.get("method_cluster"),
                 "object_cluster": n.get("object_cluster"),
             })

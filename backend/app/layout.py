@@ -141,7 +141,7 @@ def update_layout_for_project(project_id: uuid.UUID) -> None:
             headers=headers,
             params={
                 "project_id": f"eq.{project_id}",
-                "select": "source,target"
+                "select": "source:source_id,target:target_id"
             }
         )
         resp_edges.raise_for_status()

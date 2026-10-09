@@ -18,16 +18,18 @@ class BrandLockup extends StatelessWidget {
         Container(
           width: compact ? 34 : 40,
           height: compact ? 34 : 40,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: light
                 ? Colors.white.withValues(alpha: 0.14)
                 : AppColors.primary,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            Icons.layers_rounded,
-            color: light ? Colors.white : Colors.white,
-            size: 22,
+          child: Image.asset(
+            'assets/Modellyng-Logo.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.layers_rounded, color: Colors.white, size: 22),
           ),
         ),
         if (!compact) ...[
@@ -268,38 +270,41 @@ class MetricCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(13),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: color, size: 22),
               ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text(value, style: Theme.of(context).textTheme.headlineSmall),
-                  if (note != null)
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 2),
                     Text(
-                      note!,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.green,
-                      ),
+                      value,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                ],
+                    if (note != null)
+                      Text(
+                        note!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.green,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
