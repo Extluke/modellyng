@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/auth_repository.dart';
-
 import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
@@ -29,244 +27,44 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   ProjectStatus? _filter;
 
   Future<void> _editProject(ResearchProject project) async {
-    final titleController = TextEditingController(text: project.title);
-    final descriptionController =
-        TextEditingController(text: project.description);
-    final formKey = GlobalKey<FormState>();
-
     final updated = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        bool saving = false;
-        String? errorMessage;
-
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Edit Proyek'),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: 480,
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Nama proyek',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: titleController,
-                          maxLength: 180,
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: 'Contoh: Literature Review Smart City 2026',
-                          ),
-                          validator: (value) {
-                            final title = value?.trim() ?? '';
-                            if (title.length < 3) {
-                              return 'Nama proyek minimal 3 karakter.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Deskripsi (opsional)',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: descriptionController,
-                          maxLines: 3,
-                          maxLength: 2000,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: 'Jelaskan fokus atau tujuan riset Anda...',
-                          ),
-                        ),
-                        if (errorMessage != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.red.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              errorMessage!,
-                              style: const TextStyle(color: AppColors.red),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: saving ? null : () => Navigator.pop(context, false),
-                  child: const Text('Batal'),
-                ),
-                FilledButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (!(formKey.currentState?.validate() ?? false)) {
-                            return;
-                          }
-                          setState(() {
-                            saving = true;
-                            errorMessage = null;
-                          });
-                          try {
-                            await ref
-                                .read(projectRepositoryProvider)
-                                .updateProject(
-                                  projectId: project.id,
-                                  title: titleController.text.trim(),
-                                  description:
-                                      descriptionController.text.trim(),
-                                );
-                            if (context.mounted) {
-                              Navigator.pop(context, true);
-                            }
-                          } catch (e) {
-                            setState(() {
-                              saving = false;
-                              errorMessage =
-                                  ProjectRepository.readableError(e);
-                            });
-                          }
-                        },
-                  child: saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Simpan'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (dialogContext) => _EditProjectDialog(
+        project: project,
+        onSave: (title, description) => ref
+            .read(projectRepositoryProvider)
+            .updateProject(
+              projectId: project.id,
+              title: title,
+              description: description,
+            ),
+      ),
     );
 
-    titleController.dispose();
-    descriptionController.dispose();
-
-    if (updated == true) {
-      final userId = ref.read(authRepositoryProvider).currentUser?.id;
-      if (userId != null) {
-        ref.invalidate(projectsProvider(userId));
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Proyek berhasil diperbarui.')),
-        );
-      }
+    if (updated == true && mounted) {
+      ref.invalidate(projectsProvider(widget.userId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Proyek berhasil diperbarui.')),
+      );
     }
   }
 
   Future<void> _deleteProject(ResearchProject project) async {
-    final confirmed = await showDialog<bool>(
+    final deleted = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        bool isMatched = false;
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Hapus Proyek?'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Tindakan ini tidak dapat dibatalkan. Semua PDF, hasil analisis, '
-                    'dan riwayat review dalam proyek ini akan dihapus permanen.',
-                  ),
-                  const SizedBox(height: 16),
-                  Text.rich(
-                    TextSpan(
-                      text: 'Ketik ulang ',
-                      children: [
-                        TextSpan(
-                          text: project.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const TextSpan(text: ' untuk konfirmasi:'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Nama proyek',
-                    ),
-                    onChanged: (val) {
-                      setState(() {
-                        isMatched = val.trim() == project.title;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Batal'),
-                ),
-                FilledButton.icon(
-                  onPressed: isMatched ? () => Navigator.pop(context, true) : null,
-                  icon: const Icon(Icons.delete_forever),
-                  label: const Text('Hapus Permanen'),
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.red),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      barrierDismissible: false,
+      builder: (dialogContext) => _DeleteProjectDialog(
+        project: project,
+        onDelete: () =>
+            ref.read(projectRepositoryProvider).deleteProject(project.id),
+      ),
     );
 
-    if (confirmed != true) return;
-
-    try {
-      await ref.read(projectRepositoryProvider).deleteProject(project.id);
-      
-      final userId = ref.read(authRepositoryProvider).currentUser?.id;
-      if (userId != null) {
-        ref.invalidate(projectsProvider(userId));
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Proyek "${project.title}" telah dihapus.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ProjectRepository.readableError(e)),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
+    if (deleted == true && mounted) {
+      ref.invalidate(projectsProvider(widget.userId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Proyek "${project.title}" telah dihapus.')),
+      );
     }
   }
 
@@ -430,11 +228,7 @@ class _ProjectListTile extends StatelessWidget {
 
   Widget _buildMenu() {
     return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.more_vert,
-        size: 20,
-        color: AppColors.muted,
-      ),
+      icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
       onSelected: (value) {
         if (value == 'edit') {
           onEdit();
@@ -459,10 +253,7 @@ class _ProjectListTile extends StatelessWidget {
             children: [
               Icon(Icons.delete_outline, size: 18, color: AppColors.red),
               SizedBox(width: 8),
-              Text(
-                'Hapus Proyek',
-                style: TextStyle(color: AppColors.red),
-              ),
+              Text('Hapus Proyek', style: TextStyle(color: AppColors.red)),
             ],
           ),
         ),
@@ -610,6 +401,288 @@ class _ProjectListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EditProjectDialog extends StatefulWidget {
+  const _EditProjectDialog({required this.project, required this.onSave});
+
+  final ResearchProject project;
+  final Future<void> Function(String title, String description) onSave;
+
+  @override
+  State<_EditProjectDialog> createState() => _EditProjectDialogState();
+}
+
+class _EditProjectDialogState extends State<_EditProjectDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  bool _saving = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.project.title);
+    _descriptionController = TextEditingController(
+      text: widget.project.description,
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Proyek'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 480,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Nama proyek',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _titleController,
+                  maxLength: 180,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Contoh: Literature Review Smart City 2026',
+                  ),
+                  validator: (value) {
+                    final title = value?.trim() ?? '';
+                    if (title.length < 3) {
+                      return 'Nama proyek minimal 3 karakter.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Deskripsi (opsional)',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: 3,
+                  maxLength: 2000,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Jelaskan fokus atau tujuan riset Anda...',
+                  ),
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.red.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: AppColors.red),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: _saving
+              ? null
+              : () async {
+                  if (!(_formKey.currentState?.validate() ?? false)) {
+                    return;
+                  }
+                  setState(() {
+                    _saving = true;
+                    _errorMessage = null;
+                  });
+                  try {
+                    await widget.onSave(
+                      _titleController.text.trim(),
+                      _descriptionController.text.trim(),
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(context, true);
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() {
+                        _saving = false;
+                        _errorMessage = ProjectRepository.readableError(e);
+                      });
+                    }
+                  }
+                },
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Simpan'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteProjectDialog extends StatefulWidget {
+  const _DeleteProjectDialog({required this.project, required this.onDelete});
+
+  final ResearchProject project;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_DeleteProjectDialog> createState() => _DeleteProjectDialogState();
+}
+
+class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
+  late final TextEditingController _controller;
+  bool _isMatched = false;
+  bool _deleting = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Hapus Proyek?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tindakan ini tidak dapat dibatalkan. Semua PDF, hasil analisis, '
+            'dan riwayat review dalam proyek ini akan dihapus permanen.',
+          ),
+          const SizedBox(height: 16),
+          Text.rich(
+            TextSpan(
+              text: 'Ketik ulang ',
+              children: [
+                TextSpan(
+                  text: widget.project.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(text: ' untuk konfirmasi:'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('delete-project-confirm-field'),
+            controller: _controller,
+            enabled: !_deleting,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Nama proyek',
+            ),
+            onChanged: (val) {
+              setState(() {
+                _isMatched = val.trim() == widget.project.title.trim();
+              });
+            },
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: const TextStyle(color: AppColors.red),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting ? null : () => Navigator.pop(context, false),
+          child: const Text('Batal'),
+        ),
+        FilledButton.icon(
+          key: const Key('confirm-delete-project-button'),
+          onPressed: (_isMatched && !_deleting)
+              ? () async {
+                  setState(() {
+                    _deleting = true;
+                    _errorMessage = null;
+                  });
+                  try {
+                    await widget.onDelete();
+                    if (context.mounted) {
+                      Navigator.pop(context, true);
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() {
+                        _deleting = false;
+                        _errorMessage = ProjectRepository.readableError(e);
+                      });
+                    }
+                  }
+                }
+              : null,
+          icon: _deleting
+              ? const SizedBox(
+                  width: 17,
+                  height: 17,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.delete_forever),
+          label: Text(_deleting ? 'Menghapus...' : 'Hapus Permanen'),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+        ),
+      ],
     );
   }
 }

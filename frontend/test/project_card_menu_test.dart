@@ -20,6 +20,18 @@ const testProject = ResearchProject(
   accent: const Color(0xFF5747E8),
 );
 
+class FakeProjectRepo extends Fake implements ProjectRepository {
+  FakeProjectRepo({this.onDelete});
+
+  final void Function(String projectId)? onDelete;
+
+  @override
+  Future<void> deleteProject(String projectId) async {
+    onDelete?.call(projectId);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   const userId = 'user-test-123';
 
@@ -117,5 +129,75 @@ void main() {
         },
       );
     }
+
+    testWidgets('delete project dialog confirms title and executes deletion', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      bool deleteCalled = false;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsProvider(userId).overrideWith((ref) => [testProject]),
+            projectRepositoryProvider.overrideWithValue(
+              FakeProjectRepo(onDelete: (id) => deleteCalled = true),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ProjectsScreen(
+                userId: userId,
+                onNewProject: () {},
+                onOpenProject: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Open popup menu
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      // Tap Hapus Proyek
+      await tester.tap(find.text('Hapus Proyek'));
+      await tester.pumpAndSettle();
+
+      // Verify dialog is open
+      expect(find.text('Hapus Proyek?'), findsOneWidget);
+      final confirmBtn = find.byKey(const Key('confirm-delete-project-button'));
+      expect(confirmBtn, findsOneWidget);
+
+      // Button is disabled until title matches
+      await tester.tap(confirmBtn);
+      await tester.pump();
+      expect(deleteCalled, isFalse);
+
+      // Enter matching title
+      await tester.enterText(
+        find.byKey(const Key('delete-project-confirm-field')),
+        testProject.title,
+      );
+      await tester.pump();
+
+      // Now tap confirm
+      await tester.tap(confirmBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
+
+      expect(deleteCalled, isTrue);
+      expect(
+        find.text('Proyek "${testProject.title}" telah dihapus.'),
+        findsOneWidget,
+      );
+    });
   });
 }

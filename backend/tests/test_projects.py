@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.auth import AuthenticatedUser
+from app.auth import AuthenticatedUser, get_current_user
 from app.main import app
 from app.repository import (
     EntityNotFoundError,
@@ -751,4 +751,88 @@ async def test_update_project_in_repository(monkeypatch: pytest.MonkeyPatch) -> 
     assert captured_json["description"] == "Updated Description"
     assert result.title == "Updated Project"
     assert result.description == "Updated Description"
+
+
+@pytest.mark.anyio
+async def test_delete_project_uses_authenticated_user_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SupabaseProjectRepository()
+    project_id = UUID("00000000-0000-0000-0000-000000000010")
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="test-user-token",
+    )
+
+    delete_called = False
+    captured_headers = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url, **kwargs):
+            if "/papers" in str(url):
+                return httpx.Response(200, json=[], request=httpx.Request("GET", url))
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": str(project_id),
+                        "title": "To Delete",
+                        "description": "",
+                        "status": "ready",
+                        "created_at": "2026-08-14T00:00:00Z",
+                        "updated_at": "2026-08-14T01:00:00Z",
+                        "papers": [],
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+
+        async def delete(self, url, **kwargs):
+            nonlocal delete_called, captured_headers
+            delete_called = True
+            captured_headers = kwargs.get("headers", {})
+            return httpx.Response(204, request=httpx.Request("DELETE", url))
+
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+
+    await repository.delete_project(user, project_id)
+    assert delete_called is True
+    assert captured_headers["Authorization"] == "Bearer test-user-token"
+    assert captured_headers["apikey"] == repository._anon_key
+
+
+def test_api_delete_project_endpoint_authorized(monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = UUID("00000000-0000-0000-0000-000000000010")
+    called = False
+
+    async def fake_delete_project(user, pid):
+        nonlocal called
+        called = True
+        assert pid == project_id
+        assert user.access_token == "test-token"
+
+    monkeypatch.setattr("app.main.project_repository.delete_project", fake_delete_project)
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="test-token",
+    )
+    try:
+        response = client.delete(
+            f"/api/v1/projects/{project_id}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 204
+        assert called is True
+    finally:
+        app.dependency_overrides.clear()
+
 

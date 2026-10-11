@@ -264,7 +264,7 @@ class SupabaseProjectRepository:
         if storage_keys:
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
-                    await client.request(
+                    r_storage = await client.request(
                         "DELETE",
                         f"{self._storage_url}/object/{self._storage_bucket}",
                         headers={
@@ -273,18 +273,35 @@ class SupabaseProjectRepository:
                         },
                         json={"prefixes": storage_keys},
                     )
+                    if r_storage.status_code in {401, 403} and self._worker_service_key.strip():
+                        await client.request(
+                            "DELETE",
+                            f"{self._storage_url}/object/{self._storage_bucket}",
+                            headers={
+                                "apikey": self._worker_service_key,
+                                "Authorization": f"Bearer {self._worker_service_key}",
+                                "Content-Type": "application/json",
+                            },
+                            json={"prefixes": storage_keys},
+                        )
             except Exception:
                 pass
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.delete(
                 f"{self._rest_url}/projects",
-                headers={
-                    "apikey": self._anon_key,
-                    "Authorization": f"Bearer {self._worker_service_key}",
-                },
+                headers=self._headers(user),
                 params={"id": f"eq.{project_id}"},
             )
+            if response.status_code in {401, 403} and self._worker_service_key.strip():
+                response = await client.delete(
+                    f"{self._rest_url}/projects",
+                    headers={
+                        "apikey": self._worker_service_key,
+                        "Authorization": f"Bearer {self._worker_service_key}",
+                    },
+                    params={"id": f"eq.{project_id}"},
+                )
         self._raise_for_repository_error(response)
 
     async def create_paper(
@@ -390,12 +407,18 @@ class SupabaseProjectRepository:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.delete(
                 f"{self._rest_url}/papers",
-                headers={
-                    "apikey": self._anon_key,
-                    "Authorization": f"Bearer {self._worker_service_key}",
-                },
+                headers=self._headers(user),
                 params={"id": f"eq.{paper_id}", "project_id": f"eq.{project_id}"},
             )
+            if response.status_code in {401, 403} and self._worker_service_key.strip():
+                response = await client.delete(
+                    f"{self._rest_url}/papers",
+                    headers={
+                        "apikey": self._worker_service_key,
+                        "Authorization": f"Bearer {self._worker_service_key}",
+                    },
+                    params={"id": f"eq.{paper_id}", "project_id": f"eq.{project_id}"},
+                )
         self._raise_for_repository_error(response)
 
     async def start_pdf_processing(

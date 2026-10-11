@@ -71,22 +71,31 @@ class ProjectRepository {
     if (error is DioException) {
       final data = error.response?.data;
       if (data is Map<String, dynamic> && data['detail'] != null) {
-        return data['detail'].toString();
+        final detail = data['detail'].toString();
+        if (detail.contains('permission denied')) {
+          return 'Izin ditolak. Anda tidak memiliki akses untuk mengubah atau menghapus data ini.';
+        }
+        return detail;
       }
       if (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout) {
         return 'Server belum dapat dihubungi. Periksa internet atau coba lagi ketika server beta aktif.';
       }
     }
-    return 'Proyek belum dapat disimpan. Silakan coba kembali.';
+    return 'Proyek belum dapat diproses. Silakan coba kembali.';
   }
 
   Future<KnowledgeGraphMap> getKnowledgeGraph(String projectId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/api/v1/projects/$projectId/knowledge-graph');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/projects/$projectId/knowledge-graph',
+    );
     return KnowledgeGraphMap.fromJson(response.data!);
   }
 
-  Future<AiResearchSynthesis> synthesizeGraphNodes(String projectId, List<String> nodeIds) async {
+  Future<AiResearchSynthesis> synthesizeGraphNodes(
+    String projectId,
+    List<String> nodeIds,
+  ) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/v1/projects/$projectId/synthesize-graph-nodes',
       data: {'node_ids': nodeIds},
@@ -94,7 +103,11 @@ class ProjectRepository {
     return AiResearchSynthesis.fromJson(response.data!);
   }
 
-  Future<void> updateGapValidation(String projectId, String gapId, String status) async {
+  Future<void> updateGapValidation(
+    String projectId,
+    String gapId,
+    String status,
+  ) async {
     await _dio.patch(
       '/api/v1/projects/$projectId/gaps/$gapId/validation',
       data: {'status': status},
