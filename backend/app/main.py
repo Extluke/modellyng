@@ -25,6 +25,7 @@ from .schemas import (
     PaperCreate,
     PaperRead,
     ProjectCreate,
+    ProjectUpdate,
     ProjectRead,
     ReviewQueueItemRead,
     ReviewRecordCreate,
@@ -160,6 +161,23 @@ async def get_project(
     current_user: CurrentUser,
 ) -> ProjectRead:
     return await project_repository.get_project(current_user, project_id)
+
+
+@api.patch(
+    "/projects/{project_id}",
+    response_model=ProjectRead,
+    tags=["projects"],
+)
+async def update_project(
+    project_id: UUID,
+    payload: ProjectUpdate,
+    current_user: CurrentUser,
+) -> ProjectRead:
+    return await project_repository.update_project(
+        current_user,
+        project_id,
+        payload,
+    )
 
 
 @api.delete(

@@ -28,6 +28,157 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _query = '';
   ProjectStatus? _filter;
 
+  Future<void> _editProject(ResearchProject project) async {
+    final titleController = TextEditingController(text: project.title);
+    final descriptionController =
+        TextEditingController(text: project.description);
+    final formKey = GlobalKey<FormState>();
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        bool saving = false;
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Proyek'),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: 480,
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Nama proyek',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: titleController,
+                          maxLength: 180,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Contoh: Literature Review Smart City 2026',
+                          ),
+                          validator: (value) {
+                            final title = value?.trim() ?? '';
+                            if (title.length < 3) {
+                              return 'Nama proyek minimal 3 karakter.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Deskripsi (opsional)',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: descriptionController,
+                          maxLines: 3,
+                          maxLength: 2000,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Jelaskan fokus atau tujuan riset Anda...',
+                          ),
+                        ),
+                        if (errorMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.red.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              errorMessage!,
+                              style: const TextStyle(color: AppColors.red),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.pop(context, false),
+                  child: const Text('Batal'),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (!(formKey.currentState?.validate() ?? false)) {
+                            return;
+                          }
+                          setState(() {
+                            saving = true;
+                            errorMessage = null;
+                          });
+                          try {
+                            await ref
+                                .read(projectRepositoryProvider)
+                                .updateProject(
+                                  projectId: project.id,
+                                  title: titleController.text.trim(),
+                                  description:
+                                      descriptionController.text.trim(),
+                                );
+                            if (context.mounted) {
+                              Navigator.pop(context, true);
+                            }
+                          } catch (e) {
+                            setState(() {
+                              saving = false;
+                              errorMessage =
+                                  ProjectRepository.readableError(e);
+                            });
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Simpan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    titleController.dispose();
+    descriptionController.dispose();
+
+    if (updated == true) {
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (userId != null) {
+        ref.invalidate(projectsProvider(userId));
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Proyek berhasil diperbarui.')),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteProject(ResearchProject project) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -153,6 +304,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                   );
                   final filter = DropdownButtonFormField<ProjectStatus?>(
                     initialValue: _filter,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.filter_list_rounded),
                     ),
@@ -246,6 +398,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                         _ProjectListTile(
                           project: project,
                           onTap: () => widget.onOpenProject(project),
+                          onEdit: () => _editProject(project),
                           onDelete: () => _deleteProject(project),
                         ),
                         const SizedBox(height: 12),
@@ -266,12 +419,56 @@ class _ProjectListTile extends StatelessWidget {
   const _ProjectListTile({
     required this.project,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final ResearchProject project;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  Widget _buildMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(
+        Icons.more_vert,
+        size: 20,
+        color: AppColors.muted,
+      ),
+      onSelected: (value) {
+        if (value == 'edit') {
+          onEdit();
+        } else if (value == 'delete') {
+          onDelete();
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 18),
+              SizedBox(width: 8),
+              Text('Edit Proyek'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+              SizedBox(width: 8),
+              Text(
+                'Hapus Proyek',
+                style: TextStyle(color: AppColors.red),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -341,10 +538,59 @@ class _ProjectListTile extends StatelessWidget {
                   ),
                 ],
               );
+              final menu = _buildMenu();
+
               if (constraints.maxWidth < 560) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [icon, const SizedBox(height: 12), details],
+                  children: [
+                    Row(
+                      children: [
+                        icon,
+                        const Spacer(),
+                        StatusBadge.project(project.status),
+                        const SizedBox(width: 4),
+                        menu,
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      project.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      project.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.description_outlined,
+                          size: 16,
+                          color: project.accent,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${project.paperCount} paper',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          project.updatedLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 );
               }
               return Row(
@@ -357,22 +603,7 @@ class _ProjectListTile extends StatelessWidget {
                     Icons.chevron_right_rounded,
                     color: AppColors.muted,
                   ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        onDelete();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Hapus Proyek',
-                          style: TextStyle(color: AppColors.red),
-                        ),
-                      ),
-                    ],
-                  ),
+                  menu,
                 ],
               );
             },

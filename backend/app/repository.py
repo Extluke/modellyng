@@ -12,6 +12,7 @@ from .schemas import (
     PaperRead,
     PaperSource,
     ProjectCreate,
+    ProjectUpdate,
     ProjectRead,
     ReviewQueueItemRead,
     PaperResultRead,
@@ -225,6 +226,30 @@ class SupabaseProjectRepository:
         if not rows:
             raise EntityNotFoundError(f"Project {project_id} was not found")
         return self._to_project(rows[0])
+
+    async def update_project(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        payload: ProjectUpdate,
+    ) -> ProjectRead:
+        await self.get_project(user, project_id)
+        update_data: dict[str, object] = {}
+        if payload.title is not None:
+            update_data["title"] = payload.title
+        if payload.description is not None:
+            update_data["description"] = payload.description
+
+        if update_data:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.patch(
+                    f"{self._rest_url}/projects",
+                    headers=self._headers(user, return_representation=True),
+                    params={"id": f"eq.{project_id}"},
+                    json=update_data,
+                )
+            self._raise_for_repository_error(response)
+        return await self.get_project(user, project_id)
 
     async def delete_project(
         self,

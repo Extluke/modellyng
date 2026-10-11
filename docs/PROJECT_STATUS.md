@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-09-09
+Last updated: 2026-10-11
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -99,11 +99,11 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   activates at logical tablet/desktop widths, and account affordances are
   either functional or honestly marked unavailable.
 
-The last verified automated baseline was (2026-08-30):
+The last verified automated baseline was (2026-10-11):
 
-- Backend: 62 tests passing, including grounded-chat refusal, citation guards,
-  and transactional bulk-review validation.
-- Flutter: static analysis clean and 23 widget/unit tests passing.
+- Backend: 138 tests passing, including project PATCH updates and authentication guards.
+- Dependency checks and transactional bulk-review validation preserved.
+- Flutter: 24 widget/unit tests passing (including project card menu regression tests).
 - Flutter web release build passing.
 - Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 

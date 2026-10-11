@@ -78,6 +78,11 @@ class ProjectCreate(BaseModel):
     description: str = Field(default="", max_length=2_000)
 
 
+class ProjectUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=180)
+    description: str | None = Field(default=None, max_length=2_000)
+
+
 class ProjectRead(ProjectCreate):
     id: UUID
     status: ProjectStatus

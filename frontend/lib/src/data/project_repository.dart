@@ -47,6 +47,18 @@ class ProjectRepository {
     return ResearchProject.fromJson(response.data!);
   }
 
+  Future<ResearchProject> updateProject({
+    required String projectId,
+    required String title,
+    required String description,
+  }) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/api/v1/projects/$projectId',
+      data: {'title': title, 'description': description},
+    );
+    return ResearchProject.fromJson(response.data!);
+  }
+
   Future<void> deleteProject(String projectId) async {
     await _dio.delete('/api/v1/projects/$projectId');
   }

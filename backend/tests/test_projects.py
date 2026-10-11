@@ -17,6 +17,7 @@ from app.schemas import (
     ProjectChatRequest,
     ProjectChatResponse,
     ProjectChatSource,
+    ProjectUpdate,
     ReviewRecordCreate,
     BulkReviewAcceptRequest,
 )
@@ -682,3 +683,72 @@ async def test_review_queue_queries_only_active_components(
     assert await repository.list_review_queue(user) == []
     assert captured_params["status"] == "eq.needs_review"
     assert captured_params["is_active"] == "eq.true"
+
+
+def test_update_project_requires_authentication() -> None:
+    response = client.patch(
+        "/api/v1/projects/00000000-0000-0000-0000-000000000000",
+        json={"title": "Updated Title"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_update_project_in_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    repository = SupabaseProjectRepository()
+    project_id = UUID("00000000-0000-0000-0000-000000000010")
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000001"),
+        access_token="test-token",
+    )
+
+    patch_called = False
+    captured_json = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": str(project_id),
+                        "title": "Updated Project",
+                        "description": "Updated Description",
+                        "status": "ready",
+                        "created_at": "2026-08-14T00:00:00Z",
+                        "updated_at": "2026-08-14T01:00:00Z",
+                        "papers": [],
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+
+        async def patch(self, url, **kwargs):
+            nonlocal patch_called, captured_json
+            patch_called = True
+            captured_json = kwargs.get("json", {})
+            return httpx.Response(
+                200,
+                json=[{"id": str(project_id)}],
+                request=httpx.Request("PATCH", url),
+            )
+
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+
+    payload = ProjectUpdate(title="Updated Project", description="Updated Description")
+    result = await repository.update_project(user, project_id, payload)
+    assert patch_called is True
+    assert captured_json["title"] == "Updated Project"
+    assert captured_json["description"] == "Updated Description"
+    assert result.title == "Updated Project"
+    assert result.description == "Updated Description"
+
