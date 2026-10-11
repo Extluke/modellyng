@@ -490,7 +490,9 @@ class _ProjectMatrixDetailScreenState
           ...structureLabels.entries.map((entry) {
             return _buildTableRow(
               entry.value,
-              filteredPapers.map((p) => _buildStructureCell(entry.key, p.id)).toList(),
+              filteredPapers
+                  .map((p) => _buildStructureCell(matrix, entry.key, p.id))
+                  .toList(),
             );
           }),
         ],
@@ -498,19 +500,65 @@ class _ProjectMatrixDetailScreenState
     );
   }
 
-  Widget _buildStructureCell(String partKey, String paperId) {
+  Widget _buildStructureCell(
+      ComparativeMatrix matrix, String partKey, String paperId) {
     String status = '❌ (Tidak Ada)';
     Color color = Colors.red;
 
-    if (partKey == 'introduction' ||
-        partKey == 'method' ||
-        partKey == 'conclusion') {
-      status =
-          '✅ (Urutan ${(partKey == 'introduction') ? 1 : (partKey == 'method' ? 3 : 6)})';
-      color = AppColors.green;
+    MatrixCell? getCell(String param) {
+      final row = matrix.rows.firstWhere(
+        (r) => r.parameter == param,
+        orElse: () => const MatrixRow(parameter: '', cells: []),
+      );
+      return row.cellFor(paperId);
+    }
+
+    bool hasContent(String param) {
+      final cell = getCell(param);
+      return cell != null &&
+          cell.displayValue.trim().isNotEmpty &&
+          cell.displayValue.trim() != '-';
+    }
+
+    final hasIntro = hasContent('research_problem') ||
+        hasContent('research_objective') ||
+        hasContent('research_question');
+    final hasMethod =
+        hasContent('methodology') || hasContent('dataset_sample');
+    final hasResults = hasContent('results_findings');
+    final hasConclusion = hasContent('contribution') ||
+        hasContent('limitations') ||
+        hasContent('future_work');
+
+    if (partKey == 'introduction') {
+      if (hasIntro) {
+        status = '✅ (Urutan 1)';
+        color = AppColors.green;
+      }
     } else if (partKey == 'literature_review') {
       status = '🔗 (Digabung dengan Introduction)';
       color = Colors.blue;
+    } else if (partKey == 'method') {
+      if (hasMethod) {
+        status = '✅ (Urutan 3)';
+        color = AppColors.green;
+      }
+    } else if (partKey == 'results') {
+      if (hasResults) {
+        status = '✅ (Urutan 4)';
+        color = AppColors.green;
+      }
+    } else if (partKey == 'discussion') {
+      if (hasResults &&
+          (hasContent('limitations') || hasContent('future_work'))) {
+        status = '🔗 (Digabung dengan Results)';
+        color = Colors.blue;
+      }
+    } else if (partKey == 'conclusion') {
+      if (hasConclusion) {
+        status = '✅ (Urutan 6)';
+        color = AppColors.green;
+      }
     }
 
     return Container(

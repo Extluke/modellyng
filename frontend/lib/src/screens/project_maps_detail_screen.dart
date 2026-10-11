@@ -125,18 +125,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       ..scale(scale);
     _transformController.value = centerMatrix;
   }
-  Future<void> _handleGapValidation(String gapId, String status) async {
-    try {
-      await ref.read(projectRepositoryProvider).updateGapValidation(widget.projectId, gapId, status);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gap $status')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: ${ProjectRepository.readableError(e)}')));
-      }
-    }
-  }
+
 
   Future<void> _handleSynthesizeGap(String gapId) async {
     try {
@@ -576,17 +565,20 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
 
   void _showGapDetail(GraphNode node) {
     if (node.type != GraphNodeType.researchGap) return;
+    bool showSummary = false;
     
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.85,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          builder: (context, scrollController) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) {
             return Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -831,40 +823,106 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                   ),
                   
                   // 6. Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _handleGapValidation(node.id, 'rejected');
-                          },
-                          icon: const Icon(Icons.close, color: Colors.red),
-                          label: const Text('TOLAK GAP', style: TextStyle(color: Colors.red)),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.red),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
+                  if (showSummary) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.green.shade300),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _handleGapValidation(node.id, 'accepted');
-                          },
-                          icon: const Icon(Icons.check),
-                          label: const Text('TERIMA GAP'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'SUMMARY',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Selamat anda sudah berada di akhir',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E2340),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        if (!showSummary) {
+                          setModalState(() {
+                            showSummary = true;
+                          });
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (scrollController.hasClients) {
+                              scrollController.animateTo(
+                                scrollController.position.maxScrollExtent,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          });
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              title: const Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('Summary', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              content: const Text(
+                                'Selamat anda sudah berada di akhir',
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF1E2340)),
+                              ),
+                              actions: [
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  child: const Text('OK'),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          Navigator.pop(context);
+                        }
+                      },
+                      icon: Icon(showSummary ? Icons.close : Icons.check),
+                      label: Text(
+                        showSummary ? 'TUTUP' : 'SELESAI',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: showSummary ? Colors.grey.shade700 : Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -906,7 +964,9 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         );
       },
     );
-  }
+  },
+);
+}
 
   Widget _buildNodeWidget(GraphNode node) {
     IconData icon;
