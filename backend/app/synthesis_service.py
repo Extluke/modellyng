@@ -56,17 +56,27 @@ Tugas Anda:
 Gunakan bahasa Indonesia yang akademis dan profesional.
 """
     
-    response = client.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=AiResearchSynthesis,
-            temperature=0.7,
-        ),
-    )
-    
+    response = _generate_with_fallback(client, prompt, settings)
     return AiResearchSynthesis.model_validate_json(response.text)
+
+def _generate_with_fallback(client: genai.Client, prompt: str, settings):
+    models = [settings.gemini_model, settings.gemini_fallback_model, "gemini-1.5-flash", "gemini-flash-lite-latest"]
+    last_err = None
+    for model_name in models:
+        try:
+            return client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=AiResearchSynthesis,
+                    temperature=0.7,
+                ),
+            )
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err or RuntimeError("Semua model AI gagal menghasilkan sintesis.")
 
 async def synthesize_graph_nodes(user: AuthenticatedUser, project_id: UUID, node_ids: list[str]) -> AiResearchSynthesis:
     # 1. Fetch the nodes from the knowledge graph
@@ -112,14 +122,5 @@ Tugas Anda:
 Gunakan bahasa Indonesia yang akademis dan profesional. Output WAJIB dalam format JSON.
 """
     
-    response = client.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=AiResearchSynthesis,
-            temperature=0.7,
-        ),
-    )
-    
+    response = _generate_with_fallback(client, prompt, settings)
     return AiResearchSynthesis.model_validate_json(response.text)

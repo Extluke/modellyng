@@ -1539,6 +1539,192 @@ class SupabaseProjectRepository:
         raise RepositoryError(f"Supabase request failed: {detail}")
 
 
+    async def _auto_populate_knowledge_graph(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> tuple[list[dict], list[dict]]:
+        with httpx.Client(timeout=30.0) as client:
+            r_p = client.get(
+                f"{self._rest_url}/papers",
+                headers=self._headers(user),
+                params={"project_id": f"eq.{project_id}"}
+            )
+            if not r_p.is_success:
+                return [], []
+            papers = r_p.json()
+            if not papers:
+                return [], []
+            paper_map = {p["id"]: p["title"] for p in papers}
+            paper_ids = list(paper_map.keys())
+
+            r_g = client.get(
+                f"{self._rest_url}/research_gaps",
+                headers=self._headers(user),
+                params={"paper_id": f"in.({','.join(paper_ids)})"}
+            )
+            project_gaps = r_g.json() if r_g.is_success else []
+
+            r_c = client.get(
+                f"{self._rest_url}/extracted_components",
+                headers=self._headers(user),
+                params={"paper_id": f"in.({','.join(paper_ids)})", "is_active": "eq.true"}
+            )
+            project_comps = r_c.json() if r_c.is_success else []
+
+        paper_nodes = []
+        for p in papers:
+            paper_nodes.append({
+                "project_id": str(project_id),
+                "node_type": "paper",
+                "label": p["title"][:100],
+                "detail": p["title"],
+                "saturation_status": "high",
+                "status": "accepted",
+                "validation_status": "accepted",
+                "confidence_score": 1.0,
+                "evidence": []
+            })
+
+        gap_nodes = []
+        gap_meta = []
+        for g in project_gaps:
+            raw_type = (g.get("gap_type") or "").lower()
+            if "method" in raw_type: typ = "methodological"
+            elif "data" in raw_type: typ = "dataset"
+            elif "populat" in raw_type: typ = "population"
+            elif "empiric" in raw_type: typ = "empirical"
+            elif "theor" in raw_type or "concept" in raw_type: typ = "theoretical"
+            else: typ = "unexplored_concept"
+
+            ev = []
+            if g.get("evidence_quote"):
+                ev.append({
+                    "quote": g.get("evidence_quote"),
+                    "paper_id": g.get("paper_id"),
+                    "paper_title": paper_map.get(g.get("paper_id"), "Unknown Paper"),
+                    "page_number": g.get("page_number"),
+                    "section": g.get("supporting_section") or "Conclusion"
+                })
+            conf = float(g.get("confidence") or 0.8)
+            if conf > 1.0: conf = conf / 100.0
+
+            gap_meta.append(g.get("paper_id"))
+            gap_nodes.append({
+                "project_id": str(project_id),
+                "node_type": "research_gap",
+                "label": g.get("gap_statement", "")[:120],
+                "detail": g.get("gap_statement", ""),
+                "gap_typology": typ,
+                "saturation_status": "none",
+                "status": "accepted",
+                "validation_status": "pending",
+                "confidence_score": conf,
+                "evidence": ev
+            })
+
+        comp_nodes = []
+        comp_meta = []
+        for c in project_comps:
+            param = c.get("parameter")
+            val = (c.get("final_value") or c.get("ai_value") or "").strip()
+            if not val: continue
+
+            if param == "methodology":
+                node_type = "method"
+                sat = "medium"
+            elif param == "variables_concepts":
+                node_type = "concept"
+                sat = "high"
+            elif param == "results_findings":
+                node_type = "result"
+                sat = "medium"
+            else:
+                continue
+
+            p_title = paper_map.get(c.get("paper_id"), "")
+            comp_meta.append((c.get("paper_id"), node_type))
+            comp_nodes.append({
+                "project_id": str(project_id),
+                "node_type": node_type,
+                "label": val[:100],
+                "detail": val,
+                "saturation_status": sat,
+                "status": "accepted",
+                "validation_status": "accepted",
+                "confidence_score": 0.85,
+                "evidence": [{"quote": val[:200], "paper_id": c.get("paper_id"), "paper_title": p_title}]
+            })
+
+        all_nodes = paper_nodes + gap_nodes + comp_nodes
+        if not all_nodes:
+            return [], []
+
+        with httpx.Client(timeout=30.0) as client:
+            resp_n = client.post(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers(user, return_representation=True),
+                json=all_nodes
+            )
+            if not resp_n.is_success:
+                return [], []
+            inserted_nodes = resp_n.json()
+
+        num_papers = len(paper_nodes)
+        num_gaps = len(gap_nodes)
+        paper_node_by_pid = {papers[i]["id"]: inserted_nodes[i]["id"] for i in range(num_papers)}
+        inserted_gap_nodes = inserted_nodes[num_papers:num_papers + num_gaps]
+        inserted_comp_nodes = inserted_nodes[num_papers + num_gaps:]
+
+        edge_rows = []
+        for i, gn in enumerate(inserted_gap_nodes):
+            p_id = gap_meta[i]
+            if p_id in paper_node_by_pid:
+                edge_rows.append({
+                    "project_id": str(project_id),
+                    "source_id": paper_node_by_pid[p_id],
+                    "target_id": gn["id"],
+                    "relation": "identifies",
+                    "detail": "Paper mengidentifikasi research gap"
+                })
+
+        for i, cn in enumerate(inserted_comp_nodes):
+            p_id, ntype = comp_meta[i]
+            if p_id in paper_node_by_pid:
+                rel = "uses" if ntype == "method" else ("studies" if ntype == "concept" else "finds")
+                edge_rows.append({
+                    "project_id": str(project_id),
+                    "source_id": paper_node_by_pid[p_id],
+                    "target_id": cn["id"],
+                    "relation": rel,
+                    "detail": f"Paper {rel} {ntype}"
+                })
+
+        inserted_edges = []
+        if edge_rows:
+            with httpx.Client(timeout=30.0) as client:
+                resp_e = client.post(
+                    f"{self._rest_url}/knowledge_graph_edges",
+                    headers=self._headers(user, return_representation=True),
+                    json=edge_rows
+                )
+                if resp_e.is_success:
+                    inserted_edges = resp_e.json()
+
+        from .layout import update_layout_for_project
+        try:
+            update_layout_for_project(project_id)
+            with httpx.Client(timeout=15.0) as client:
+                re_resp = client.get(
+                    f"{self._rest_url}/knowledge_graph_nodes",
+                    headers=self._headers(user),
+                    params={"project_id": f"eq.{project_id}"}
+                )
+                if re_resp.is_success:
+                    inserted_nodes = re_resp.json()
+        except Exception:
+            pass
+
+        return inserted_nodes, inserted_edges
+
     async def get_knowledge_graph(
         self, user: AuthenticatedUser, project_id: UUID
     ) -> 'KnowledgeGraphMapRead':
@@ -1561,6 +1747,9 @@ class SupabaseProjectRepository:
             
         nodes_data = nodes_resp.json()
         edges_data = edges_resp.json()
+
+        if not nodes_data:
+            nodes_data, edges_data = await self._auto_populate_knowledge_graph(user, project_id)
 
         # 2. Map back to edges format expected by schema
         edges_formatted = []
