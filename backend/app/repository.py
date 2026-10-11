@@ -816,23 +816,32 @@ class SupabaseProjectRepository:
             f"{combined_text[:settings.gemini_max_input_chars]}"
         )
         
-        try:
-            client_gemini = genai.Client(api_key=settings.gemini_api_key)
-            response_llm = client_gemini.models.generate_content(
-                model=settings.gemini_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=SynthesisOutput,
-                    temperature=0.2,
-                ),
-            )
-            result_json = response_llm.text
-            if not result_json:
-                 raise ValueError("Empty response")
-            parsed = SynthesisOutput.model_validate_json(result_json)
-        except Exception as e:
-            raise RepositoryError(f"Gagal melakukan sintesis AI: {str(e)}")
+        models = list(dict.fromkeys(filter(None, [settings.gemini_model, settings.gemini_fallback_model])))
+        parsed = None
+        last_error = None
+        client_gemini = genai.Client(api_key=settings.gemini_api_key)
+        for model_name in models:
+            try:
+                response_llm = client_gemini.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=SynthesisOutput,
+                        temperature=0.2,
+                    ),
+                )
+                result_json = response_llm.text
+                if not result_json:
+                    raise ValueError("Empty response")
+                parsed = SynthesisOutput.model_validate_json(result_json)
+                break
+            except Exception as e:
+                last_error = e
+                continue
+
+        if not parsed:
+            raise RepositoryError(f"Gagal melakukan sintesis AI: {str(last_error)}")
         
         insert_payload = {
             "project_id": str(project_id),
@@ -846,7 +855,7 @@ class SupabaseProjectRepository:
         async with httpx.AsyncClient(timeout=30.0) as client:
             res_insert = await client.post(
                 f"{self._rest_url}/comparative_syntheses",
-                headers=self._headers(user, {"Prefer": "return=representation"}),
+                headers=self._headers(user, return_representation=True),
                 json=insert_payload,
             )
             self._raise_for_repository_error(res_insert)
