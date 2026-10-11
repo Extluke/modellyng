@@ -8,8 +8,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 25),
+      receiveTimeout: const Duration(seconds: 45),
       headers: {'Accept': 'application/json'},
     ),
   );

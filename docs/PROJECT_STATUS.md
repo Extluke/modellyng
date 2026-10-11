@@ -99,12 +99,13 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   activates at logical tablet/desktop widths, and account affordances are
   either functional or honestly marked unavailable.
 
-The last verified automated baseline was (2026-10-11):
+The last verified automated baseline was (2026-10-12):
 
 - Backend: 138 tests passing, including project PATCH updates and authentication guards.
 - Dependency checks and transactional bulk-review validation preserved.
-- Flutter: 24 widget/unit tests passing (including project card menu regression tests).
+- Flutter: 30 widget/unit tests passing (including mobile aspect ratio upload visibility, defensive PDF validation, and project card menu regression tests).
 - Flutter web release build passing.
+- Mobile PDF upload defensively validated with in-memory bytes, sticky AppBar progress bar, reactive EmptyState upload indicator, and reliable Content-Length reporting.
 - Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 
 Direct browser QA on 2026-08-23 exercised real login, project creation, two PDF uploads,

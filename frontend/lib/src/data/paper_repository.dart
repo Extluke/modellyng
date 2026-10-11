@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -83,7 +82,7 @@ class PaperRepository {
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
       allowMultiple: true,
-      withData: kIsWeb,
+      withData: true,
     );
     if (result == null) return null;
 
@@ -92,11 +91,15 @@ class PaperRepository {
         'Maksimal 15 PDF dalam satu kali unggah.',
       );
     }
-    
-    // Check for duplicates
-    final existingTitles = existingPapers.map((p) => p.title?.toLowerCase() ?? '').toSet();
+
+    // Check for duplicates by filename
+    final existingFilenames = existingPapers
+        .map((p) => p.originalFilename.trim().toLowerCase())
+        .where((name) => name.isNotEmpty)
+        .toSet();
     for (final file in result.files) {
-      if (existingTitles.contains(file.name.toLowerCase())) {
+      final nameLower = file.name.trim().toLowerCase();
+      if (existingFilenames.contains(nameLower)) {
         throw PaperUploadException(
           'Paper "${file.name}" sudah pernah diunggah ke proyek ini.',
         );
@@ -108,21 +111,26 @@ class PaperRepository {
     int completedFiles = 0;
 
     for (final selected in result.files) {
-      if (kIsWeb && selected.bytes == null) {
-        throw const PaperUploadException(
-          'Salah satu file tidak dapat dibaca. Silakan pilih PDF kembali.',
+      Uint8List? fileBytes = selected.bytes;
+      if (fileBytes == null && selected.path != null) {
+        try {
+          final f = File(selected.path!);
+          if (await f.exists()) {
+            fileBytes = await f.readAsBytes();
+          }
+        } catch (_) {}
+      }
+
+      if (fileBytes == null && selected.path == null) {
+        throw PaperUploadException(
+          'File "${selected.name}" tidak dapat dibaca dari penyimpanan perangkat. Silakan pilih PDF kembali.',
         );
       }
-      if (!kIsWeb && selected.path == null) {
-        throw const PaperUploadException(
-          'Path file tidak ditemukan. Silakan pilih PDF kembali.',
-        );
-      }
-      
+
       final paper = await uploadPdf(
         project: project,
         originalFilename: selected.name,
-        bytes: selected.bytes,
+        bytes: fileBytes,
         path: selected.path,
         size: selected.size,
         onProgress: (progress) {
@@ -133,7 +141,7 @@ class PaperRepository {
       uploadedPapers.add(paper);
       completedFiles++;
     }
-    
+
     return uploadedPapers;
   }
 
@@ -145,7 +153,12 @@ class PaperRepository {
     int? size,
     void Function(double progress)? onProgress,
   }) async {
-    await _validatePdf(originalFilename, size, bytes: bytes, path: path);
+    final validatedBytes = await _validatePdf(
+      originalFilename,
+      size,
+      bytes: bytes,
+      path: path,
+    );
 
     final user = _supabase.auth.currentUser;
     if (user == null) {
@@ -156,82 +169,106 @@ class PaperRepository {
 
     try {
       onProgress?.call(0.05);
-      
-      final multipartFile = bytes != null
-          ? MultipartFile.fromBytes(bytes, filename: originalFilename)
-          : await MultipartFile.fromFile(path!, filename: originalFilename);
 
-      final formData = FormData.fromMap({
-        'file': multipartFile,
-      });
+      final multipartFile = MultipartFile.fromBytes(
+        validatedBytes,
+        filename: originalFilename,
+      );
+
+      final formData = FormData.fromMap({'file': multipartFile});
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/v1/projects/${project.id}/papers/upload',
         data: formData,
         options: Options(
-          sendTimeout: const Duration(minutes: 2),
-          receiveTimeout: const Duration(minutes: 2),
+          sendTimeout: const Duration(minutes: 3),
+          receiveTimeout: const Duration(minutes: 3),
         ),
         onSendProgress: (sent, total) {
           if (total > 0) {
-            onProgress?.call(0.05 + (sent / total * 0.9));
+            final ratio = (sent / total).clamp(0.0, 1.0);
+            onProgress?.call(0.05 + (ratio * 0.9));
+          } else if (sent > 0) {
+            onProgress?.call(0.5);
           }
         },
       );
-      onProgress?.call(1);
+      onProgress?.call(1.0);
       return ProjectPaper.fromJson(response.data!);
     } catch (error) {
       throw PaperUploadException(readableError(error));
     }
   }
 
-  static Future<void> _validatePdf(String name, int? size, {Uint8List? bytes, String? path}) async {
+  @visibleForTesting
+  static Future<Uint8List> validatePdf(
+    String name,
+    int? size, {
+    Uint8List? bytes,
+    String? path,
+  }) => _validatePdf(name, size, bytes: bytes, path: path);
+
+  static Future<Uint8List> _validatePdf(
+    String name,
+    int? size, {
+    Uint8List? bytes,
+    String? path,
+  }) async {
     if (!name.toLowerCase().endsWith('.pdf')) {
       throw const PaperUploadException('Hanya file PDF yang dapat diunggah.');
     }
-    
-    int actualSize = size ?? 0;
-    List<int> signatureBytes = [];
 
+    Uint8List effectiveBytes;
     if (bytes != null) {
-      actualSize = bytes.length;
-      if (bytes.length >= 5) {
-        signatureBytes = bytes.sublist(0, 5);
-      }
+      effectiveBytes = bytes;
     } else if (path != null) {
-      final file = File(path);
-      actualSize = await file.length();
-      final stream = file.openRead(0, 5);
-      await for (final chunk in stream) {
-        signatureBytes.addAll(chunk);
-        if (signatureBytes.length >= 5) break;
+      try {
+        final file = File(path);
+        if (!await file.exists()) {
+          throw PaperUploadException(
+            'File "$name" tidak ditemukan di perangkat. Silakan pilih kembali.',
+          );
+        }
+        effectiveBytes = await file.readAsBytes();
+      } on FileSystemException catch (e) {
+        throw PaperUploadException(
+          'Gagal membaca file "$name" dari perangkat: ${e.message}',
+        );
       }
-    }
-
-    if (actualSize <= 0 || signatureBytes.isEmpty) {
-      throw const PaperUploadException(
-        'File PDF kosong dan tidak dapat diproses.',
+    } else {
+      throw PaperUploadException(
+        'File "$name" tidak dapat dibaca dari penyimpanan perangkat.',
       );
     }
-    if (actualSize > maxPdfSizeBytes) {
+
+    if (effectiveBytes.isEmpty) {
+      throw const PaperUploadException(
+        'File PDF kosong (0 byte) dan tidak dapat diproses.',
+      );
+    }
+    if (effectiveBytes.length > maxPdfSizeBytes) {
       throw const PaperUploadException(
         'Ukuran PDF melebihi batas 50 MB per file.',
       );
     }
-    
+
     const signature = [0x25, 0x50, 0x44, 0x46, 0x2D];
-    if (signatureBytes.length < 5 ||
+    if (effectiveBytes.length < 5 ||
         !List.generate(
           5,
-          (index) => signatureBytes[index] == signature[index],
+          (index) => effectiveBytes[index] == signature[index],
         ).every((matches) => matches)) {
       throw const PaperUploadException(
         'Isi file tidak dikenali sebagai dokumen PDF yang valid.',
       );
     }
+    return effectiveBytes;
   }
 
   static String readableError(Object error) {
     if (error is PaperUploadException) return error.message;
+    if (error is FileSystemException) {
+      return 'Gagal membaca file dari penyimpanan perangkat: ${error.message}';
+    }
     if (error is DioException) {
       final data = error.response?.data;
       if (data is Map<String, dynamic> && data['detail'] != null) {
@@ -245,11 +282,11 @@ class PaperRepository {
       }
       if (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout) {
-        return 'FastAPI belum dapat dihubungi. Pastikan server lokal berjalan.';
+        return 'FastAPI belum dapat dihubungi. Pastikan server lokal berjalan dan koneksi stabil.';
       }
       if (error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.receiveTimeout) {
-        return 'Waktu unggah habis. Pastikan server tetap berjalan lalu coba kembali.';
+        return 'Waktu unggah habis. Pastikan koneksi jaringan stabil lalu coba kembali.';
       }
       return ProjectRepository.readableError(error);
     }

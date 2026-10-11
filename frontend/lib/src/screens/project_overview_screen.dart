@@ -56,19 +56,21 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
       _uploading = true;
       _uploadProgress = 0;
     });
-    
+
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOutCubic,
+      unawaited(
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        ),
       );
     }
     try {
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
       final query = (userId: userId!, projectId: widget.project.id);
       final existingPapers = ref.read(projectPapersProvider(query)).value ?? [];
-      
+
       final papers = await ref
           .read(paperRepositoryProvider)
           .pickAndUploadPdf(
@@ -91,9 +93,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
           ref.invalidate(projectsProvider(userId));
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${papers.length} PDF berhasil diunggah.'),
-          ),
+          SnackBar(content: Text('${papers.length} PDF berhasil diunggah.')),
         );
       }
     } catch (error) {
@@ -164,22 +164,23 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
     if (confirmed != true) return;
 
     try {
-      await ref.read(projectRepositoryProvider).deletePaper(
-            widget.project.id,
-            paper.id,
-          );
-          
+      await ref
+          .read(projectRepositoryProvider)
+          .deletePaper(widget.project.id, paper.id);
+
       if (!mounted) return;
-      
+
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
       if (userId != null) {
         ref.invalidate(
           projectPapersProvider((userId: userId, projectId: widget.project.id)),
         );
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Paper "${paper.originalFilename}" telah dihapus.')),
+        SnackBar(
+          content: Text('Paper "${paper.originalFilename}" telah dihapus.'),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -226,150 +227,234 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
           ),
           const SizedBox(width: 10),
         ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(_uploading ? 4 : 1),
+          child: _uploading
+              ? LinearProgressIndicator(
+                  key: const Key('appbar-upload-progress'),
+                  value: _uploadProgress > 0 ? _uploadProgress : null,
+                  minHeight: 4,
+                  backgroundColor: AppColors.primarySoft,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.primary,
+                  ),
+                )
+              : const Divider(height: 1),
         ),
       ),
-      body: SingleChildScrollView(
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(24, 30, 24, 40),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                PageHeading(
-                  title: project.title,
-                  subtitle: project.description.isEmpty
-                      ? 'Workspace riset tanpa deskripsi.'
-                      : project.description,
-                  action: FilledButton.icon(
-                    key: const Key('upload-pdf-button'),
-                    onPressed: _uploading ? null : _uploadPdf,
-                    icon: _uploading
-                        ? const SizedBox(
-                            width: 17,
-                            height: 17,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.upload_file_rounded),
-                    label: Text(_uploading ? 'Mengunggah...' : 'Unggah PDF'),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: MetricCard(
-                          icon: Icons.description_outlined,
-                          label: 'Paper',
-                          value: '$paperCount',
-                          color: AppColors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: MetricCard(
-                          icon: Icons.fact_check_outlined,
-                          label: 'Menunggu review',
-                          value: '$reviewCount',
-                          color: AppColors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _UploadGuidance(
-                  uploading: _uploading,
-                  progress: _uploadProgress,
-                ),
-                const SizedBox(height: 24),
-                const SectionHeading(
-                  title: 'Paper dalam proyek',
-                  subtitle:
-                      'File tersimpan privat dan hanya dapat diakses oleh pemilik proyek.',
-                ),
-                const SizedBox(height: 14),
-                papers.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(36),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, _) => Card(
-                    child: EmptyState(
-                      icon: Icons.cloud_off_outlined,
-                      title: 'Daftar paper belum dapat dimuat',
-                      message:
-                          'Pastikan FastAPI dan Supabase lokal sedang berjalan.',
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+          final spacing = isNarrow ? 16.0 : 24.0;
+          return SingleChildScrollView(
+            controller: _scrollController,
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 16 : 24,
+              isNarrow ? 18 : 30,
+              isNarrow ? 16 : 24,
+              isNarrow ? 24 : 40,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 920),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PageHeading(
+                      title: project.title,
+                      subtitle: project.description.isEmpty
+                          ? 'Workspace riset tanpa deskripsi.'
+                          : project.description,
                       action: FilledButton.icon(
-                        onPressed: userId == null
-                            ? null
-                            : () => ref.invalidate(
-                                projectPapersProvider((
-                                  userId: userId,
-                                  projectId: project.id,
-                                )),
-                              ),
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Coba lagi'),
+                        key: const Key('upload-pdf-button'),
+                        onPressed: _uploading ? null : _uploadPdf,
+                        icon: _uploading
+                            ? const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.upload_file_rounded),
+                        label: Text(
+                          _uploading
+                              ? '${(_uploadProgress * 100).round()}% Mengunggah...'
+                              : 'Unggah PDF',
+                        ),
                       ),
                     ),
-                  ),
-                  data: (items) => items.isEmpty
-                      ? Card(
-                          child: EmptyState(
-                            icon: Icons.upload_file_outlined,
-                            title: 'Belum ada paper dalam proyek ini',
-                            message:
-                                'Unggah PDF pertama. Ukuran maksimal 50 MB dan file harus memiliki isi PDF yang valid.',
-                            action: FilledButton.icon(
-                              onPressed: _uploading ? null : _uploadPdf,
-                              icon: const Icon(Icons.upload_file_rounded),
-                              label: const Text('Pilih PDF'),
+                    SizedBox(height: spacing),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: MetricCard(
+                              icon: Icons.description_outlined,
+                              label: 'Paper',
+                              value: '$paperCount',
+                              color: AppColors.blue,
                             ),
                           ),
-                        )
-                      : Column(
-                          children: [
-                            for (final paper in items) ...[
-                              _PaperTile(
-                                paper: paper,
-                                onOpenResult: () async {
-                                  await Navigator.of(context).push<void>(
-                                    MaterialPageRoute(
-                                      builder: (_) => PaperResultScreen(
-                                        projectId: project.id,
-                                        paperId: paper.id,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: MetricCard(
+                              icon: Icons.fact_check_outlined,
+                              label: 'Menunggu review',
+                              value: '$reviewCount',
+                              color: AppColors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: spacing),
+                    _UploadGuidance(
+                      uploading: _uploading,
+                      progress: _uploadProgress,
+                    ),
+                    SizedBox(height: spacing),
+                    const SectionHeading(
+                      title: 'Paper dalam proyek',
+                      subtitle:
+                          'File tersimpan privat dan hanya dapat diakses oleh pemilik proyek.',
+                    ),
+                    const SizedBox(height: 14),
+                    papers.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.all(36),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (error, _) => Card(
+                        child: EmptyState(
+                          icon: Icons.cloud_off_outlined,
+                          title: 'Daftar paper belum dapat dimuat',
+                          message:
+                              'Pastikan FastAPI dan Supabase lokal sedang berjalan.',
+                          action: FilledButton.icon(
+                            onPressed: userId == null
+                                ? null
+                                : () => ref.invalidate(
+                                    projectPapersProvider((
+                                      userId: userId,
+                                      projectId: project.id,
+                                    )),
+                                  ),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Coba lagi'),
+                          ),
+                        ),
+                      ),
+                      data: (items) => items.isEmpty
+                          ? Card(
+                              child: EmptyState(
+                                icon: _uploading
+                                    ? Icons.cloud_upload_outlined
+                                    : Icons.upload_file_outlined,
+                                title: _uploading
+                                    ? 'Sedang mengunggah PDF...'
+                                    : 'Belum ada paper dalam proyek ini',
+                                message: _uploading
+                                    ? 'PDF sedang dikirim ke penyimpanan privat (${(_uploadProgress * 100).round()}%). Mohon jangan tutup halaman ini.'
+                                    : 'Unggah PDF pertama. Ukuran maksimal 50 MB dan file harus memiliki isi PDF yang valid.',
+                                action: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_uploading) ...[
+                                      SizedBox(
+                                        width: 240,
+                                        child: LinearProgressIndicator(
+                                          key: const Key(
+                                            'empty-state-upload-progress',
+                                          ),
+                                          value: _uploadProgress > 0
+                                              ? _uploadProgress
+                                              : null,
+                                          minHeight: 6,
+                                          borderRadius: BorderRadius.circular(
+                                            99,
+                                          ),
+                                          backgroundColor:
+                                              AppColors.primarySoft,
+                                          valueColor:
+                                              const AlwaysStoppedAnimation<
+                                                Color
+                                              >(AppColors.primary),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 14),
+                                    ],
+                                    FilledButton.icon(
+                                      key: const Key(
+                                        'empty-state-upload-button',
+                                      ),
+                                      onPressed: _uploading ? null : _uploadPdf,
+                                      icon: _uploading
+                                          ? const SizedBox(
+                                              width: 17,
+                                              height: 17,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.upload_file_rounded,
+                                            ),
+                                      label: Text(
+                                        _uploading
+                                            ? 'Mengunggah (${(_uploadProgress * 100).round()}%)...'
+                                            : 'Pilih PDF',
                                       ),
                                     ),
-                                  );
-                                  if (userId != null) {
-                                    ref.invalidate(projectPapersProvider((userId: userId, projectId: project.id)));
-                                    ref.invalidate(projectsProvider(userId));
-                                  }
-                                },
-                                onProcess: paper.canStartProcessing
-                                    ? () => _processPaper(paper)
-                                    : null,
-                                onDelete: () => _deletePaper(paper),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 12),
-                            ],
-                          ],
-                        ),
+                            )
+                          : Column(
+                              children: [
+                                for (final paper in items) ...[
+                                  _PaperTile(
+                                    paper: paper,
+                                    onOpenResult: () async {
+                                      await Navigator.of(context).push<void>(
+                                        MaterialPageRoute(
+                                          builder: (_) => PaperResultScreen(
+                                            projectId: project.id,
+                                            paperId: paper.id,
+                                          ),
+                                        ),
+                                      );
+                                      if (userId != null) {
+                                        ref.invalidate(
+                                          projectPapersProvider((
+                                            userId: userId,
+                                            projectId: project.id,
+                                          )),
+                                        );
+                                        ref.invalidate(
+                                          projectsProvider(userId),
+                                        );
+                                      }
+                                    },
+                                    onProcess: paper.canStartProcessing
+                                        ? () => _processPaper(paper)
+                                        : null,
+                                    onDelete: () => _deletePaper(paper),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                              ],
+                            ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -423,6 +508,7 @@ class _UploadGuidance extends StatelessWidget {
           if (uploading) ...[
             const SizedBox(height: 12),
             LinearProgressIndicator(
+              key: const Key('guidance-upload-progress'),
               value: progress > 0 ? progress : null,
               minHeight: 6,
               borderRadius: BorderRadius.circular(99),
@@ -577,8 +663,15 @@ class _PaperTile extends StatelessWidget {
                   const SizedBox(height: 8),
                   TextButton.icon(
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
-                    label: const Text('Hapus', style: TextStyle(color: AppColors.red)),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: AppColors.red,
+                    ),
+                    label: const Text(
+                      'Hapus',
+                      style: TextStyle(color: AppColors.red),
+                    ),
                     style: TextButton.styleFrom(foregroundColor: AppColors.red),
                   ),
                 ],
