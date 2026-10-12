@@ -10,7 +10,11 @@ import 'paper_result_screen.dart';
 import 'synthesis_screen.dart';
 
 class ResearchGapMapScreen extends ConsumerStatefulWidget {
-  const ResearchGapMapScreen({required this.userId, required this.projectId, super.key});
+  const ResearchGapMapScreen({
+    required this.userId,
+    required this.projectId,
+    super.key,
+  });
   final String userId;
   final String projectId;
 
@@ -20,12 +24,12 @@ class ResearchGapMapScreen extends ConsumerStatefulWidget {
 }
 
 class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
-    String _source = 'all';
+  String _source = 'all';
   String? _savingCandidateKey;
 
   @override
   Widget build(BuildContext context) {
-        return Scaffold(
+    return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
@@ -39,37 +43,45 @@ class _ResearchGapMapScreenState extends ConsumerState<ResearchGapMapScreen> {
           const _HumanReviewNotice(),
           const SizedBox(height: 18),
           Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  PaperComparisonPanel(key: ValueKey('gap-pairs-${widget.projectId}'), projectId: widget.projectId),
-                  const SizedBox(height: 24),
-                  Text('Keterbatasan dari masing-masing paper', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  const Text('Sumber tambahan dari limitations dan future work yang sudah direview.'),
-                  const SizedBox(height: 14),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'all', label: Text('Semua')),
-                      ButtonSegment(
-                        value: 'limitations',
-                        label: Text('Keterbatasan'),
-                      ),
-                      ButtonSegment(
-                        value: 'future_work',
-                        label: Text('Future work'),
-                      ),
-                    ],
-                    selected: {_source},
-                    onSelectionChanged: (value) =>
-                        setState(() => _source = value.first),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PaperComparisonPanel(
+                key: ValueKey('gap-pairs-${widget.projectId}'),
+                projectId: widget.projectId,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Keterbatasan dari masing-masing paper',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Sumber tambahan dari limitations dan future work yang sudah direview.',
+              ),
+              const SizedBox(height: 14),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'all', label: Text('Semua')),
+                  ButtonSegment(
+                    value: 'limitations',
+                    label: Text('Keterbatasan'),
                   ),
-                  const SizedBox(height: 18),
-                  _map(
-                    ref.watch(researchGapMapProvider(widget.projectId)),
-                    ref.watch(researchGapDecisionsProvider(widget.projectId)),
+                  ButtonSegment(
+                    value: 'future_work',
+                    label: Text('Future work'),
                   ),
                 ],
+                selected: {_source},
+                onSelectionChanged: (value) =>
+                    setState(() => _source = value.first),
               ),
+              const SizedBox(height: 18),
+              _map(
+                ref.watch(researchGapMapProvider(widget.projectId)),
+                ref.watch(researchGapDecisionsProvider(widget.projectId)),
+              ),
+            ],
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -215,15 +227,28 @@ class _GapChainCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final paperEdge = graph.edges.firstWhere(
-      (edge) => edge.target == gap.id && edge.relation == 'suggests_candidate',
-    );
-    final paper = graph.nodes.firstWhere((node) => node.id == paperEdge.source);
+    final paperEdge = graph.edges
+        .where(
+          (edge) =>
+              edge.target == gap.id && edge.relation == 'suggests_candidate',
+        )
+        .firstOrNull;
+    final paper = paperEdge == null
+        ? graph.nodes
+              .where((node) => node.kind == 'paper' && node.id == gap.paperId)
+              .firstOrNull
+        : graph.nodes.where((node) => node.id == paperEdge.source).firstOrNull;
+    final paperTitle = paper?.label ?? 'Paper Terkait';
+    final paperDetail = paper?.detail ?? 'Detail paper tidak tersedia';
     final evidence = graph.edges
         .where(
           (edge) => edge.source == gap.id && edge.relation == 'supported_by',
         )
-        .map((edge) => graph.nodes.firstWhere((node) => node.id == edge.target))
+        .map(
+          (edge) =>
+              graph.nodes.where((node) => node.id == edge.target).firstOrNull,
+        )
+        .whereType<ConceptMapNode>()
         .toList();
     final sourceLabel = gap.parameter == 'limitations'
         ? 'Keterbatasan'
@@ -267,8 +292,8 @@ class _GapChainCard extends StatelessWidget {
             _MapStep(
               icon: Icons.description_outlined,
               eyebrow: '1 · SUMBER PAPER',
-              title: paper.label,
-              subtitle: paper.detail,
+              title: paperTitle,
+              subtitle: paperDetail,
             ),
             const _FlowConnector(),
             _MapStep(
@@ -297,7 +322,7 @@ class _GapChainCard extends StatelessWidget {
                 ),
             const _FlowConnector(),
             const Text(
-              '4 · AMBIL KANDIDAT GAP INI?',
+              '4 · PENYELESAIAN GAP',
               style: TextStyle(
                 color: AppColors.muted,
                 fontSize: 11,
@@ -305,30 +330,20 @@ class _GapChainCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    key: Key('accept-gap-${gap.paperId}-${gap.parameter}'),
-                    onPressed: saving
-                        ? null
-                        : () => onDecision(GapDecision.accepted),
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Yes, gunakan'),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: Key('finish-gap-${gap.paperId}-${gap.parameter}'),
+                onPressed: saving
+                    ? null
+                    : () => onDecision(GapDecision.accepted),
+                icon: const Icon(Icons.check_circle_rounded),
+                label: const Text('SELESAI'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: Key('reject-gap-${gap.paperId}-${gap.parameter}'),
-                    onPressed: saving
-                        ? null
-                        : () => onDecision(GapDecision.rejected),
-                    icon: const Icon(Icons.close_rounded),
-                    label: const Text('No, lewati'),
-                  ),
-                ),
-              ],
+              ),
             ),
             if (saving) ...[
               const SizedBox(height: 10),
@@ -336,17 +351,89 @@ class _GapChainCard extends StatelessWidget {
             ],
             if (decision != null) ...[
               const _FlowConnector(),
-              _MapStep(
-                icon: decision!.decision == GapDecision.accepted
-                    ? Icons.edit_note_rounded
-                    : Icons.navigate_next_rounded,
-                eyebrow: '5 · PROSES BERIKUTNYA',
-                title: decision!.decision == GapDecision.accepted
-                    ? 'Susun rumusan penelitian'
-                    : 'Lanjut ke kandidat berikutnya',
-                subtitle: decision!.decision == GapDecision.accepted
-                    ? 'Kandidat masuk daftar gap terpilih dan siap menjadi dasar pertanyaan/tujuan baru.'
-                    : 'Kandidat tetap tersimpan sebagai riwayat keputusan, tetapi tidak dipakai.',
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Selamat anda sudah berada di akhir',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E2340),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Kutipan Gap yang Di-klik:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '"${gap.detail}"',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Rekomendasi Tindakan (Apa yang Bisa Dilakukan User):',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Berdasarkan gap yang diidentifikasi, pengguna dapat merumuskan arsitektur baru atau mengganti komponen yang memiliki keterbatasan (misal: jika keterbatasan kemampuan IoT, beralih dari IoT mikrokontroler standar ke Raspberry Pi/Edge AI).',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF2D3748),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Bagaimana Kelanjutannya (Tahapan Riset):',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '1. Tetapkan baseline performa awal sistem saat ini.\n2. Rancang implementasi solusi komparatif.\n3. Uji coba dan dokumentasikan kontribusi kebaruan (novelty) riset Anda.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF2D3748),
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],

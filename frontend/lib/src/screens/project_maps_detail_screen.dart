@@ -39,17 +39,20 @@ class ProjectMapsDetailScreen extends ConsumerStatefulWidget {
   final String userId;
 
   @override
-  ConsumerState<ProjectMapsDetailScreen> createState() => _ProjectMapsDetailScreenState();
+  ConsumerState<ProjectMapsDetailScreen> createState() =>
+      _ProjectMapsDetailScreenState();
 }
 
-class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScreen> {
+class _ProjectMapsDetailScreenState
+    extends ConsumerState<ProjectMapsDetailScreen> {
   int _selectedMap = 0; // 0 for Concept Map, 1 for Gap Map
-  final TransformationController _transformController = TransformationController();
-  
+  final TransformationController _transformController =
+      TransformationController();
+
   final Map<String, Offset> _nodePositions = {};
   List<GraphNode> _visibleNodes = [];
   List<GraphEdge> _visibleEdges = [];
-  
+
   final TextEditingController _searchController = TextEditingController();
 
   // Filter state
@@ -63,8 +66,10 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
     GraphNodeType.researchArea,
     GraphNodeType.result,
   };
-  
-  final Set<GraphGapType> _visibleGapTypes = GraphGapType.values.where((e) => e != GraphGapType.other).toSet();
+
+  final Set<GraphGapType> _visibleGapTypes = GraphGapType.values
+      .where((e) => e != GraphGapType.other)
+      .toSet();
   final Set<GraphSaturationStatus> _visibleSaturationStatuses = {
     GraphSaturationStatus.high,
     GraphSaturationStatus.medium,
@@ -89,15 +94,15 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       final repo = ref.read(projectRepositoryProvider);
       final map = await repo.getKnowledgeGraph(widget.projectId);
       if (!mounted) return;
-      
+
       setState(() {
         _graphMap = map;
         _isLoading = false;
       });
-      
+
       _generateLayout();
       _updateVisibleGraph();
-      
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _centerView();
       });
@@ -114,10 +119,10 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
     if (!mounted) return;
     final size = MediaQuery.of(context).size;
     const double scale = 0.5;
-    
+
     double cx = 2500;
     double cy = 2500;
-    
+
     if (_visibleNodes.isNotEmpty) {
       double sumX = 0;
       double sumY = 0;
@@ -138,17 +143,18 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
 
     final dx = (size.width / 2) - (cx * scale);
     final dy = (size.height / 2) - (cy * scale);
-    
+
     final centerMatrix = Matrix4.identity()
       ..translate(dx, dy)
       ..scale(scale);
     _transformController.value = centerMatrix;
   }
 
-
   Future<void> _handleSynthesizeGap(String gapId) async {
     try {
-      final res = await ref.read(projectRepositoryProvider).synthesizeGraphNodes(widget.projectId, [gapId]);
+      final res = await ref
+          .read(projectRepositoryProvider)
+          .synthesizeGraphNodes(widget.projectId, [gapId]);
       if (!mounted) return;
       showDialog(
         context: context,
@@ -159,16 +165,28 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Usulan Judul Tesis:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Usulan Judul Tesis:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 ...res.usulanJudul.map((t) => Text('- $t')),
                 const SizedBox(height: 16),
-                const Text('Rumusan Masalah:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Rumusan Masalah:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 ...res.rumusanMasalah.map((p) => Text('- $p')),
                 const SizedBox(height: 16),
-                const Text('Pernyataan Novelty:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Pernyataan Novelty:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 Text(res.pernyataanNovelty),
                 const SizedBox(height: 16),
-                const Text('Alasan Pemilihan:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Alasan Pemilihan:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 Text(res.alasanPemilihan),
               ],
             ),
@@ -177,27 +195,33 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Tutup'),
-            )
+            ),
           ],
-        )
+        ),
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal sintesis: ${ProjectRepository.readableError(e)}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Gagal sintesis: ${ProjectRepository.readableError(e)}',
+            ),
+          ),
+        );
       }
     }
   }
 
   void _generateLayout() {
     if (_graphMap == null) return;
-    
+
     int index = 0;
     final totalNodes = _graphMap!.nodes.length;
-    
+
     for (final node in _graphMap!.nodes) {
       double xVal;
       double yVal;
-      
+
       if (node.x == null || node.y == null) {
         // Fallback: arrange in a circle if no coordinates are provided
         final radius = 600.0 + (index % 3) * 200.0;
@@ -209,7 +233,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         xVal = node.x!;
         yVal = node.y!;
       }
-      
+
       // Base offset 2500 to prevent negative coords from clipping top/left
       final x = xVal + 2500.0;
       final y = yVal + 2500.0;
@@ -226,30 +250,36 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         _visibleEdges = [];
         return;
       }
-      
+
       final query = _searchController.text.toLowerCase();
-      
+
       final allGraphNodes = _graphMap!.nodes.map((n) {
         final nodeType = GraphNodeType.fromJson(n.kind);
-        
+
         GraphGapType? gapType;
         if (nodeType == GraphNodeType.researchGap) {
           gapType = GraphGapType.fromJson(n.gapTypology);
         }
-        
+
         return GraphNode(
           id: n.id,
           label: n.label,
           type: nodeType,
           gapStatement: n.detail,
           gapType: gapType,
-          confidence: n.confidenceScore != null ? GapConfidence.high : GapConfidence.medium,
-          evidence: n.evidence.map((e) => GapEvidence(
-            paperId: e.paperId,
-            paperTitle: e.paperTitle,
-            section: e.section ?? 'General',
-            quote: e.quote,
-          )).toList(),
+          confidence: n.confidenceScore != null
+              ? GapConfidence.high
+              : GapConfidence.medium,
+          evidence: n.evidence
+              .map(
+                (e) => GapEvidence(
+                  paperId: e.paperId,
+                  paperTitle: e.paperTitle,
+                  section: e.section ?? 'General',
+                  quote: e.quote,
+                ),
+              )
+              .toList(),
           isValidated: n.validationStatus == 'accepted',
           saturationStatus: n.saturationStatus,
           zoneCategory: n.zoneCategory,
@@ -260,7 +290,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
 
       _visibleNodes = allGraphNodes.where((n) {
         if (!_visibleNodeTypes.contains(n.type)) return false;
-        
+
         if (n.type == GraphNodeType.researchGap && n.gapType != null) {
           if (!_visibleGapTypes.contains(n.gapType)) return false;
         }
@@ -270,18 +300,24 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           if (!_visibleSaturationStatuses.contains(satEnum)) return false;
         }
 
-        if (_selectedMethodCluster != null && _selectedMethodCluster!.isNotEmpty) {
-          if (n.type == GraphNodeType.method && n.methodCluster != _selectedMethodCluster) return false;
+        if (_selectedMethodCluster != null &&
+            _selectedMethodCluster!.isNotEmpty) {
+          if (n.type == GraphNodeType.method &&
+              n.methodCluster != _selectedMethodCluster)
+            return false;
         }
-        
-        if (_selectedObjectCluster != null && _selectedObjectCluster!.isNotEmpty) {
-          if (n.zoneCategory != null && n.zoneCategory != _selectedObjectCluster) return false;
+
+        if (_selectedObjectCluster != null &&
+            _selectedObjectCluster!.isNotEmpty) {
+          if (n.zoneCategory != null &&
+              n.zoneCategory != _selectedObjectCluster)
+            return false;
         }
 
         if (query.isNotEmpty && !n.label.toLowerCase().contains(query)) {
           return false;
         }
-        
+
         if (_selectedMap == 1) {
           // Concept map: hide gaps
           return n.type != GraphNodeType.researchGap;
@@ -292,14 +328,20 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       }).toList();
 
       final visibleIds = _visibleNodes.map((n) => n.id).toSet();
-      
-      _visibleEdges = _graphMap!.edges.where((e) {
-        return visibleIds.contains(e.source) && visibleIds.contains(e.target);
-      }).map<GraphEdge>((e) => GraphEdge(
-        sourceId: e.source, 
-        targetId: e.target, 
-        label: e.relation
-      )).toList();
+
+      _visibleEdges = _graphMap!.edges
+          .where((e) {
+            return visibleIds.contains(e.source) &&
+                visibleIds.contains(e.target);
+          })
+          .map<GraphEdge>(
+            (e) => GraphEdge(
+              sourceId: e.source,
+              targetId: e.target,
+              label: e.relation,
+            ),
+          )
+          .toList();
     });
   }
 
@@ -323,146 +365,259 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                   Container(
                     width: 40,
                     height: 4,
-                    decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       children: [
-                        const Text('Filter Map', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E2340))),
+                        const Text(
+                          'Filter Map',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E2340),
+                          ),
+                        ),
                         const SizedBox(height: 24),
-                        
+
                         // 1. Tampilkan Tipe NODE
-                        const Text('Tampilkan Tipe NODE', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted)),
+                        const Text(
+                          'Tampilkan Tipe NODE',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.muted,
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        LayoutBuilder(builder: (context, constraints) {
-                          final width = (constraints.maxWidth - 12) / 2;
-                          Widget buildNodeFilter(IconData icon, String label, GraphNodeType type) {
-                            return _buildFilterButton(
-                              width: width,
-                              icon: icon,
-                              label: label,
-                              isSelected: _visibleNodeTypes.contains(type),
-                              onTap: () {
-                                setModalState(() {
-                                  if (_visibleNodeTypes.contains(type)) {
-                                    _visibleNodeTypes.remove(type);
-                                  } else {
-                                    _visibleNodeTypes.add(type);
-                                  }
-                                });
-                                _updateVisibleGraph();
-                              },
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = (constraints.maxWidth - 12) / 2;
+                            Widget buildNodeFilter(
+                              IconData icon,
+                              String label,
+                              GraphNodeType type,
+                            ) {
+                              return _buildFilterButton(
+                                width: width,
+                                icon: icon,
+                                label: label,
+                                isSelected: _visibleNodeTypes.contains(type),
+                                onTap: () {
+                                  setModalState(() {
+                                    if (_visibleNodeTypes.contains(type)) {
+                                      _visibleNodeTypes.remove(type);
+                                    } else {
+                                      _visibleNodeTypes.add(type);
+                                    }
+                                  });
+                                  _updateVisibleGraph();
+                                },
+                              );
+                            }
+
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                buildNodeFilter(
+                                  Icons.article_outlined,
+                                  'Paper Nodes',
+                                  GraphNodeType.paper,
+                                ),
+                                buildNodeFilter(
+                                  Icons.lightbulb_outline,
+                                  'Concept Nodes',
+                                  GraphNodeType.concept,
+                                ),
+                                buildNodeFilter(
+                                  Icons.data_object,
+                                  'Variable Nodes',
+                                  GraphNodeType.variable,
+                                ),
+                                buildNodeFilter(
+                                  Icons.warning_amber_rounded,
+                                  'Research GAP Nodes',
+                                  GraphNodeType.researchGap,
+                                ),
+                                buildNodeFilter(
+                                  Icons.science_outlined,
+                                  'Method Nodes',
+                                  GraphNodeType.method,
+                                ),
+                              ],
                             );
-                          }
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              buildNodeFilter(Icons.article_outlined, 'Paper Nodes', GraphNodeType.paper),
-                              buildNodeFilter(Icons.lightbulb_outline, 'Concept Nodes', GraphNodeType.concept),
-                              buildNodeFilter(Icons.data_object, 'Variable Nodes', GraphNodeType.variable),
-                              buildNodeFilter(Icons.warning_amber_rounded, 'Research GAP Nodes', GraphNodeType.researchGap),
-                              buildNodeFilter(Icons.science_outlined, 'Method Nodes', GraphNodeType.method),
-                            ],
-                          );
-                        }),
-                        
+                          },
+                        ),
+
                         const SizedBox(height: 32),
-                        
+
                         // 2. Saring Tipe Celah
-                        const Text('Saring Tipe Celah', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted)),
+                        const Text(
+                          'Saring Tipe Celah',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.muted,
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        LayoutBuilder(builder: (context, constraints) {
-                          final width = (constraints.maxWidth - 12) / 2;
-                          
-                          Widget buildGapFilter(IconData icon, String label, GraphGapType type) {
-                            return _buildFilterButton(
-                              width: width,
-                              icon: icon,
-                              label: label,
-                              isSelected: _visibleGapTypes.contains(type),
-                              onTap: () {
-                                setModalState(() {
-                                  if (_visibleGapTypes.contains(type)) {
-                                    _visibleGapTypes.remove(type);
-                                  } else {
-                                    _visibleGapTypes.add(type);
-                                  }
-                                });
-                                _updateVisibleGraph();
-                              },
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = (constraints.maxWidth - 12) / 2;
+
+                            Widget buildGapFilter(
+                              IconData icon,
+                              String label,
+                              GraphGapType type,
+                            ) {
+                              return _buildFilterButton(
+                                width: width,
+                                icon: icon,
+                                label: label,
+                                isSelected: _visibleGapTypes.contains(type),
+                                onTap: () {
+                                  setModalState(() {
+                                    if (_visibleGapTypes.contains(type)) {
+                                      _visibleGapTypes.remove(type);
+                                    } else {
+                                      _visibleGapTypes.add(type);
+                                    }
+                                  });
+                                  _updateVisibleGraph();
+                                },
+                              );
+                            }
+
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                buildGapFilter(
+                                  Icons.travel_explore,
+                                  'Unexplored Concept',
+                                  GraphGapType.unexploredConcept,
+                                ),
+                                buildGapFilter(
+                                  Icons.link_off,
+                                  'Missing Relation',
+                                  GraphGapType.missingRelation,
+                                ),
+                                buildGapFilter(
+                                  Icons.science,
+                                  'Methodological',
+                                  GraphGapType.methodological,
+                                ),
+                                buildGapFilter(
+                                  Icons.groups,
+                                  'Population Gap',
+                                  GraphGapType.populationGap,
+                                ),
+                                buildGapFilter(
+                                  Icons.dataset,
+                                  'Dataset Gap',
+                                  GraphGapType.datasetGap,
+                                ),
+                                buildGapFilter(
+                                  Icons.analytics,
+                                  'Empirical Gap',
+                                  GraphGapType.empiricalGap,
+                                ),
+                              ],
                             );
-                          }
-                          
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              buildGapFilter(Icons.travel_explore, 'Unexplored Concept', GraphGapType.unexploredConcept),
-                              buildGapFilter(Icons.link_off, 'Missing Relation', GraphGapType.missingRelation),
-                              buildGapFilter(Icons.science, 'Methodological', GraphGapType.methodological),
-                              buildGapFilter(Icons.groups, 'Population Gap', GraphGapType.populationGap),
-                              buildGapFilter(Icons.dataset, 'Dataset Gap', GraphGapType.datasetGap),
-                              buildGapFilter(Icons.analytics, 'Empirical Gap', GraphGapType.empiricalGap),
-                            ],
-                          );
-                        }),
-                        
+                          },
+                        ),
+
                         const SizedBox(height: 32),
-                        
+
                         // 3. Saring Area Cakupan
-                        const Text('Saring Area Cakupan', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.muted)),
+                        const Text(
+                          'Saring Area Cakupan',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.muted,
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        LayoutBuilder(builder: (context, constraints) {
-                          final width = (constraints.maxWidth - 12) / 2;
-                          
-                          Widget buildSatFilter(Color color, String label, GraphSaturationStatus status) {
-                            return _buildFilterButton(
-                              width: width,
-                              icon: Icons.square,
-                              iconColor: color,
-                              label: label,
-                              isSelected: _visibleSaturationStatuses.contains(status),
-                              onTap: () {
-                                setModalState(() {
-                                  if (_visibleSaturationStatuses.contains(status)) {
-                                    _visibleSaturationStatuses.remove(status);
-                                  } else {
-                                    _visibleSaturationStatuses.add(status);
-                                  }
-                                });
-                                _updateVisibleGraph();
-                              },
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = (constraints.maxWidth - 12) / 2;
+
+                            Widget buildSatFilter(
+                              Color color,
+                              String label,
+                              GraphSaturationStatus status,
+                            ) {
+                              return _buildFilterButton(
+                                width: width,
+                                icon: Icons.square,
+                                iconColor: color,
+                                label: label,
+                                isSelected: _visibleSaturationStatuses.contains(
+                                  status,
+                                ),
+                                onTap: () {
+                                  setModalState(() {
+                                    if (_visibleSaturationStatuses.contains(
+                                      status,
+                                    )) {
+                                      _visibleSaturationStatuses.remove(status);
+                                    } else {
+                                      _visibleSaturationStatuses.add(status);
+                                    }
+                                  });
+                                  _updateVisibleGraph();
+                                },
+                              );
+                            }
+
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                buildSatFilter(
+                                  Colors.green,
+                                  'Banyak di teliti',
+                                  GraphSaturationStatus.high,
+                                ),
+                                buildSatFilter(
+                                  Colors.yellow.shade700,
+                                  'Cukup di teliti',
+                                  GraphSaturationStatus.medium,
+                                ),
+                                buildSatFilter(
+                                  Colors.orange,
+                                  'Jarang di teliti',
+                                  GraphSaturationStatus.low,
+                                ),
+                                buildSatFilter(
+                                  Colors.red,
+                                  'Belum di teliti',
+                                  GraphSaturationStatus.none,
+                                ),
+                              ],
                             );
-                          }
-                          
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              buildSatFilter(Colors.green, 'Banyak di teliti', GraphSaturationStatus.high),
-                              buildSatFilter(Colors.yellow.shade700, 'Cukup di teliti', GraphSaturationStatus.medium),
-                              buildSatFilter(Colors.orange, 'Jarang di teliti', GraphSaturationStatus.low),
-                              buildSatFilter(Colors.red, 'Belum di teliti', GraphSaturationStatus.none),
-                            ],
-                          );
-                        }),
-                        
+                          },
+                        ),
+
                         const SizedBox(height: 32),
-                        
+
                         const SizedBox(height: 16),
                       ],
                     ),
                   ),
-                  
+
                   // Footer Actions
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      border: Border(
+                        top: BorderSide(color: Colors.grey.shade200),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -471,7 +626,10 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                           onPressed: () {
                             setModalState(() {});
                           },
-                          child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Reset',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(width: 16),
                         FilledButton(
@@ -481,10 +639,18 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                           },
                           style: FilledButton.styleFrom(
                             backgroundColor: Colors.indigo,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
-                          child: const Text('Terapkan Filter', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Terapkan Filter',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
@@ -513,13 +679,23 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         width: width,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.indigo.withValues(alpha: 0.08) : Colors.transparent,
-          border: Border.all(color: isSelected ? Colors.indigo.shade300 : Colors.grey.shade300),
+          color: isSelected
+              ? Colors.indigo.withValues(alpha: 0.08)
+              : Colors.transparent,
+          border: Border.all(
+            color: isSelected ? Colors.indigo.shade300 : Colors.grey.shade300,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: iconColor ?? (isSelected ? Colors.indigo.shade600 : Colors.grey.shade600)),
+            Icon(
+              icon,
+              size: 16,
+              color:
+                  iconColor ??
+                  (isSelected ? Colors.indigo.shade600 : Colors.grey.shade600),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -540,8 +716,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
   }
 
   Widget _buildDropdownFilter({
-    required IconData icon, 
-    required String label, 
+    required IconData icon,
+    required String label,
     String? value,
     required List<String> items,
     required void Function(String?) onChanged,
@@ -560,7 +736,10 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           Expanded(
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                hint: Text(label, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                hint: Text(
+                  label,
+                  style: const TextStyle(fontSize: 13, color: Colors.black87),
+                ),
                 isExpanded: true,
                 value: value,
                 items: [
@@ -568,10 +747,16 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                     value: null,
                     child: Text("Semua"),
                   ),
-                  ...items.map((e) => DropdownMenuItem(
-                        value: e,
-                        child: Text(e, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      )),
+                  ...items.map(
+                    (e) => DropdownMenuItem(
+                      value: e,
+                      child: Text(
+                        e,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
                 ],
                 onChanged: onChanged,
               ),
@@ -607,9 +792,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         combinedText.contains('resource-constrained') ||
         combinedText.contains('komputasi terbatas')) {
       return const GapActionRecommendation(
-        coreIssue: 'Keterbatasan komputasi, memori, dan konsumsi daya pada perangkat keras / IoT mikrokontroler konvensional.',
-        concreteSolution: 'Beralih dari mikrokontroler IoT standar (misal ESP32/Arduino) ke Single-Board Computer / Edge AI seperti Raspberry Pi 4/5 atau NVIDIA Jetson Nano, serta terapkan model quantization (TFLite int8).',
-        whatUserCanDo: 'Untuk mengatasi keterbatasan komputasi dan memori pada device IoT, Anda dapat melakukan migrasi arsitektur dari mikrokontroler berdaya rendah menjadi Single-Board Computer (seperti Raspberry Pi 4/5 atau NVIDIA Jetson). Selain itu, Anda dapat menerapkan teknik Edge AI Optimization (seperti model pruning dan integer-8 quantization) atau arsitektur hybrid (edge-to-cloud offloading) agar pemrosesan data lokal tetap cepat, akurat, dan andal tanpa membebani jaringan.',
+        coreIssue:
+            'Keterbatasan komputasi, memori, dan konsumsi daya pada perangkat keras / IoT mikrokontroler konvensional.',
+        concreteSolution:
+            'Beralih dari mikrokontroler IoT standar (misal ESP32/Arduino) ke Single-Board Computer / Edge AI seperti Raspberry Pi 4/5 atau NVIDIA Jetson Nano, serta terapkan model quantization (TFLite int8).',
+        whatUserCanDo:
+            'Untuk mengatasi keterbatasan komputasi dan memori pada device IoT, Anda dapat melakukan migrasi arsitektur dari mikrokontroler berdaya rendah menjadi Single-Board Computer (seperti Raspberry Pi 4/5 atau NVIDIA Jetson). Selain itu, Anda dapat menerapkan teknik Edge AI Optimization (seperti model pruning dan integer-8 quantization) atau arsitektur hybrid (edge-to-cloud offloading) agar pemrosesan data lokal tetap cepat, akurat, dan andal tanpa membebani jaringan.',
         roadmapSteps: [
           'Tahap 1 (Audit Baseline): Ukur profil memori, latensi inferensi, dan konsumsi daya sistem IoT saat ini sebagai baseline acuan.',
           'Tahap 2 (Migrasi Arsitektur): Siapkan perangkat edge (Raspberry Pi/Jetson) dengan runtime inferensi lokal teroptimasi (TFLite/ONNX/TensorRT).',
@@ -620,7 +808,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Implementasi Edge Computing Berbasis Raspberry Pi untuk Optimasi Latensi dan Pemrosesan Real-Time pada Sistem Cerdas',
           'Analisis Komparatif Efisiensi Energi dan Throughput pada Perangkat Edge Device vs Mikrokontroler IoT',
         ],
-        noveltyContribution: 'Membuktikan peningkatan throughput dan pengurangan latency transmisi tanpa ketergantungan koneksi server kontinu.',
+        noveltyContribution:
+            'Membuktikan peningkatan throughput dan pengurangan latency transmisi tanpa ketergantungan koneksi server kontinu.',
       );
     }
 
@@ -633,9 +822,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         combinedText.contains('pemulihan mandiri') ||
         combinedText.contains('runtime')) {
       return const GapActionRecommendation(
-        coreIssue: 'Minimnya teknik pemulihan mandiri (self-healing) khusus untuk galat JavaScript di browser sisi klien dibandingkan sistem server/Unix.',
-        concreteSolution: 'Membangun arsitektur Client-Side Self-Healing Agent berbasis Service Worker / WebAssembly interceptor dengan dynamic state rollback dan patch DOM otomatis.',
-        whatUserCanDo: 'Anda dapat mengembangkan runtime error interceptor di browser yang secara otomatis menangkap unhandled error (window.onerror & unhandledrejection), menganalisis konteks eksekusi, lalu mengaplikasikan automated repair patch (misal: wrapping virtual try-catch, me-reset state komponen terisolasi, atau fallback UI dinamis) sehingga aplikasi web tetap berjalan mulus tanpa merusak sesi pengguna.',
+        coreIssue:
+            'Minimnya teknik pemulihan mandiri (self-healing) khusus untuk galat JavaScript di browser sisi klien dibandingkan sistem server/Unix.',
+        concreteSolution:
+            'Membangun arsitektur Client-Side Self-Healing Agent berbasis Service Worker / WebAssembly interceptor dengan dynamic state rollback dan patch DOM otomatis.',
+        whatUserCanDo:
+            'Anda dapat mengembangkan runtime error interceptor di browser yang secara otomatis menangkap unhandled error (window.onerror & unhandledrejection), menganalisis konteks eksekusi, lalu mengaplikasikan automated repair patch (misal: wrapping virtual try-catch, me-reset state komponen terisolasi, atau fallback UI dinamis) sehingga aplikasi web tetap berjalan mulus tanpa merusak sesi pengguna.',
         roadmapSteps: [
           'Tahap 1 (Taksonomi Galat): Kumpulkan dan kelompokkan jenis galat runtime JavaScript produksi (TypeError, ReferenceError, Async Promise failure).',
           'Tahap 2 (Rancang Agen Interceptor): Implementasikan middleware Service Worker atau runtime interceptor WebAssembly untuk mendeteksi anomali real-time.',
@@ -646,7 +838,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Rancang Bangun Framework Self-Healing Mandiri Berbasis Service Worker untuk Mitigasi Galat JavaScript pada Aplikasi Web Modern',
           'Penerapan Runtime Interception Berbasis WebAssembly dalam Menjaga Keutuhan State Aplikasi Web di Sisi Klien',
         ],
-        noveltyContribution: 'Mewujudkan toleransi kesalahan (fault tolerance) otomatis di lingkungan browser runtime tanpa membutuhkan reload halaman.',
+        noveltyContribution:
+            'Mewujudkan toleransi kesalahan (fault tolerance) otomatis di lingkungan browser runtime tanpa membutuhkan reload halaman.',
       );
     }
 
@@ -658,9 +851,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         combinedText.contains('dokumen web') ||
         combinedText.contains('struktur spesifik')) {
       return const GapActionRecommendation(
-        coreIssue: 'Model temu kembali informasi (IR) hanya memperlakukan dokumen sebagai teks datar generik dan mengabaikan struktur tag HTML/DOM.',
-        concreteSolution: 'Mengganti model teks flat (seperti BM25 standar) menjadi arsitektur DOM-Aware Hierarchical Transformer (seperti MarkupLM atau Graph Neural Network berbasis pohon DOM).',
-        whatUserCanDo: 'Anda dapat memanfaatkan representasi hierarkis dokumen web (tag semantik seperti <title>, <h1>, <nav>, serta kedalaman node DOM) sebagai bobot fitur embedding multimodal (teks + graf hierarki). Dengan pendekatan ini, mesin pencari dapat membedakan konteks konten utama dari boilerplate/iklan/sidebar secara presisi.',
+        coreIssue:
+            'Model temu kembali informasi (IR) hanya memperlakukan dokumen sebagai teks datar generik dan mengabaikan struktur tag HTML/DOM.',
+        concreteSolution:
+            'Mengganti model teks flat (seperti BM25 standar) menjadi arsitektur DOM-Aware Hierarchical Transformer (seperti MarkupLM atau Graph Neural Network berbasis pohon DOM).',
+        whatUserCanDo:
+            'Anda dapat memanfaatkan representasi hierarkis dokumen web (tag semantik seperti <title>, <h1>, <nav>, serta kedalaman node DOM) sebagai bobot fitur embedding multimodal (teks + graf hierarki). Dengan pendekatan ini, mesin pencari dapat membedakan konteks konten utama dari boilerplate/iklan/sidebar secara presisi.',
         roadmapSteps: [
           'Tahap 1 (Ekstraksi Pohon DOM): Buat modul parser untuk mengekstrak struktur pohon DOM lengkap dengan path dan atribut semantik dokumen.',
           'Tahap 2 (Pemodelan Sadar-Struktur): Gabungkan embedding teks dengan embedding posisi hierarki DOM menggunakan arsitektur Transformer terstruktur.',
@@ -671,7 +867,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Model Temu Kembali Informasi Sadar-Struktur (DOM-Aware) Berbasis Graph Neural Network untuk Dokumen Web HTML',
           'Pengaruh Integrasi Bobot Hierarki Tag Semantik terhadap Akurasi Penelusuran Dokumen Web Kompleks',
         ],
-        noveltyContribution: 'Mengeksploitasi relasi struktural dan semantik tag dokumen web untuk meningkatkan relevansi pencarian secara signifikan.',
+        noveltyContribution:
+            'Mengeksploitasi relasi struktural dan semantik tag dokumen web untuk meningkatkan relevansi pencarian secara signifikan.',
       );
     }
 
@@ -683,9 +880,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         combinedText.contains('biaya') ||
         combinedText.contains('penghematan')) {
       return const GapActionRecommendation(
-        coreIssue: 'Kurangnya data empiris mengenai efisiensi ruang dan rasio kompresi format web berbasis XML untuk optimalisasi performa dan biaya.',
-        concreteSolution: 'Melakukan studi benchmarking empiris komparatif antara kompresi standar (Gzip/Brotli) dengan format biner modern (Efficient XML Interchange / EXI, CBOR, Protocol Buffers) pada korpus riil institusi.',
-        whatUserCanDo: 'Anda dapat membangun testbed pengujian performa komparatif yang mengukur rasio reduksi ukuran data, throughput proses dekompresi, dan proyeksi penghematan bandwidth server. Hasilnya dapat menjadi dasar standarisasi format pertukaran data yang jauh lebih hemat biaya untuk portal web skala besar.',
+        coreIssue:
+            'Kurangnya data empiris mengenai efisiensi ruang dan rasio kompresi format web berbasis XML untuk optimalisasi performa dan biaya.',
+        concreteSolution:
+            'Melakukan studi benchmarking empiris komparatif antara kompresi standar (Gzip/Brotli) dengan format biner modern (Efficient XML Interchange / EXI, CBOR, Protocol Buffers) pada korpus riil institusi.',
+        whatUserCanDo:
+            'Anda dapat membangun testbed pengujian performa komparatif yang mengukur rasio reduksi ukuran data, throughput proses dekompresi, dan proyeksi penghematan bandwidth server. Hasilnya dapat menjadi dasar standarisasi format pertukaran data yang jauh lebih hemat biaya untuk portal web skala besar.',
         roadmapSteps: [
           'Tahap 1 (Koleksi Korpus Data): Ambil sampel representatif dataset dokumen XML dari portal resmi pemerintahan atau lembaga publik.',
           'Tahap 2 (Implementasi Testbed Kompresi): Bangun pipeline otomatis untuk menguji kompresi teks (Gzip, Brotli, Zstandard) vs format biner (EXI, CBOR).',
@@ -696,7 +896,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Studi Empiris Efisiensi Ruang dan Biaya Bandwidth pada Situs Berbasis XML Menggunakan Format Kompresi Biner EXI',
           'Analisis Komparatif Performa Algoritma Kompresi Modern terhadap Penghematan Biaya Infrastruktur Data Web Publik',
         ],
-        noveltyContribution: 'Menyediakan data empiris riil pertama tentang rasio trade-off efisiensi ruang dan kecepatan parsing pada dokumen XML skala enterprise.',
+        noveltyContribution:
+            'Menyediakan data empiris riil pertama tentang rasio trade-off efisiensi ruang dan kecepatan parsing pada dokumen XML skala enterprise.',
       );
     }
 
@@ -707,9 +908,12 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         combinedText.contains('reproduksi') ||
         combinedText.contains('pengujian')) {
       return const GapActionRecommendation(
-        coreIssue: 'Ketiadaan dataset benchmark publik yang memuat kasus riil dan dapat direproduksi secara konsisten untuk keperluan eksperimen.',
-        concreteSolution: 'Membangun dan merilis repositori dataset benchmark open-source terstandarisasi dengan lingkungan reproduksi containerized (Docker & Headless Browser).',
-        whatUserCanDo: 'Anda dapat memelopori pengumpulan kasus galat dunia nyata dari repositori open-source, mengotomatiskan proses replikasi lingkungan bug menggunakan container (Docker), memberi label ground-truth yang divalidasi, dan menerbitkannya secara terbuka (misal di Zenodo atau Hugging Face) sebagai benchmark rujukan bersama.',
+        coreIssue:
+            'Ketiadaan dataset benchmark publik yang memuat kasus riil dan dapat direproduksi secara konsisten untuk keperluan eksperimen.',
+        concreteSolution:
+            'Membangun dan merilis repositori dataset benchmark open-source terstandarisasi dengan lingkungan reproduksi containerized (Docker & Headless Browser).',
+        whatUserCanDo:
+            'Anda dapat memelopori pengumpulan kasus galat dunia nyata dari repositori open-source, mengotomatiskan proses replikasi lingkungan bug menggunakan container (Docker), memberi label ground-truth yang divalidasi, dan menerbitkannya secara terbuka (misal di Zenodo atau Hugging Face) sebagai benchmark rujukan bersama.',
         roadmapSteps: [
           'Tahap 1 (Mining Kasus Riil): Ekstraksi laporan bug dan commit perbaikan dari ribuan repositori open source populer.',
           'Tahap 2 (Containerisasi Lingkungan): Bungkus setiap kasus ke dalam skrip isolasi teruji (Docker/Playwright) agar 100% dapat direproduksi.',
@@ -720,16 +924,22 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Penyusunan Dataset Benchmark Publik Terstandar untuk Evaluasi Reproducible Sistem Perangkat Lunak Modern',
           'Kerangka Kerja Pengujian Otomatis Terkontainerisasi untuk Validasi Galat Aplikasi Web Skala Nyata',
         ],
-        noveltyContribution: 'Menjadi dataset rujukan terbuka pertama yang terverifikasi dan reproducible untuk mengevaluasi efektivitas teknik debugging modern.',
+        noveltyContribution:
+            'Menjadi dataset rujukan terbuka pertama yang terverifikasi dan reproducible untuk mengevaluasi efektivitas teknik debugging modern.',
       );
     }
 
     // 6. Fallback berdasarkan Gap Typology: Dataset Gap
-    if (node.gapType == GraphGapType.datasetGap || combinedText.contains('dataset') || combinedText.contains('data')) {
+    if (node.gapType == GraphGapType.datasetGap ||
+        combinedText.contains('dataset') ||
+        combinedText.contains('data')) {
       return const GapActionRecommendation(
-        coreIssue: 'Kelangkaan atau keterbatasan volume, anotasi, dan variasi dataset yang digunakan dalam penelitian rujukan.',
-        concreteSolution: 'Menerapkan teknik Synthetic Data Generation (via Generative AI / Diffusion Models), Self-Supervised Learning (SSL), atau Cross-Domain Transfer Learning.',
-        whatUserCanDo: 'Anda dapat mengatasi minimnya data dengan membangun pipeline sintesis data terarah, melakukan augmentasi tingkat lanjut, atau memanfaatkan model pondasi (Foundation Model) yang di-fine tune secara adaptif pada dataset target berskala kecil.',
+        coreIssue:
+            'Kelangkaan atau keterbatasan volume, anotasi, dan variasi dataset yang digunakan dalam penelitian rujukan.',
+        concreteSolution:
+            'Menerapkan teknik Synthetic Data Generation (via Generative AI / Diffusion Models), Self-Supervised Learning (SSL), atau Cross-Domain Transfer Learning.',
+        whatUserCanDo:
+            'Anda dapat mengatasi minimnya data dengan membangun pipeline sintesis data terarah, melakukan augmentasi tingkat lanjut, atau memanfaatkan model pondasi (Foundation Model) yang di-fine tune secara adaptif pada dataset target berskala kecil.',
         roadmapSteps: [
           'Tahap 1 (Eksplorasi Sumber Data): Petakan kebutuhan fitur dan identifikasi repositori publik pendukung untuk augmentasi.',
           'Tahap 2 (Generasi Data Sintetis): Kembangkan skrip sintesis data untuk memperkaya variasi sampel langka.',
@@ -740,16 +950,22 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Penerapan Data Sintetis Terarah untuk Mengatasi Kelangkaan Sampel Pelatihan pada Pemodelan Prediktif',
           'Pengaruh Transfer Learning dan Self-Supervised Pretraining dalam Memitigasi Keterbatasan Dataset Domain Spesifik',
         ],
-        noveltyContribution: 'Membuktikan bahwa kombinasi data sintetis dan transfer learning mampu menyamai akurasi model data besar konvensional.',
+        noveltyContribution:
+            'Membuktikan bahwa kombinasi data sintetis dan transfer learning mampu menyamai akurasi model data besar konvensional.',
       );
     }
 
     // 7. Fallback berdasarkan Gap Typology: Population Gap
-    if (node.gapType == GraphGapType.populationGap || combinedText.contains('populasi') || combinedText.contains('responden')) {
+    if (node.gapType == GraphGapType.populationGap ||
+        combinedText.contains('populasi') ||
+        combinedText.contains('responden')) {
       return const GapActionRecommendation(
-        coreIssue: 'Cakupan populasi atau demografi subjek penelitian sebelumnya terlalu sempit dan kurang representatif.',
-        concreteSolution: 'Memperluas cakupan sampel ke multi-center lintas demografi (usia, institusi, wilayah) dan menerapkan pendekatan Mixed-Methods terintegrasi.',
-        whatUserCanDo: 'Anda dapat memperluas instrumen riset ke segmen populasi baru yang belum tersentuh, mengkombinasikan instrumen kuantitatif terstandar dengan studi kualitatif mendalam untuk mengungkap faktor kontekstual.',
+        coreIssue:
+            'Cakupan populasi atau demografi subjek penelitian sebelumnya terlalu sempit dan kurang representatif.',
+        concreteSolution:
+            'Memperluas cakupan sampel ke multi-center lintas demografi (usia, institusi, wilayah) dan menerapkan pendekatan Mixed-Methods terintegrasi.',
+        whatUserCanDo:
+            'Anda dapat memperluas instrumen riset ke segmen populasi baru yang belum tersentuh, mengkombinasikan instrumen kuantitatif terstandar dengan studi kualitatif mendalam untuk mengungkap faktor kontekstual.',
         roadmapSteps: [
           'Tahap 1 (Perancangan Instrumen): Susun instrumen kuesioner dengan uji validitas konstruk dan reliabilitas Cronbach Alpha.',
           'Tahap 2 (Pengumpulan Data Multi-Pusat): Sebarkan survei ke klaster demografi yang lebih heterogen di berbagai wilayah/institusi.',
@@ -760,16 +976,22 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Studi Komparatif Lintas Demografi terhadap Efektivitas Adopsi Teknologi pada Ekosistem Terdistribusi',
           'Analisis Pendekatan Mixed-Methods untuk Mengevaluasi Generalisasi Sistem pada Kelompok Pengguna Heterogen',
         ],
-        noveltyContribution: 'Mengonfirmasi validitas eksternal dan generalisasi teori pada spektrum populasi yang jauh lebih luas.',
+        noveltyContribution:
+            'Mengonfirmasi validitas eksternal dan generalisasi teori pada spektrum populasi yang jauh lebih luas.',
       );
     }
 
     // 8. Fallback berdasarkan Gap Typology: Methodological
-    if (node.gapType == GraphGapType.methodological || combinedText.contains('metode') || combinedText.contains('algoritma')) {
+    if (node.gapType == GraphGapType.methodological ||
+        combinedText.contains('metode') ||
+        combinedText.contains('algoritma')) {
       return const GapActionRecommendation(
-        coreIssue: 'Metodologi atau arsitektur algoritma yang digunakan dalam literatur terdahulu memiliki keterbatasan fleksibilitas atau akurasi.',
-        concreteSolution: 'Mengganti atau menggabungkan model baseline dengan arsitektur Hybrid State-of-the-Art (Transformer adaptif / Ensemble Learning) dan melakukan uji ablasi sistematis.',
-        whatUserCanDo: 'Anda dapat merekayasa ulang algoritma rujukan dengan mengganti modul bottleneck, menambahkan modul attention mechanism, atau menerapkan optimasi hiperparameter berbasis Bayesian untuk mencapai konvergensi yang lebih cepat dan presisi tinggi.',
+        coreIssue:
+            'Metodologi atau arsitektur algoritma yang digunakan dalam literatur terdahulu memiliki keterbatasan fleksibilitas atau akurasi.',
+        concreteSolution:
+            'Mengganti atau menggabungkan model baseline dengan arsitektur Hybrid State-of-the-Art (Transformer adaptif / Ensemble Learning) dan melakukan uji ablasi sistematis.',
+        whatUserCanDo:
+            'Anda dapat merekayasa ulang algoritma rujukan dengan mengganti modul bottleneck, menambahkan modul attention mechanism, atau menerapkan optimasi hiperparameter berbasis Bayesian untuk mencapai konvergensi yang lebih cepat dan presisi tinggi.',
         roadmapSteps: [
           'Tahap 1 (Replikasi Baseline): Bangun implementasi baseline dari paper rujukan untuk menetapkan titik tolak performa awal.',
           'Tahap 2 (Rekayasa Modul Pengganti): Kembangkan modul algoritma baru dan integrasikan ke dalam pipeline pemrosesan.',
@@ -780,16 +1002,22 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Pengembangan Algoritma Hibrida Berbasis Attention Mechanism untuk Peningkatan Akurasi dan Efisiensi Komputasi',
           'Studi Ablasi terhadap Modifikasi Arsitektur Model Prediktif pada Kasus Non-Linier Kompleks',
         ],
-        noveltyContribution: 'Menghadirkan arsitektur hibrida baru dengan performa terbukti melampaui metode baseline rujukan.',
+        noveltyContribution:
+            'Menghadirkan arsitektur hibrida baru dengan performa terbukti melampaui metode baseline rujukan.',
       );
     }
 
     // 9. Fallback berdasarkan Gap Typology: Empirical Gap
-    if (node.gapType == GraphGapType.empiricalGap || combinedText.contains('empiris') || combinedText.contains('evaluasi')) {
+    if (node.gapType == GraphGapType.empiricalGap ||
+        combinedText.contains('empiris') ||
+        combinedText.contains('evaluasi')) {
       return const GapActionRecommendation(
-        coreIssue: 'Kurangnya pengujian empiris jangka panjang (longitudinal) di lingkungan produksi atau dunia nyata.',
-        concreteSolution: 'Melakukan pilot deployment in-the-wild secara bertahap selama minimal 4-8 minggu dengan continuous telemetry logging dan analisis time-series.',
-        whatUserCanDo: 'Anda dapat memindahkan pengujian dari simulasi lab murni ke lingkungan operasional pengguna nyata, mengumpulkan data telemetri penggunaan harian, dan mengevaluasi dampak jangka panjang terhadap stabilitas sistem.',
+        coreIssue:
+            'Kurangnya pengujian empiris jangka panjang (longitudinal) di lingkungan produksi atau dunia nyata.',
+        concreteSolution:
+            'Melakukan pilot deployment in-the-wild secara bertahap selama minimal 4-8 minggu dengan continuous telemetry logging dan analisis time-series.',
+        whatUserCanDo:
+            'Anda dapat memindahkan pengujian dari simulasi lab murni ke lingkungan operasional pengguna nyata, mengumpulkan data telemetri penggunaan harian, dan mengevaluasi dampak jangka panjang terhadap stabilitas sistem.',
         roadmapSteps: [
           'Tahap 1 (Setup Testbed Nyata): Siapkan infrastruktur pengujian terisolasi di lingkungan pengguna operasional.',
           'Tahap 2 (Pilot Deployment): Luncurkan sistem ke kelompok pengguna terbatas dengan telemetri otomatis.',
@@ -800,15 +1028,19 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
           'Evaluasi Empiris Longitudinal Kinerja Sistem Cerdas pada Lingkungan Operasional Dunia Nyata',
           'Studi Lapangan In-The-Wild terhadap Ketahanan dan Akseptabilitas Pengguna dalam Periode Implementasi Bertahap',
         ],
-        noveltyContribution: 'Menyajikan data empiris pertama dari uji coba operasional riil yang menjembatani jurang antara teori dan praktik.',
+        noveltyContribution:
+            'Menyajikan data empiris pertama dari uji coba operasional riil yang menjembatani jurang antara teori dan praktik.',
       );
     }
 
     // 10. Default General Case (Theoretical / Unexplored Concept)
     return const GapActionRecommendation(
-      coreIssue: 'Belum adanya integrasi komprehensif atau pembuktian relasi konseptual antara entitas penelitian ini.',
-      concreteSolution: 'Mengembangkan kerangka integratif baru (Unified Conceptual Framework) yang menghubungkan variabel-variabel tersebut ke dalam arsitektur terpadu dan teruji.',
-      whatUserCanDo: 'Anda dapat merumuskan model konseptual baru yang menjembatani celah teori tersebut, membuat prototipe sistem yang menggabungkan kedua domain, dan menguji korelasinya melalui serangkaian eksperimen terukur.',
+      coreIssue:
+          'Belum adanya integrasi komprehensif atau pembuktian relasi konseptual antara entitas penelitian ini.',
+      concreteSolution:
+          'Mengembangkan kerangka integratif baru (Unified Conceptual Framework) yang menghubungkan variabel-variabel tersebut ke dalam arsitektur terpadu dan teruji.',
+      whatUserCanDo:
+          'Anda dapat merumuskan model konseptual baru yang menjembatani celah teori tersebut, membuat prototipe sistem yang menggabungkan kedua domain, dan menguji korelasinya melalui serangkaian eksperimen terukur.',
       roadmapSteps: [
         'Tahap 1 (Sintesis Teori): Petakan hubungan kausalitas antar variabel dari literatur multidisiplin terkait.',
         'Tahap 2 (Prototipe Integrasi): Bangun prototipe sistem atau model simulasi yang mengoperasionalkan hubungan baru tersebut.',
@@ -819,7 +1051,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
         'Pengembangan Kerangka Integratif Baru untuk Menjembatani Celah Teori pada Domain Terkait',
         'Model Hubungan Konseptual Multidisiplin untuk Optimasi Solusi pada Kasus Kompleks',
       ],
-      noveltyContribution: 'Menjadi pionir yang menyatukan variabel yang sebelumnya diteliti secara terpisah menjadi satu kesatuan model utuh.',
+      noveltyContribution:
+          'Menjadi pionir yang menyatukan variabel yang sebelumnya diteliti secara terpisah menjadi satu kesatuan model utuh.',
     );
   }
 
@@ -830,10 +1063,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
       margin: const EdgeInsets.only(top: 8, bottom: 28),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFFF4F6FF),
-            Colors.white,
-          ],
+          colors: [Color(0xFFF4F6FF), Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -861,7 +1091,11 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                     color: Colors.amber.shade100,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.tips_and_updates_rounded, color: Colors.amber.shade900, size: 22),
+                  child: Icon(
+                    Icons.tips_and_updates_rounded,
+                    color: Colors.amber.shade900,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -890,7 +1124,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
@@ -909,15 +1143,21 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.build_circle_rounded, color: Colors.teal.shade800, size: 18),
+                      Icon(
+                        Icons.build_circle_rounded,
+                        color: Colors.teal.shade800,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
-                      Text(
-                        'APA YANG BISA DILAKUKAN USER (SOLUSI KONKRET)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade900,
-                          letterSpacing: 0.5,
+                      Expanded(
+                        child: Text(
+                          'APA YANG BISA DILAKUKAN USER (SOLUSI KONKRET)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal.shade900,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ],
@@ -950,7 +1190,11 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
             // 2. BAGAIMANA KELANJUTANNYA (ROADMAP RISET 4 TAHAP)
             Row(
               children: [
-                Icon(Icons.rocket_launch_rounded, color: Colors.indigo.shade700, size: 18),
+                Icon(
+                  Icons.rocket_launch_rounded,
+                  color: Colors.indigo.shade700,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'BAGAIMANA KELANJUTANNYA (ROADMAP RISET)',
@@ -964,7 +1208,7 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
               ],
             ),
             const SizedBox(height: 12),
-            
+
             ...rec.roadmapSteps.asMap().entries.map((entry) {
               final idx = entry.key + 1;
               final stepText = entry.value;
@@ -1022,35 +1266,55 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.bookmark_added_rounded, color: Colors.amber.shade800, size: 16),
+                      Icon(
+                        Icons.bookmark_added_rounded,
+                        color: Colors.amber.shade800,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
-                      Text(
-                        'CONTOH USULAN TOPIK / JUDUL RISET BARU',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade800,
-                          letterSpacing: 0.5,
+                      Expanded(
+                        child: Text(
+                          'CONTOH USULAN TOPIK / JUDUL RISET BARU',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  ...rec.proposedTitles.map((title) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 14)),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E2340), height: 1.4),
+                  ...rec.proposedTitles.map(
+                    (title) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '• ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E2340),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  )),
+                  ),
                 ],
               ),
             ),
@@ -1062,7 +1326,8 @@ class _ProjectMapsDetailScreenState extends ConsumerState<ProjectMapsDetailScree
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () {
-                  final copyText = '''
+                  final copyText =
+                      '''
 REKOMENDASI RISET UNTUK GAP: ${node.label}
 
 Keterbatasan Utama:
@@ -1082,11 +1347,14 @@ ${rec.proposedTitles.map((t) => '- $t').join('\n')}
 
 Nilai Novelty:
 ${rec.noveltyContribution}
-'''.trim();
+'''
+                          .trim();
                   Clipboard.setData(ClipboardData(text: copyText));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Rekomendasi tindakan & roadmap berhasil disalin ke clipboard!'),
+                      content: Text(
+                        'Rekomendasi tindakan & roadmap berhasil disalin ke clipboard!',
+                      ),
                       backgroundColor: Colors.teal,
                       behavior: SnackBarBehavior.floating,
                       duration: Duration(seconds: 2),
@@ -1094,12 +1362,20 @@ ${rec.noveltyContribution}
                   );
                 },
                 icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('SALIN REKOMENDASI LENGKAP', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'SALIN REKOMENDASI LENGKAP',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.indigo.shade800,
                   side: BorderSide(color: Colors.indigo.shade300),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
                 ),
               ),
             ),
@@ -1109,10 +1385,290 @@ ${rec.noveltyContribution}
     );
   }
 
+  Widget _buildSummarySection(
+    BuildContext context,
+    GraphNode node,
+    GapActionRecommendation rec,
+  ) {
+    return Container(
+      key: const Key('gap-summary-section'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.shade400, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SUMMARY AKHIR RISET',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.green,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Selamat anda sudah berada di akhir',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E2340),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.format_quote_rounded,
+                      size: 16,
+                      color: Colors.indigo.shade700,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'KUTIPAN GAP YANG DI-KLIK',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '"${node.gapStatement ?? node.label}"',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E2340),
+                    height: 1.4,
+                  ),
+                ),
+                if (node.evidence.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Kutipan Literatur (${node.evidence.first.paperTitle} - ${node.evidence.first.section}):',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '"${node.evidence.first.quote}"',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.teal.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.build_circle_rounded,
+                      size: 16,
+                      color: Colors.teal.shade800,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'APA YANG BISA DILAKUKAN USER (SOLUSI KONKRET)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  rec.concreteSolution,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade900,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  rec.whatUserCanDo,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF2D3748),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.indigo.shade50.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.indigo.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.alt_route_rounded,
+                      size: 16,
+                      color: Colors.indigo.shade800,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'BAGAIMANA KELANJUTANNYA (ROADMAP RISET)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ...rec.roadmapSteps.map(
+                  (step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '• ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.indigo,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            step,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF2D3748),
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (rec.proposedTitles.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  const Divider(height: 12),
+                  const Text(
+                    'Usulan Topik / Judul Riset:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ...rec.proposedTitles.map(
+                    (title) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '→ $title',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFF2D3748),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showGapDetail(GraphNode node) {
     if (node.type != GraphNodeType.researchGap) return;
     bool showSummary = false;
-    
+    final rec = _getGapRecommendation(node);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1125,402 +1681,700 @@ ${rec.noveltyContribution}
               minChildSize: 0.5,
               maxChildSize: 0.95,
               builder: (context, scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(24),
-                children: [
-                  // Handle for dragging
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 24),
-                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
                     ),
                   ),
-                  
-                  // Header Title
-                  Text(
-                    'GAP DETAIL: ${node.label.toUpperCase()}',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo.shade800, letterSpacing: 0.5),
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // 1. Gap Statement
-                  const Text('GAP STATEMENT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E2340))),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FA),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Text(
-                      '"${node.gapStatement ?? node.label}"',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1E2340), height: 1.5, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // 2. Jenis Gap
-                  const Text('JENIS GAP', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E2340))),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.indigo.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.indigo.withValues(alpha: 0.15)),
-                    ),
-                    child: Text(
-                      node.gapType?.name.toUpperCase() ?? 'MISSING CONCEPT RELATIONSHIP',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.indigo.shade900),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // 3. Status & Confidence Row
-                  Row(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(24),
                     children: [
-                      Expanded(
+                      // Handle for dragging
+                      Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 24),
                           decoration: BoxDecoration(
-                            color: Colors.indigo.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.local_police_outlined, size: 16, color: Colors.indigo.shade600),
-                              const SizedBox(width: 6),
-                              Builder(
-                                builder: (context) {
-                                  final confStr = node.confidence?.name.toLowerCase() ?? 'medium';
-                                  String percentage = '75%';
-                                  if (confStr.contains('high')) percentage = '90%';
-                                  else if (confStr.contains('low')) percentage = '30%';
-                                  
-                                  return Text(
-                                    'CONFIDENCE $percentage',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.indigo.shade600),
-                                  );
-                                },
-                              ),
-                            ],
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: node.isValidated ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                node.isValidated ? Icons.check_circle : Icons.pending, 
-                                size: 16, 
-                                color: node.isValidated ? Colors.green.shade600 : Colors.orange.shade700
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                node.isValidated ? 'Validated' : 'Pending',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: node.isValidated ? Colors.green.shade700 : Colors.orange.shade800),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 24),
 
-                  // REKOMENDASI TINDAKAN & LANGKAH KELANJUTAN
-                  _buildRecommendationCard(context, node),
-                  
-                  // 4. Supporting Papers
-                  const Text('BUKTI PENDUKUNG (SUPPORTING EVIDENCE)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E2340))),
-                  const SizedBox(height: 16),
-                  
-                  ...node.evidence.map((ev) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade200),
-                        borderRadius: BorderRadius.circular(16),
-                        color: Colors.white,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ev.paperTitle,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Ditemukan pada: ',
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    ev.section,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E2340)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            const Text('Kutipan Asli:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted)),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border(left: BorderSide(color: Colors.indigo.shade300, width: 4)),
-                              ),
-                              child: Text(
-                                '"${ev.quote}"',
-                                style: const TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF4A5568), fontSize: 13, height: 1.5),
-                              ),
-                            ),
-                          ],
+                      // Header Title
+                      Text(
+                        'GAP DETAIL: ${node.label.toUpperCase()}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade800,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    );
-                  }).toList(),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // 5. Related Concepts
-                  const Text('KONSEP TERKAIT (RELATED CONCEPTS)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E2340))),
-                  const SizedBox(height: 16),
-                  
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final itemWidth = (constraints.maxWidth - 12) / 2; // 2 kolom dengan jarak 12
-                      return Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: node.relatedConceptIds.map((id) {
-                          final concept = MapsMockData.nodes.firstWhere((n) => n.id == id);
-                          IconData cIcon = Icons.lightbulb_outline;
-                          if (concept.label.toLowerCase().contains('student') || concept.type == GraphNodeType.object) cIcon = Icons.person_outline;
-                          if (concept.label.toLowerCase().contains('education') || concept.type == GraphNodeType.researchArea) cIcon = Icons.menu_book_outlined;
-                          if (concept.label.toLowerCase().contains('ai') || concept.type == GraphNodeType.concept) cIcon = Icons.psychology_outlined;
-                          
-                          return InkWell(
-                            onTap: () {
-                              Navigator.pop(context);
-                              final pos = _nodePositions[concept.id]!;
-                              const double scale = 0.8;
-                              final dx = MediaQuery.of(context).size.width / 2 - pos.dx * scale;
-                              final dy = MediaQuery.of(context).size.height / 2 - pos.dy * scale;
-                              _transformController.value = Matrix4.identity()
-                                ..translate(dx, dy)
-                                ..scale(scale);
-                            },
-                            borderRadius: BorderRadius.circular(24),
+                      const SizedBox(height: 24),
+
+                      // 1. Gap Statement
+                      const Text(
+                        'GAP STATEMENT',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E2340),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FA),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Text(
+                          '"${node.gapStatement ?? node.label}"',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E2340),
+                            height: 1.5,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // 2. Jenis Gap
+                      const Text(
+                        'JENIS GAP',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E2340),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.indigo.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.indigo.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Text(
+                          node.gapType?.name.toUpperCase() ??
+                              'MISSING CONCEPT RELATIONSHIP',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.indigo.shade900,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // 3. Status & Confidence Row
+                      Row(
+                        children: [
+                          Expanded(
                             child: Container(
-                              width: itemWidth,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: 12,
+                              ),
                               decoration: BoxDecoration(
-                                color: Colors.indigo.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(24),
+                                color: Colors.indigo.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(cIcon, color: Colors.indigo.shade700, size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      concept.label,
-                                      style: TextStyle(color: Colors.indigo.shade900, fontWeight: FontWeight.w600, fontSize: 13),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                  Icon(
+                                    Icons.local_police_outlined,
+                                    size: 16,
+                                    color: Colors.indigo.shade600,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Builder(
+                                    builder: (context) {
+                                      final confStr =
+                                          node.confidence?.name.toLowerCase() ??
+                                          'medium';
+                                      String percentage = '75%';
+                                      if (confStr.contains('high'))
+                                        percentage = '90%';
+                                      else if (confStr.contains('low'))
+                                        percentage = '30%';
+
+                                      return Text(
+                                        'CONFIDENCE $percentage',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.indigo.shade600,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: node.isValidated
+                                    ? Colors.green.withValues(alpha: 0.1)
+                                    : Colors.orange.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    node.isValidated
+                                        ? Icons.check_circle
+                                        : Icons.pending,
+                                    size: 16,
+                                    color: node.isValidated
+                                        ? Colors.green.shade600
+                                        : Colors.orange.shade700,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    node.isValidated ? 'Validated' : 'Pending',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: node.isValidated
+                                          ? Colors.green.shade700
+                                          : Colors.orange.shade800,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
-                  
-                  // 6. Action Buttons
-                  if (showSummary) ...[
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.green.shade300),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'SUMMARY',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Selamat anda sudah berada di akhir',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E2340),
-                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        if (!showSummary) {
-                          setModalState(() {
-                            showSummary = true;
-                          });
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (scrollController.hasClients) {
-                              scrollController.animateTo(
-                                scrollController.position.maxScrollExtent,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
-                              );
-                            }
-                          });
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              title: const Row(
-                                children: [
-                                  Icon(Icons.check_circle, color: Colors.green),
-                                  SizedBox(width: 8),
-                                  Text('Summary', style: TextStyle(fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                              content: const Text(
-                                'Selamat anda sudah berada di akhir',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF1E2340)),
-                              ),
-                              actions: [
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+
+                      const SizedBox(height: 24),
+
+                      // REKOMENDASI TINDAKAN & LANGKAH KELANJUTAN
+                      _buildRecommendationCard(context, node),
+
+                      // 4. Supporting Papers
+                      const Text(
+                        'BUKTI PENDUKUNG (SUPPORTING EVIDENCE)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E2340),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      ...node.evidence.map((ev) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade200),
+                            borderRadius: BorderRadius.circular(16),
+                            color: Colors.white,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ev.paperTitle,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.black87,
                                   ),
-                                  child: const Text('OK'),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Ditemukan pada: ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.muted,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        ev.section,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E2340),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Kutipan Asli:',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: Colors.indigo.shade300,
+                                        width: 4,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '"${ev.quote}"',
+                                    style: const TextStyle(
+                                      fontStyle: FontStyle.italic,
+                                      color: Color(0xFF4A5568),
+                                      fontSize: 13,
+                                      height: 1.5,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
+                          ),
+                        );
+                      }).toList(),
+
+                      const SizedBox(height: 16),
+
+                      // 5. Related Concepts
+                      const Text(
+                        'KONSEP TERKAIT (RELATED CONCEPTS)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E2340),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final itemWidth =
+                              (constraints.maxWidth - 12) /
+                              2; // 2 kolom dengan jarak 12
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: node.relatedConceptIds.map((id) {
+                              final concept = MapsMockData.nodes.firstWhere(
+                                (n) => n.id == id,
+                              );
+                              IconData cIcon = Icons.lightbulb_outline;
+                              if (concept.label.toLowerCase().contains(
+                                    'student',
+                                  ) ||
+                                  concept.type == GraphNodeType.object)
+                                cIcon = Icons.person_outline;
+                              if (concept.label.toLowerCase().contains(
+                                    'education',
+                                  ) ||
+                                  concept.type == GraphNodeType.researchArea)
+                                cIcon = Icons.menu_book_outlined;
+                              if (concept.label.toLowerCase().contains('ai') ||
+                                  concept.type == GraphNodeType.concept)
+                                cIcon = Icons.psychology_outlined;
+
+                              return InkWell(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  final pos = _nodePositions[concept.id]!;
+                                  const double scale = 0.8;
+                                  final dx =
+                                      MediaQuery.of(context).size.width / 2 -
+                                      pos.dx * scale;
+                                  final dy =
+                                      MediaQuery.of(context).size.height / 2 -
+                                      pos.dy * scale;
+                                  _transformController.value =
+                                      Matrix4.identity()
+                                        ..translate(dx, dy)
+                                        ..scale(scale);
+                                },
+                                borderRadius: BorderRadius.circular(24),
+                                child: Container(
+                                  width: itemWidth,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.indigo.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        cIcon,
+                                        color: Colors.indigo.shade700,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          concept.label,
+                                          style: TextStyle(
+                                            color: Colors.indigo.shade900,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           );
-                        } else {
-                          Navigator.pop(context);
-                        }
-                      },
-                      icon: Icon(showSummary ? Icons.close : Icons.check),
-                      label: Text(
-                        showSummary ? 'TUTUP' : 'SELESAI',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                        },
                       ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: showSummary ? Colors.grey.shade700 : Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+                      // 6. Action Buttons
+                      if (showSummary) ...[
+                        _buildSummarySection(context, node, rec),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('gap-finish-button'),
+                          onPressed: () {
+                            if (!showSummary) {
+                              setModalState(() {
+                                showSummary = true;
+                              });
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (scrollController.hasClients) {
+                                  scrollController.animateTo(
+                                    scrollController.position.maxScrollExtent,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                  );
+                                }
+                              });
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  title: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_rounded,
+                                        color: Colors.green,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Summary Gap & Rekomendasi',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  content: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight:
+                                          MediaQuery.of(context).size.height *
+                                          0.65,
+                                      maxWidth: 480,
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: Colors.green.shade300,
+                                              ),
+                                            ),
+                                            child: const Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.flag_rounded,
+                                                  color: Colors.green,
+                                                  size: 20,
+                                                ),
+                                                SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Selamat anda sudah berada di akhir',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Color(0xFF1E2340),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          const Text(
+                                            'KUTIPAN GAP YANG DI-KLIK:',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.muted,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF8F9FA),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.grey.shade200,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '"${node.gapStatement ?? node.label}"',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontStyle: FontStyle.italic,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF1E2340),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          const Text(
+                                            'HASIL REKOMENDASI (APA YANG BISA DILAKUKAN USER):',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.teal,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            rec.concreteSolution,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.teal.shade900,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            rec.whatUserCanDo,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF2D3748),
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          const Text(
+                                            'BAGAIMANA KELANJUTANNYA (ROADMAP RISET):',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.indigo,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          ...rec.roadmapSteps.map(
+                                            (step) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 4,
+                                              ),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    '• ',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.indigo,
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      step,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Color(
+                                                          0xFF2D3748,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  actions: [
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text('OK / Tutup'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            } else {
+                              Navigator.pop(context);
+                            }
+                          },
+                          icon: Icon(
+                            showSummary
+                                ? Icons.close_rounded
+                                : Icons.check_circle_rounded,
+                          ),
+                          label: Text(
+                            showSummary ? 'TUTUP' : 'SELESAI',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: showSummary
+                                ? Colors.grey.shade700
+                                : Colors.green,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _handleSynthesizeGap(node.id);
+                          },
+                          icon: const Icon(Icons.auto_awesome),
+                          label: const Text(
+                            'SINTESIS RISET (AI)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.indigo,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            // Aksi baca sumber paper
+                          },
+                          icon: const Icon(Icons.description_outlined),
+                          label: const Text(
+                            'BACA PAPER SUMBER',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleSynthesizeGap(node.id);
-                      },
-                      icon: const Icon(Icons.auto_awesome),
-                      label: const Text('SINTESIS RISET (AI)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.indigo,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Aksi baca sumber paper
-                      },
-                      icon: const Icon(Icons.description_outlined),
-                      label: const Text('BACA PAPER SUMBER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
     );
-  },
-);
-}
+  }
 
   Widget _buildNodeWidget(GraphNode node) {
     IconData icon;
     Color color;
-    
+
     switch (node.type) {
       case GraphNodeType.concept:
         icon = Icons.psychology_outlined;
@@ -1569,11 +2423,20 @@ ${rec.noveltyContribution}
     if (node.saturationStatus != null) {
       Color satColor;
       switch (node.saturationStatus?.toLowerCase()) {
-        case 'high': satColor = Colors.green; break;
-        case 'medium': satColor = Colors.yellow.shade700; break;
-        case 'low': satColor = Colors.orange; break;
-        case 'none': satColor = Colors.red; break;
-        default: satColor = Colors.grey;
+        case 'high':
+          satColor = Colors.green;
+          break;
+        case 'medium':
+          satColor = Colors.yellow.shade700;
+          break;
+        case 'low':
+          satColor = Colors.orange;
+          break;
+        case 'none':
+          satColor = Colors.red;
+          break;
+        default:
+          satColor = Colors.grey;
       }
       saturationIndicator = Container(
         width: 10,
@@ -1583,8 +2446,12 @@ ${rec.noveltyContribution}
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 1.5),
           boxShadow: [
-            BoxShadow(color: satColor.withValues(alpha: 0.4), blurRadius: 4, spreadRadius: 1)
-          ]
+            BoxShadow(
+              color: satColor.withValues(alpha: 0.4),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
         ),
       );
     }
@@ -1606,7 +2473,10 @@ ${rec.noveltyContribution}
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withValues(alpha: 0.4), width: isGap ? 2 : 1),
+          border: Border.all(
+            color: color.withValues(alpha: 0.4),
+            width: isGap ? 2 : 1,
+          ),
         ),
         child: Row(
           children: [
@@ -1615,18 +2485,17 @@ ${rec.noveltyContribution}
               children: [
                 Icon(icon, color: color, size: 20),
                 if (saturationIndicator != null)
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: saturationIndicator,
-                  ),
+                  Positioned(right: -2, top: -2, child: saturationIndicator),
               ],
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 node.label,
-                style: TextStyle(fontSize: 12, fontWeight: isGap ? FontWeight.bold : FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isGap ? FontWeight.bold : FontWeight.w600,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1650,7 +2519,9 @@ ${rec.noveltyContribution}
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
+          color: isSelected
+              ? Theme.of(context).primaryColor
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
           border: isSelected ? null : Border.all(color: Colors.grey.shade300),
         ),
@@ -1671,18 +2542,18 @@ ${rec.noveltyContribution}
     final scale = currentMatrix.getMaxScaleOnAxis();
     final newScale = (scale * factor).clamp(0.1, 2.0);
     final ratio = newScale / scale;
-    
+
     // Zoom around center of canvas
     final size = MediaQuery.of(context).size;
     final center = Offset(size.width / 2, 200); // 200 is half of canvas height
-    
+
     final Matrix4 newMatrix = Matrix4.identity()
       ..translate(
         center.dx * (1 - ratio) + currentMatrix.getTranslation().x * ratio,
         center.dy * (1 - ratio) + currentMatrix.getTranslation().y * ratio,
       )
       ..scale(newScale);
-      
+
     _transformController.value = newMatrix;
   }
 
@@ -1694,22 +2565,31 @@ ${rec.noveltyContribution}
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    
+
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.projectTitle)),
-        body: Center(child: Text('Gagal memuat graph: $_errorMessage', style: const TextStyle(color: Colors.red))),
+        body: Center(
+          child: Text(
+            'Gagal memuat graph: $_errorMessage',
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
       );
     }
 
-    final visibleGapNodes = _visibleNodes.where((n) => n.type == GraphNodeType.researchGap).toList();
-    
+    final visibleGapNodes = _visibleNodes
+        .where((n) => n.type == GraphNodeType.researchGap)
+        .toList();
+
     final projectsAsync = ref.watch(projectsProvider(widget.userId));
-    final project = projectsAsync.value?.where((p) => p.id == widget.projectId).firstOrNull;
+    final project = projectsAsync.value
+        ?.where((p) => p.id == widget.projectId)
+        .firstOrNull;
     final totalPapers = project?.paperCount ?? 0;
-    
+
     final totalGaps = visibleGapNodes.length;
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -1731,12 +2611,20 @@ ${rec.noveltyContribution}
               // 1. Tipografi
               const Text(
                 'Research Gap Map',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1E2340)),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E2340),
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 widget.projectTitle,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E2340)),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E2340),
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -1744,13 +2632,16 @@ ${rec.noveltyContribution}
                 style: const TextStyle(fontSize: 13, color: AppColors.muted),
               ),
               const SizedBox(height: 20),
-              
+
               // 2. Kartu Statistik
               Row(
                 children: [
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade200),
                         borderRadius: BorderRadius.circular(16),
@@ -1764,7 +2655,11 @@ ${rec.noveltyContribution}
                               color: Colors.indigo.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.description_outlined, color: Colors.indigo, size: 20),
+                            child: const Icon(
+                              Icons.description_outlined,
+                              color: Colors.indigo,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Column(
@@ -1772,9 +2667,18 @@ ${rec.noveltyContribution}
                             children: [
                               Text(
                                 '$totalPapers',
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text('Papers', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                              const Text(
+                                'Papers',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.muted,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -1784,7 +2688,10 @@ ${rec.noveltyContribution}
                   const SizedBox(width: 12),
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade200),
                         borderRadius: BorderRadius.circular(16),
@@ -1798,7 +2705,11 @@ ${rec.noveltyContribution}
                               color: Colors.indigo.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.track_changes_outlined, color: Colors.indigo, size: 20),
+                            child: const Icon(
+                              Icons.track_changes_outlined,
+                              color: Colors.indigo,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Column(
@@ -1806,9 +2717,18 @@ ${rec.noveltyContribution}
                             children: [
                               Text(
                                 '$totalGaps',
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text('Gaps', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                              const Text(
+                                'Gaps',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.muted,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -1818,7 +2738,7 @@ ${rec.noveltyContribution}
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // 3. Toggle Filter
               Row(
                 children: [
@@ -1830,12 +2750,14 @@ ${rec.noveltyContribution}
                 ],
               ),
               const SizedBox(height: 24),
-              
+
               // 4. Box Canvas Interaktif
               Container(
                 height: 400,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F5F9), // Warna kanvas kebiruan sangat muda
+                  color: const Color(
+                    0xFFF3F5F9,
+                  ), // Warna kanvas kebiruan sangat muda
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.grey.shade200, width: 1.5),
                 ),
@@ -1856,7 +2778,7 @@ ${rec.noveltyContribution}
                             clipBehavior: Clip.none,
                             children: [
                               // Zone Backgrounds if Gap Map is active
-                              if (_selectedMap == 2 && _graphMap != null) 
+                              if (_selectedMap == 2 && _graphMap != null)
                                 ..._graphMap!.zones.map((zone) {
                                   final left = zone.minX + 2500.0;
                                   final top = zone.minY + 2500.0;
@@ -1865,7 +2787,9 @@ ${rec.noveltyContribution}
 
                                   Color color;
                                   String label;
-                                  switch (GraphSaturationStatus.fromJson(zone.saturationStatus)) {
+                                  switch (GraphSaturationStatus.fromJson(
+                                    zone.saturationStatus,
+                                  )) {
                                     case GraphSaturationStatus.high:
                                       color = Colors.green;
                                       label = '🟩 ZONA: BANYAK DITELITI';
@@ -1893,13 +2817,22 @@ ${rec.noveltyContribution}
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: color.withValues(alpha: 0.05),
-                                        border: Border(top: BorderSide(color: color.withValues(alpha: 0.3), width: 2)),
+                                        border: Border(
+                                          top: BorderSide(
+                                            color: color.withValues(alpha: 0.3),
+                                            width: 2,
+                                          ),
+                                        ),
                                       ),
                                       child: Padding(
                                         padding: const EdgeInsets.all(16),
                                         child: Text(
                                           label,
-                                          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
+                                          style: TextStyle(
+                                            color: color,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1915,17 +2848,22 @@ ${rec.noveltyContribution}
                                 ),
                               ),
                               // 2. Draw Nodes
-                              ..._visibleNodes.where((node) => _nodePositions.containsKey(node.id)).map((node) {
-                                final pos = _nodePositions[node.id]!;
-                                return Positioned(
-                                  left: pos.dx,
-                                  top: pos.dy,
-                                  child: FractionalTranslation(
-                                    translation: const Offset(-0.5, -0.5),
-                                    child: _buildNodeWidget(node),
-                                  ),
-                                );
-                              }),
+                              ..._visibleNodes
+                                  .where(
+                                    (node) =>
+                                        _nodePositions.containsKey(node.id),
+                                  )
+                                  .map((node) {
+                                    final pos = _nodePositions[node.id]!;
+                                    return Positioned(
+                                      left: pos.dx,
+                                      top: pos.dy,
+                                      child: FractionalTranslation(
+                                        translation: const Offset(-0.5, -0.5),
+                                        child: _buildNodeWidget(node),
+                                      ),
+                                    );
+                                  }),
                             ],
                           ),
                         ),
@@ -1940,7 +2878,11 @@ ${rec.noveltyContribution}
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
                           ],
                           border: Border.all(color: Colors.grey.shade200),
                         ),
@@ -1950,14 +2892,24 @@ ${rec.noveltyContribution}
                             IconButton(
                               icon: const Icon(Icons.add, size: 20),
                               onPressed: () => _zoom(1.2),
-                              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
+                              ),
                               padding: EdgeInsets.zero,
                             ),
-                            Container(height: 1, width: 40, color: Colors.grey.shade200),
+                            Container(
+                              height: 1,
+                              width: 40,
+                              color: Colors.grey.shade200,
+                            ),
                             IconButton(
                               icon: const Icon(Icons.remove, size: 20),
                               onPressed: () => _zoom(0.8),
-                              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
+                              ),
                               padding: EdgeInsets.zero,
                             ),
                           ],
@@ -1968,14 +2920,18 @@ ${rec.noveltyContribution}
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               // 5. Research Gaps Section
               const Text(
                 'Research Gaps',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E2340)),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E2340),
+                ),
               ),
               const SizedBox(height: 16),
-              
+
               if (visibleGapNodes.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -1985,7 +2941,10 @@ ${rec.noveltyContribution}
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.grey.shade200),
                   ),
-                  child: const Text('Tidak ada research gap yang ditampilkan pada filter ini.', style: TextStyle(color: AppColors.muted)),
+                  child: const Text(
+                    'Tidak ada research gap yang ditampilkan pada filter ini.',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
                 )
               else
                 SizedBox(
@@ -1999,8 +2958,9 @@ ${rec.noveltyContribution}
                       final rec = _getGapRecommendation(gap);
                       final gapNumber = (index + 1).toString().padLeft(2, '0');
                       final relatedPapers = gap.evidence.length;
-                      
+
                       return InkWell(
+                        key: Key('gap-card-${gap.id}'),
                         onTap: () => _showGapDetail(gap),
                         borderRadius: BorderRadius.circular(16),
                         child: Container(
@@ -2011,7 +2971,11 @@ ${rec.noveltyContribution}
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.grey.shade200),
                             boxShadow: [
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.02),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
                             ],
                           ),
                           child: Column(
@@ -2022,20 +2986,32 @@ ${rec.noveltyContribution}
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: Colors.indigo.withValues(alpha: 0.1),
+                                      color: Colors.indigo.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: const Icon(Icons.warning_amber_rounded, color: Colors.indigo, size: 20),
+                                    child: const Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: Colors.indigo,
+                                      size: 20,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       'Gap $gapNumber',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.teal.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
@@ -2043,11 +3019,19 @@ ${rec.noveltyContribution}
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.tips_and_updates_rounded, size: 12, color: Colors.teal),
+                                        Icon(
+                                          Icons.tips_and_updates_rounded,
+                                          size: 12,
+                                          color: Colors.teal,
+                                        ),
                                         SizedBox(width: 4),
                                         Text(
                                           'Ada Solusi',
-                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.teal),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.teal,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -2057,26 +3041,44 @@ ${rec.noveltyContribution}
                               const SizedBox(height: 10),
                               Text(
                                 gap.gapStatement ?? gap.label,
-                                style: const TextStyle(fontSize: 12, color: Color(0xFF4A5568)),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF4A5568),
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 10),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: Colors.teal.shade50.withValues(alpha: 0.7),
+                                  color: Colors.teal.shade50.withValues(
+                                    alpha: 0.7,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.teal.shade200),
+                                  border: Border.all(
+                                    color: Colors.teal.shade200,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.lightbulb_rounded, size: 14, color: Colors.teal.shade800),
+                                    Icon(
+                                      Icons.lightbulb_rounded,
+                                      size: 14,
+                                      color: Colors.teal.shade800,
+                                    ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         'Aksi User: ${rec.concreteSolution}',
-                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.teal.shade900),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.teal.shade900,
+                                        ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -2089,25 +3091,45 @@ ${rec.noveltyContribution}
                                 children: [
                                   Text(
                                     '$relatedPapers papers',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.muted,
+                                    ),
                                   ),
                                   const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8),
-                                    child: Text('•', style: TextStyle(color: AppColors.muted)),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: Text(
+                                      '•',
+                                      style: TextStyle(color: AppColors.muted),
+                                    ),
                                   ),
                                   Text(
-                                    gap.confidence?.name.toUpperCase() ?? 'MEDIUM',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                                    gap.confidence?.name.toUpperCase() ??
+                                        'MEDIUM',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.muted,
+                                    ),
                                   ),
                                   const Spacer(),
                                   Row(
                                     children: [
                                       Text(
                                         'Solusi & Kelanjutan',
-                                        style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context).primaryColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                       const SizedBox(width: 4),
-                                      Icon(Icons.arrow_forward_rounded, size: 14, color: Theme.of(context).primaryColor),
+                                      Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 14,
+                                        color: Theme.of(context).primaryColor,
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -2119,7 +3141,9 @@ ${rec.noveltyContribution}
                     },
                   ),
                 ),
-              const SizedBox(height: 80), // Padding tambahan agar tidak tertutup FAB
+              const SizedBox(
+                height: 80,
+              ), // Padding tambahan agar tidak tertutup FAB
             ],
           ),
         ),
@@ -2129,10 +3153,7 @@ ${rec.noveltyContribution}
 }
 
 class _GraphEdgePainter extends CustomPainter {
-  _GraphEdgePainter({
-    required this.edges,
-    required this.positions,
-  });
+  _GraphEdgePainter({required this.edges, required this.positions});
 
   final List<GraphEdge> edges;
   final Map<String, Offset> positions;
@@ -2157,22 +3178,32 @@ class _GraphEdgePainter extends CustomPainter {
       final end = p2 + const Offset(90, 25);
 
       canvas.drawLine(start, end, linePaint);
-      
+
       // Draw arrow head
       final d = end - start;
       final angle = atan2(d.dy, d.dx);
       const arrowLen = 12.0;
-      final arrowEnd = end - Offset(cos(angle) * 45, sin(angle) * 45); 
-      
-      final pA = arrowEnd - Offset(cos(angle - pi/6) * arrowLen, sin(angle - pi/6) * arrowLen);
-      final pB = arrowEnd - Offset(cos(angle + pi/6) * arrowLen, sin(angle + pi/6) * arrowLen);
-      
+      final arrowEnd = end - Offset(cos(angle) * 45, sin(angle) * 45);
+
+      final pA =
+          arrowEnd -
+          Offset(
+            cos(angle - pi / 6) * arrowLen,
+            sin(angle - pi / 6) * arrowLen,
+          );
+      final pB =
+          arrowEnd -
+          Offset(
+            cos(angle + pi / 6) * arrowLen,
+            sin(angle + pi / 6) * arrowLen,
+          );
+
       final path = Path()
         ..moveTo(arrowEnd.dx, arrowEnd.dy)
         ..lineTo(pA.dx, pA.dy)
         ..lineTo(pB.dx, pB.dy)
         ..close();
-        
+
       canvas.drawPath(path, Paint()..color = Colors.grey.shade500);
 
       // Draw label
@@ -2185,9 +3216,12 @@ class _GraphEdgePainter extends CustomPainter {
         ),
       );
       textPainter.layout();
-      
+
       final mid = start + d / 2;
-      textPainter.paint(canvas, mid - Offset(textPainter.width / 2, textPainter.height / 2));
+      textPainter.paint(
+        canvas,
+        mid - Offset(textPainter.width / 2, textPainter.height / 2),
+      );
     }
   }
 
