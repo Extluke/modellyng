@@ -57,6 +57,17 @@ class FakePaperRepo extends Fake implements PaperRepository {
   }
 }
 
+class FakeFailingPaperRepo extends Fake implements PaperRepository {
+  @override
+  Future<List<ProjectPaper>?> pickAndUploadPdf(
+    ResearchProject project, {
+    List<ProjectPaper> existingPapers = const [],
+    void Function(double progress)? onProgress,
+  }) async {
+    throw const PaperUploadException('Koneksi terputus saat mengunggah PDF.');
+  }
+}
+
 void main() {
   group('PaperRepository - Validation & Error Handling', () {
     test('rejects non-PDF extension with Indonesian message', () async {
@@ -186,6 +197,64 @@ void main() {
         expect(dioSend, contains('Waktu unggah habis'));
       },
     );
+
+    test('rejects duplicate filename against existing project papers', () {
+      expect(
+        () => PaperRepository.validateDuplicateFilenames(
+          ['paper_a.pdf'],
+          ['paper_a.pdf', 'paper_b.pdf'],
+        ),
+        throwsA(
+          isA<PaperUploadException>().having(
+            (e) => e.message,
+            'message',
+            contains('sudah pernah diunggah atau duplikat dalam pilihan'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects case-insensitive and trimmed duplicate filename', () {
+      expect(
+        () => PaperRepository.validateDuplicateFilenames(
+          ['  PAPER_A.PDF  '],
+          ['paper_a.pdf'],
+        ),
+        throwsA(
+          isA<PaperUploadException>().having(
+            (e) => e.message,
+            'message',
+            contains('sudah pernah diunggah atau duplikat dalam pilihan'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects duplicate filename within the same selection batch', () {
+      expect(
+        () => PaperRepository.validateDuplicateFilenames(
+          ['new_paper.pdf', 'new_paper.pdf'],
+          ['existing.pdf'],
+        ),
+        throwsA(
+          isA<PaperUploadException>().having(
+            (e) => e.message,
+            'message',
+            contains('sudah pernah diunggah atau duplikat dalam pilihan'),
+          ),
+        ),
+      );
+    });
+
+    test('accepts distinct non-duplicate filenames', () {
+      expect(
+        () => PaperRepository.validateDuplicateFilenames(
+          ['paper_c.pdf', 'paper_d.pdf'],
+          ['paper_a.pdf', 'paper_b.pdf'],
+        ),
+        returnsNormally,
+      );
+    });
   });
 
   group('ProjectOverviewScreen - Mobile Aspect Ratio Upload Feedback', () {
@@ -210,7 +279,7 @@ void main() {
                 projectId: testEmptyProject.id,
               )).overrideWith((ref) => []),
             ],
-            child: MaterialApp(
+            child: const MaterialApp(
               home: ProjectOverviewScreen(project: testEmptyProject),
             ),
           ),
@@ -262,6 +331,51 @@ void main() {
 
         // 4. After completion, progress bar resets safely:
         expect(find.byKey(const Key('appbar-upload-progress')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'invalidates paper provider even when upload throws an exception',
+      (tester) async {
+        int providerBuildCount = 0;
+        final fakeFailingPaperRepo = FakeFailingPaperRepo();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authRepositoryProvider.overrideWithValue(FakeAuthRepo()),
+              paperRepositoryProvider.overrideWithValue(fakeFailingPaperRepo),
+              projectPapersProvider((
+                userId: 'user-test-456',
+                projectId: testEmptyProject.id,
+              )).overrideWith((ref) {
+                providerBuildCount++;
+                return [];
+              }),
+            ],
+            child: const MaterialApp(
+              home: ProjectOverviewScreen(project: testEmptyProject),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        expect(providerBuildCount, equals(1));
+
+        await tester.ensureVisible(
+          find.byKey(const Key('empty-state-upload-button')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('empty-state-upload-button')));
+        await tester.pumpAndSettle();
+
+        // Provider should have been re-evaluated/invalidated:
+        expect(providerBuildCount, greaterThan(1));
+        // Error SnackBar should be displayed:
+        expect(
+          find.text('Koneksi terputus saat mengunggah PDF.'),
+          findsOneWidget,
+        );
       },
     );
   });

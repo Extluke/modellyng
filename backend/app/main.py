@@ -66,7 +66,7 @@ from .intelligence_service import get_project_intelligence_report
 
 settings = get_settings()
 MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
-PDF_READ_CHUNK_BYTES = 1024 * 1024
+PDF_READ_CHUNK_BYTES = 4 * 1024 * 1024
 
 app = FastAPI(
     title=settings.app_name,

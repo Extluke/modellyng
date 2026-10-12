@@ -1,8 +1,12 @@
 import asyncio
+import hashlib
+import logging
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from .auth import AuthenticatedUser
 from .config import get_settings
@@ -136,7 +140,7 @@ class SupabaseProjectRepository:
     def _paper_select() -> str:
         return (
             "id,project_id,storage_key,original_filename,mime_type,"
-            "file_size_bytes,page_count,language_code,doi,status,title,authors,"
+            "file_size_bytes,file_hash,page_count,language_code,doi,status,title,authors,"
             "publication_year,journal,publisher,volume,issue,pages,publication_status,created_at,updated_at,"
             "analysis_jobs(id,status,stage,progress,error_message,created_at,updated_at)"
         )
@@ -304,20 +308,80 @@ class SupabaseProjectRepository:
                 )
         self._raise_for_repository_error(response)
 
+    async def _check_duplicate_paper(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        *,
+        original_filename: str | None = None,
+        file_hash: str | None = None,
+        file_size_bytes: int | None = None,
+        doi: str | None = None,
+    ) -> None:
+        """Enforce single-upload policy per paper within a project."""
+        clean_name = original_filename.strip().lower() if original_filename else None
+        clean_doi = doi.strip().lower() if doi else None
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/papers",
+                headers=self._headers(user),
+                params={
+                    "select": "id,original_filename,file_hash,file_size_bytes,doi",
+                    "project_id": f"eq.{project_id}",
+                },
+            )
+        self._raise_for_repository_error(response)
+        existing_rows = response.json()
+
+        for row in existing_rows:
+            # 1. Check exact or case-insensitive filename duplicate
+            row_filename = (row.get("original_filename") or "").strip()
+            if clean_name and row_filename.lower() == clean_name:
+                raise InvalidUploadError(
+                    f'Paper "{original_filename}" sudah pernah diunggah ke proyek ini.'
+                )
+
+            # 2. Check cryptographic content hash duplicate
+            row_hash = row.get("file_hash")
+            if file_hash and row_hash and row_hash.lower() == file_hash.lower():
+                display_name = row_filename or "yang sudah ada"
+                raise InvalidUploadError(
+                    f'File PDF ini identik dengan paper "{display_name}" yang sudah ada di proyek ini.'
+                )
+
+            # 3. Check DOI duplicate if applicable
+            row_doi = (row.get("doi") or "").strip().lower()
+            if clean_doi and row_doi == clean_doi:
+                raise InvalidUploadError(
+                    f'Paper dengan DOI "{doi}" sudah ada di proyek ini.'
+                )
+
     async def create_paper(
         self,
         user: AuthenticatedUser,
         project_id: UUID,
         payload: PaperCreate,
+        *,
+        skip_storage_verification: bool = False,
     ) -> PaperRead:
         await self.get_project(user, project_id)
+        await self._check_duplicate_paper(
+            user,
+            project_id,
+            original_filename=payload.original_filename,
+            file_hash=payload.file_hash,
+            file_size_bytes=payload.file_size_bytes,
+            doi=payload.doi,
+        )
 
         if payload.source == PaperSource.UPLOAD:
             self._validate_storage_key(user, project_id, payload)
-            await self._verify_uploaded_pdf(user, payload)
+            if not skip_storage_verification:
+                await self._verify_uploaded_pdf(user, payload)
 
         database_payload = payload.model_dump(exclude={"source"})
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 f"{self._rest_url}/papers",
                 headers=self._headers(user, return_representation=True),
@@ -337,10 +401,21 @@ class SupabaseProjectRepository:
         """Store a validated PDF and create its private paper record."""
         await self.get_project(user, project_id)
         self._validate_pdf_content(original_filename, content)
+        file_hash = hashlib.sha256(content).hexdigest()
+
+        # Check for duplicates before touching storage or database
+        await self._check_duplicate_paper(
+            user,
+            project_id,
+            original_filename=original_filename,
+            file_hash=file_hash,
+            file_size_bytes=len(content),
+        )
 
         storage_key = f"{user.id}/{project_id}/{uuid4()}.pdf"
         encoded_path = quote(storage_key, safe="/")
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        storage_timeout = httpx.Timeout(connect=30.0, read=120.0, write=120.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=storage_timeout) as client:
             response = await client.post(
                 f"{self._storage_url}/object/"
                 f"{self._storage_bucket}/{encoded_path}",
@@ -359,15 +434,26 @@ class SupabaseProjectRepository:
             storage_key=storage_key,
             mime_type="application/pdf",
             file_size_bytes=len(content),
+            file_hash=file_hash,
         )
         try:
-            paper = await self.create_paper(user, project_id, payload)
+            paper = await self.create_paper(
+                user, project_id, payload, skip_storage_verification=True
+            )
+        except Exception:
+            await self._remove_storage_object(user, storage_key)
+            raise
+
+        try:
             await self.start_pdf_processing(user, project_id, paper.id)
             return await self.get_paper(user, project_id, paper.id)
-        except Exception:
-            if "paper" not in locals():
-                await self._remove_storage_object(user, storage_key)
-            raise
+        except Exception as exc:
+            logger.warning(
+                "Paper %s berhasil disimpan tetapi auto-start pemrosesan gagal: %s",
+                paper.id,
+                exc,
+            )
+            return await self.get_paper(user, project_id, paper.id)
 
     async def get_paper(
         self,

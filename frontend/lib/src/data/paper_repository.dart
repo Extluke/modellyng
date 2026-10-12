@@ -82,7 +82,7 @@ class PaperRepository {
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
       allowMultiple: true,
-      withData: true,
+      withData: kIsWeb,
     );
     if (result == null) return null;
 
@@ -92,23 +92,22 @@ class PaperRepository {
       );
     }
 
-    // Check for duplicates by filename
-    final existingFilenames = existingPapers
-        .map((p) => p.originalFilename.trim().toLowerCase())
-        .where((name) => name.isNotEmpty)
-        .toSet();
-    for (final file in result.files) {
-      final nameLower = file.name.trim().toLowerCase();
-      if (existingFilenames.contains(nameLower)) {
-        throw PaperUploadException(
-          'Paper "${file.name}" sudah pernah diunggah ke proyek ini.',
-        );
-      }
+    List<ProjectPaper> currentPapers = existingPapers;
+    if (currentPapers.isEmpty) {
+      try {
+        currentPapers = await listPapers(project.id);
+      } catch (_) {}
     }
+
+    validateDuplicateFilenames(
+      result.files.map((file) => file.name),
+      currentPapers.map((paper) => paper.originalFilename),
+    );
 
     final List<ProjectPaper> uploadedPapers = [];
     final totalFiles = result.files.length;
     int completedFiles = 0;
+    final List<String> failures = [];
 
     for (final selected in result.files) {
       Uint8List? fileBytes = selected.bytes;
@@ -122,24 +121,38 @@ class PaperRepository {
       }
 
       if (fileBytes == null && selected.path == null) {
-        throw PaperUploadException(
-          'File "${selected.name}" tidak dapat dibaca dari penyimpanan perangkat. Silakan pilih PDF kembali.',
+        failures.add(
+          'File "${selected.name}" tidak dapat dibaca dari penyimpanan perangkat.',
         );
+        continue;
       }
 
-      final paper = await uploadPdf(
-        project: project,
-        originalFilename: selected.name,
-        bytes: fileBytes,
-        path: selected.path,
-        size: selected.size,
-        onProgress: (progress) {
-          final overallProgress = (completedFiles + progress) / totalFiles;
-          onProgress?.call(overallProgress);
-        },
+      try {
+        final paper = await uploadPdf(
+          project: project,
+          originalFilename: selected.name,
+          bytes: fileBytes,
+          path: selected.path,
+          size: selected.size,
+          onProgress: (progress) {
+            final overallProgress = (completedFiles + progress) / totalFiles;
+            onProgress?.call(overallProgress);
+          },
+        );
+        uploadedPapers.add(paper);
+        completedFiles++;
+      } catch (error) {
+        failures.add('${selected.name}: ${readableError(error)}');
+      }
+    }
+
+    if (failures.isNotEmpty) {
+      if (uploadedPapers.isEmpty) {
+        throw PaperUploadException(failures.join('\n'));
+      }
+      throw PaperUploadException(
+        '${uploadedPapers.length} dari $totalFiles PDF berhasil diunggah. Gagal:\n${failures.join('\n')}',
       );
-      uploadedPapers.add(paper);
-      completedFiles++;
     }
 
     return uploadedPapers;
@@ -180,8 +193,9 @@ class PaperRepository {
         '/api/v1/projects/${project.id}/papers/upload',
         data: formData,
         options: Options(
-          sendTimeout: const Duration(minutes: 3),
-          receiveTimeout: const Duration(minutes: 3),
+          connectTimeout: const Duration(minutes: 1),
+          sendTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 5),
         ),
         onSendProgress: (sent, total) {
           if (total > 0) {
@@ -196,6 +210,27 @@ class PaperRepository {
       return ProjectPaper.fromJson(response.data!);
     } catch (error) {
       throw PaperUploadException(readableError(error));
+    }
+  }
+
+  @visibleForTesting
+  static void validateDuplicateFilenames(
+    Iterable<String> incomingNames,
+    Iterable<String> existingNames,
+  ) {
+    final seen = existingNames
+        .map((name) => name.trim().toLowerCase())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    for (final name in incomingNames) {
+      final nameLower = name.trim().toLowerCase();
+      if (seen.contains(nameLower)) {
+        throw PaperUploadException(
+          'Paper "$name" sudah pernah diunggah atau duplikat dalam pilihan.',
+        );
+      }
+      seen.add(nameLower);
     }
   }
 

@@ -31,8 +31,8 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
   @override
   void initState() {
     super.initState();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!mounted) return;
+    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || _uploading) return;
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
       if (userId == null) return;
       final query = (userId: userId, projectId: widget.project.id);
@@ -52,6 +52,7 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
   }
 
   Future<void> _uploadPdf() async {
+    if (_uploading) return;
     setState(() {
       _uploading = true;
       _uploadProgress = 0;
@@ -68,7 +69,16 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
     }
     try {
       final userId = ref.read(authRepositoryProvider).currentUser?.id;
-      final query = (userId: userId!, projectId: widget.project.id);
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sesi login telah berakhir. Silakan masuk kembali.'),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
+      final query = (userId: userId, projectId: widget.project.id);
       final existingPapers = ref.read(projectPapersProvider(query)).value ?? [];
 
       final papers = await ref
@@ -82,16 +92,6 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
           );
       if (!mounted) return;
       if (papers != null && papers.isNotEmpty) {
-        final userId = ref.read(authRepositoryProvider).currentUser?.id;
-        if (userId != null) {
-          ref.invalidate(
-            projectPapersProvider((
-              userId: userId,
-              projectId: widget.project.id,
-            )),
-          );
-          ref.invalidate(projectsProvider(userId));
-        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${papers.length} PDF berhasil diunggah.')),
         );
@@ -105,6 +105,13 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
         ),
       );
     } finally {
+      final userId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (userId != null) {
+        ref.invalidate(
+          projectPapersProvider((userId: userId, projectId: widget.project.id)),
+        );
+        ref.invalidate(projectsProvider(userId));
+      }
       if (mounted) setState(() => _uploading = false);
     }
   }

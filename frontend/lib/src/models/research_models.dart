@@ -191,6 +191,7 @@ class ProjectPaper {
     this.issue,
     this.pages,
     this.publicationStatus,
+    this.fileHash,
   });
 
   final String id;
@@ -216,6 +217,7 @@ class ProjectPaper {
   final String? issue;
   final String? pages;
   final String? publicationStatus;
+  final String? fileHash;
 
   Map<String, String?> get bibliographicValues => {
     'title': title,
@@ -276,6 +278,7 @@ class ProjectPaper {
       issue: json['issue'] as String?,
       pages: json['pages'] as String?,
       publicationStatus: json['publication_status'] as String?,
+      fileHash: json['file_hash'] as String?,
     );
   }
 
@@ -370,11 +373,13 @@ class AiResearchSynthesis {
 
   factory AiResearchSynthesis.fromJson(Map<String, dynamic> json) {
     return AiResearchSynthesis(
-      usulanJudul: (json['usulan_judul'] as List<dynamic>?)
+      usulanJudul:
+          (json['usulan_judul'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
-      rumusanMasalah: (json['rumusan_masalah'] as List<dynamic>?)
+      rumusanMasalah:
+          (json['rumusan_masalah'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -383,7 +388,6 @@ class AiResearchSynthesis {
     );
   }
 }
-
 
 class KnowledgeGraphEvidence {
   const KnowledgeGraphEvidence({
@@ -459,8 +463,12 @@ class KnowledgeGraphNode {
       validationStatus: json['validation_status']?.toString(),
       methodCluster: json['method_cluster']?.toString(),
       objectCluster: json['object_cluster']?.toString(),
-      evidence: (json['evidence'] as List<dynamic>?)
-              ?.map((e) => KnowledgeGraphEvidence.fromJson(e as Map<String, dynamic>))
+      evidence:
+          (json['evidence'] as List<dynamic>?)
+              ?.map(
+                (e) =>
+                    KnowledgeGraphEvidence.fromJson(e as Map<String, dynamic>),
+              )
               .toList(growable: false) ??
           const [],
     );
@@ -535,15 +543,18 @@ class KnowledgeGraphMap {
     return KnowledgeGraphMap(
       projectId: json['project_id']?.toString() ?? '',
       projectTitle: json['project_title']?.toString() ?? '',
-      nodes: (json['nodes'] as List<dynamic>?)
+      nodes:
+          (json['nodes'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphNode.fromJson(e))
               .toList(growable: false) ??
           [],
-      edges: (json['edges'] as List<dynamic>?)
+      edges:
+          (json['edges'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphEdge.fromJson(e))
               .toList(growable: false) ??
           [],
-      zones: (json['zones'] as List<dynamic>?)
+      zones:
+          (json['zones'] as List<dynamic>?)
               ?.map((e) => KnowledgeGraphZone.fromJson(e))
               .toList(growable: false) ??
           [],

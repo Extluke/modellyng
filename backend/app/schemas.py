@@ -105,6 +105,7 @@ class PaperCreate(BaseModel):
         ge=1,
         le=52_428_800,
     )
+    file_hash: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def validate_source_fields(self) -> "PaperCreate":

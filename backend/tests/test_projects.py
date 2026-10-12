@@ -9,6 +9,7 @@ from app.auth import AuthenticatedUser, get_current_user
 from app.main import app
 from app.repository import (
     EntityNotFoundError,
+    InvalidUploadError,
     RepositoryError,
     SupabaseProjectRepository,
 )
@@ -834,5 +835,94 @@ def test_api_delete_project_endpoint_authorized(monkeypatch: pytest.MonkeyPatch)
         assert called is True
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_repository_rejects_duplicate_filename(monkeypatch: pytest.MonkeyPatch) -> None:
+    repository = SupabaseProjectRepository()
+    user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000001"), access_token="token")
+    project_id = UUID("00000000-0000-0000-0000-000000000002")
+
+    async def fake_get_project(u, pid):
+        return None
+    monkeypatch.setattr(repository, "get_project", fake_get_project)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return None
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "00000000-0000-0000-0000-000000000099",
+                        "original_filename": "existing.pdf",
+                        "file_hash": "somehash",
+                        "file_size_bytes": 100,
+                        "doi": None,
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(InvalidUploadError, match='sudah pernah diunggah ke proyek ini'):
+        await repository.upload_pdf(
+            user,
+            project_id,
+            original_filename="EXISTING.pdf",
+            content=b"%PDF-1.4\nvalid content",
+        )
+
+
+@pytest.mark.anyio
+async def test_repository_rejects_duplicate_content_hash(monkeypatch: pytest.MonkeyPatch) -> None:
+    import hashlib
+    repository = SupabaseProjectRepository()
+    user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000001"), access_token="token")
+    project_id = UUID("00000000-0000-0000-0000-000000000002")
+
+    async def fake_get_project(u, pid):
+        return None
+    monkeypatch.setattr(repository, "get_project", fake_get_project)
+
+    pdf_content = b"%PDF-1.4\nsame pdf different name"
+    expected_hash = hashlib.sha256(pdf_content).hexdigest()
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return None
+        async def get(self, url, **kwargs):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "00000000-0000-0000-0000-000000000099",
+                        "original_filename": "original_paper.pdf",
+                        "file_hash": expected_hash,
+                        "file_size_bytes": len(pdf_content),
+                        "doi": None,
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+    monkeypatch.setattr("app.repository.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(InvalidUploadError, match='identik dengan paper "original_paper.pdf"'):
+        await repository.upload_pdf(
+            user,
+            project_id,
+            original_filename="renamed_paper.pdf",
+            content=pdf_content,
+        )
+
 
 
