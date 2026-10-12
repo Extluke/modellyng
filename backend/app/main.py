@@ -564,7 +564,12 @@ async def chat_with_assistant(
     current_user: CurrentUser,
 ) -> GlobalChatResponse:
     from .chat_service import answer_global_question
-    return await asyncio.to_thread(answer_global_question, payload)
+    project_context = None
+    if payload.project_id:
+        project_context = await project_repository.get_project_chat_context(
+            current_user, payload.project_id
+        )
+    return await asyncio.to_thread(answer_global_question, payload, project_context)
 
 
 @api.post(

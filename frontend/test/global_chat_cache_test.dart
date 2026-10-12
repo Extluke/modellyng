@@ -12,8 +12,9 @@ class FakeGlobalChatRepository extends Fake implements GlobalChatRepository {
   @override
   Future<GlobalChatResponse> sendQuestion(
     String question,
-    List<GlobalChatMessage> history,
-  ) async {
+    List<GlobalChatMessage> history, {
+    String? projectId,
+  }) async {
     return const GlobalChatResponse(
       answer: 'Ini adalah respons asisten AI yang dicache.',
       modelName: 'gemini-2.0-flash',

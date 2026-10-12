@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/global_chat_cache_service.dart';
 import '../data/global_chat_repository.dart';
+import '../data/project_repository.dart';
+import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 
 class _ChatMessage {
@@ -13,11 +15,15 @@ class _ChatMessage {
     required this.role,
     required this.content,
     this.timestamp,
+    this.referencedProject,
+    this.projectId,
   });
 
   final String role;
   final String content;
   final DateTime? timestamp;
+  final String? referencedProject;
+  final String? projectId;
 }
 
 class GlobalChatScreen extends ConsumerStatefulWidget {
@@ -36,12 +42,111 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
   bool _sending = false;
   bool _loadingHistory = true;
 
+  bool _showProjectPopup = false;
+  String _projectQuery = '';
+  int _atSymbolIndex = -1;
+  String? _selectedProjectId;
+  String? _selectedProjectTitle;
+
   bool get _hasUserPrompt => _messages.any((m) => m.role == 'user');
 
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_onTextChanged);
     _loadHistory();
+  }
+
+  void _onTextChanged() {
+    final text = _controller.text;
+    final selection = _controller.selection;
+    final cursor = selection.baseOffset;
+
+    if (cursor < 0 || text.isEmpty) {
+      if (_showProjectPopup) {
+        setState(() {
+          _showProjectPopup = false;
+          _projectQuery = '';
+          _atSymbolIndex = -1;
+        });
+      }
+      return;
+    }
+
+    if (_selectedProjectId != null && !text.contains('@')) {
+      setState(() {
+        _selectedProjectId = null;
+        _selectedProjectTitle = null;
+      });
+    }
+
+    final textBeforeCursor = text.substring(0, cursor);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex != -1) {
+      final isAtStartOrAfterSpace =
+          lastAtIndex == 0 ||
+          textBeforeCursor[lastAtIndex - 1] == ' ' ||
+          textBeforeCursor[lastAtIndex - 1] == '\n';
+
+      final queryCandidate = textBeforeCursor.substring(lastAtIndex + 1);
+      final hasSpaceInQuery =
+          queryCandidate.contains(' ') || queryCandidate.contains('\n');
+
+      if (isAtStartOrAfterSpace && !hasSpaceInQuery) {
+        if (!_showProjectPopup ||
+            _projectQuery != queryCandidate ||
+            _atSymbolIndex != lastAtIndex) {
+          setState(() {
+            _showProjectPopup = true;
+            _projectQuery = queryCandidate;
+            _atSymbolIndex = lastAtIndex;
+          });
+        }
+        return;
+      }
+    }
+
+    if (_showProjectPopup) {
+      setState(() {
+        _showProjectPopup = false;
+        _projectQuery = '';
+        _atSymbolIndex = -1;
+      });
+    }
+  }
+
+  void _selectProject(ResearchProject project) {
+    final text = _controller.text;
+    final atIndex = _atSymbolIndex;
+
+    String newText;
+    int newCursorPosition;
+
+    if (atIndex != -1 && atIndex <= text.length) {
+      final beforeAt = text.substring(0, atIndex);
+      final cursor = _controller.selection.baseOffset;
+      final afterCursor = (cursor >= atIndex && cursor <= text.length)
+          ? text.substring(cursor)
+          : '';
+      final mention = '@${project.title} ';
+      newText = '$beforeAt$mention$afterCursor';
+      newCursorPosition = (beforeAt + mention).length;
+    } else {
+      newText = '@${project.title} ';
+      newCursorPosition = newText.length;
+    }
+
+    _controller.text = newText;
+    _controller.selection = TextSelection.collapsed(offset: newCursorPosition);
+
+    setState(() {
+      _selectedProjectId = project.id;
+      _selectedProjectTitle = project.title;
+      _showProjectPopup = false;
+      _projectQuery = '';
+      _atSymbolIndex = -1;
+    });
   }
 
   Future<void> _loadHistory() async {
@@ -59,6 +164,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                 role: m.role,
                 content: m.content,
                 timestamp: m.timestamp,
+                referencedProject: m.referencedProject,
+                projectId: m.projectId,
               ),
             ),
           );
@@ -90,6 +197,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
             role: m.role,
             content: m.content,
             timestamp: m.timestamp ?? DateTime.now(),
+            referencedProject: m.referencedProject,
+            projectId: m.projectId,
           ),
         )
         .toList(growable: false);
@@ -143,6 +252,7 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -162,16 +272,26 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
 
+    final linkedProjectId = _selectedProjectId;
+    final linkedProjectTitle = _selectedProjectTitle;
+
     final now = DateTime.now();
     final userMessage = _ChatMessage(
       role: 'user',
       content: text,
       timestamp: now,
+      referencedProject: linkedProjectTitle,
+      projectId: linkedProjectId,
     );
     setState(() {
       _messages.add(userMessage);
       _sending = true;
       _controller.clear();
+      _showProjectPopup = false;
+      _projectQuery = '';
+      _atSymbolIndex = -1;
+      _selectedProjectId = null;
+      _selectedProjectTitle = null;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -185,13 +305,15 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
               role: m.role,
               content: m.content,
               timestamp: m.timestamp,
+              referencedProject: m.referencedProject,
+              projectId: m.projectId,
             ),
           )
           .toList();
 
       final response = await ref
           .read(globalChatRepositoryProvider)
-          .sendQuestion(text, history);
+          .sendQuestion(text, history, projectId: linkedProjectId);
 
       if (!mounted) return;
       setState(() {
@@ -200,6 +322,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
             role: 'assistant',
             content: response.answer,
             timestamp: DateTime.now(),
+            referencedProject: response.referencedProject ?? linkedProjectTitle,
+            projectId: linkedProjectId,
           ),
         );
       });
@@ -222,8 +346,213 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
     }
   }
 
+  Widget _buildLinkedProjectBadge() {
+    return Container(
+      key: const Key('linked-project-badge'),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.link_rounded,
+            size: 16,
+            color: AppColors.primaryDark,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Tersambung ke proyek: ${_selectedProjectTitle ?? ""}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryDark,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          InkWell(
+            key: const Key('remove-linked-project-button'),
+            onTap: () {
+              setState(() {
+                _selectedProjectId = null;
+                _selectedProjectTitle = null;
+              });
+            },
+            child: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: AppColors.primaryDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectMentionPopup(
+    AsyncValue<List<ResearchProject>> projectsAsync,
+  ) {
+    return Container(
+      key: const Key('project-mention-popup'),
+      constraints: const BoxConstraints(maxHeight: 220),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: const BoxDecoration(
+                color: AppColors.canvas,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+                border: Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.folder_open_rounded,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pilih Proyek untuk Dijadikan Referensi',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: projectsAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+                error: (err, _) => Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Gagal memuat proyek: $err',
+                    style: const TextStyle(fontSize: 12, color: AppColors.red),
+                  ),
+                ),
+                data: (projects) {
+                  final query = _projectQuery.trim().toLowerCase();
+                  final filtered = query.isEmpty
+                      ? projects
+                      : projects
+                            .where((p) => p.title.toLowerCase().contains(query))
+                            .toList();
+
+                  if (filtered.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Tidak ada proyek yang sesuai.',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.border),
+                    itemBuilder: (context, index) {
+                      final project = filtered[index];
+                      return ListTile(
+                        dense: true,
+                        key: Key('project-mention-option-${project.id}'),
+                        leading: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoft,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.library_books_rounded,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        title: Text(
+                          project.title,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: project.description.isNotEmpty
+                            ? Text(
+                                project.description,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.muted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                        onTap: () => _selectProject(project),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final projectsAsync = ref.watch(projectsProvider(widget.userId));
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -303,29 +632,85 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                               const SizedBox(width: 12),
                             ],
                             Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isUser
-                                      ? AppColors.primarySoft
-                                      : Colors.white,
-                                  border: isUser
-                                      ? null
-                                      : Border.all(color: AppColors.border),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: MarkdownBody(
-                                  data: message.content,
-                                  selectable: true,
-                                  styleSheet: MarkdownStyleSheet(
-                                    p: TextStyle(
+                              child: Column(
+                                crossAxisAlignment: isUser
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  if (message.referencedProject != null) ...[
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isUser
+                                            ? AppColors.primaryDark
+                                            : AppColors.primarySoft,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isUser
+                                              ? AppColors.primaryDark
+                                              : AppColors.primary.withValues(
+                                                  alpha: 0.2,
+                                                ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.folder_open_rounded,
+                                            size: 12,
+                                            color: isUser
+                                                ? Colors.white
+                                                : AppColors.primaryDark,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              'Proyek: ${message.referencedProject}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: isUser
+                                                    ? Colors.white
+                                                    : AppColors.primaryDark,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
                                       color: isUser
-                                          ? AppColors.primaryDark
-                                          : AppColors.ink,
-                                      height: 1.5,
+                                          ? AppColors.primarySoft
+                                          : Colors.white,
+                                      border: isUser
+                                          ? null
+                                          : Border.all(color: AppColors.border),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: MarkdownBody(
+                                      data: message.content,
+                                      selectable: true,
+                                      styleSheet: MarkdownStyleSheet(
+                                        p: TextStyle(
+                                          color: isUser
+                                              ? AppColors.primaryDark
+                                              : AppColors.ink,
+                                          height: 1.5,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
                             if (isUser) ...[
@@ -346,6 +731,9 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                     },
                   ),
           ),
+          if (_showProjectPopup) _buildProjectMentionPopup(projectsAsync),
+          if (!_showProjectPopup && _selectedProjectId != null)
+            _buildLinkedProjectBadge(),
           Container(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -363,7 +751,7 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     decoration: const InputDecoration(
-                      hintText: 'Tanyakan sesuatu...',
+                      hintText: 'Tanyakan sesuatu atau ketik @ untuk proyek...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(12)),
                       ),

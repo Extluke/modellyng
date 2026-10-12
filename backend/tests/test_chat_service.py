@@ -3,8 +3,16 @@ from uuid import UUID
 
 import pytest
 
-from app.chat_service import ChatUnavailableError, ProjectChatBlock, ProjectChatContext, ProjectChatDocument, _GeminiChatOutput, answer_project_question
-from app.schemas import ProjectChatRequest
+from app.chat_service import (
+    ChatUnavailableError,
+    ProjectChatBlock,
+    ProjectChatContext,
+    ProjectChatDocument,
+    _GeminiChatOutput,
+    answer_global_question,
+    answer_project_question,
+)
+from app.schemas import GlobalChatRequest, ProjectChatRequest
 
 
 def _context(*, with_blocks: bool = True) -> ProjectChatContext:
@@ -74,3 +82,45 @@ def test_chat_rejects_generated_answer_without_valid_citation(monkeypatch) -> No
 def test_chat_waits_honestly_when_pdf_text_is_not_extracted() -> None:
     with pytest.raises(ChatUnavailableError, match="Teks PDF belum tersedia"):
         answer_project_question(_context(with_blocks=False), ProjectChatRequest(question="Apa isi paper ini?"))
+
+
+def test_global_chat_without_project(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            captured["contents"] = contents
+            return SimpleNamespace(text="Halo, ini jawaban asisten Modellyng.", parsed=None)
+
+    monkeypatch.setattr("app.chat_service.get_settings", lambda: SimpleNamespace(gemini_api_key="test-key", gemini_model="gemini-test", gemini_fallback_model="gemini-fallback", gemini_chat_timeout_ms=12_000))
+    monkeypatch.setattr("app.chat_service.genai.Client", lambda api_key, http_options: SimpleNamespace(models=FakeModels()))
+
+    resp = answer_global_question(GlobalChatRequest(question="Bagaimana cara memulai penelitian?"))
+    assert resp.answer == "Halo, ini jawaban asisten Modellyng."
+    assert resp.referenced_project is None
+    assert "Bagaimana cara memulai penelitian?" in captured["contents"]
+
+
+def test_global_chat_with_connected_project(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            captured["contents"] = contents
+            return SimpleNamespace(text="Berdasarkan proyek Query study dan paper Index Performance Study, berikut sarannya...", parsed=None)
+
+    monkeypatch.setattr("app.chat_service.get_settings", lambda: SimpleNamespace(gemini_api_key="test-key", gemini_model="gemini-test", gemini_fallback_model="gemini-fallback", gemini_chat_timeout_ms=12_000))
+    monkeypatch.setattr("app.chat_service.genai.Client", lambda api_key, http_options: SimpleNamespace(models=FakeModels()))
+
+    ctx = _context()
+    resp = answer_global_question(
+        GlobalChatRequest(
+            question="Jelaskan temuan optimasi query dari paper dalam proyek saya",
+            project_id=ctx.project_id,
+        ),
+        project_context=ctx,
+    )
+    assert resp.answer.startswith("Berdasarkan proyek Query study")
+    assert resp.referenced_project == "Query study"
+    assert "Query study" in captured["contents"]
+    assert "Index Performance Study" in captured["contents"]

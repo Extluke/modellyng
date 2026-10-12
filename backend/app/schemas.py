@@ -565,6 +565,7 @@ class ProjectChatRequest(BaseModel):
 class GlobalChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2_000)
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=15)
+    project_id: UUID | None = None
 
 
 class ComponentReviseRequest(BaseModel):
@@ -602,6 +603,7 @@ class ProjectChatResponse(BaseModel):
 class GlobalChatResponse(BaseModel):
     answer: str
     model_name: str
+    referenced_project: str | None = None
 
 
 class ProjectChatMessageRead(BaseModel):

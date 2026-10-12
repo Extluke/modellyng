@@ -151,16 +151,58 @@ def answer_project_question(
     return ProjectChatResponse(answer=parsed.answer.strip(), sources=valid_sources, model_name=used_model)
 
 
-def answer_global_question(request: GlobalChatRequest) -> GlobalChatResponse:
+def answer_global_question(
+    request: GlobalChatRequest,
+    project_context: ProjectChatContext | None = None,
+) -> GlobalChatResponse:
     settings = get_settings()
     if not settings.gemini_api_key:
         raise ChatUnavailableError("Gemini API key belum dikonfigurasi di backend")
 
-    history = "\n".join(f"{message.role.upper()}: {message.content}" for message in request.history[-6:])
+    history = "\n".join(
+        f"{message.role.upper()}: {message.content}"
+        for message in request.history[-6:]
+    )
+
+    project_section = ""
+    if project_context:
+        doc_summaries: list[str] = []
+        for doc in project_context.documents:
+            doc_summaries.append(
+                f"- {doc.title} ({doc.original_filename}) [Status: {doc.status}, {len(doc.blocks)} blok teks]"
+            )
+        docs_text = "\n".join(doc_summaries) if doc_summaries else "(Belum ada dokumen/paper yang diunggah ke proyek ini)"
+
+        retrieved_sources = _retrieve(
+            project_context,
+            ProjectChatRequest(question=request.question, history=request.history),
+        )
+        passages_text = ""
+        if retrieved_sources:
+            passages_text = "\n\nKUTIPAN DOKUMEN RELEVAN DARI PROYEK:\n" + "\n\n".join(
+                f"Paper: {s.model.paper_title} (Halaman {s.model.page_number})\nKutipan:\n{s.content}"
+                for s in retrieved_sources[:8]
+            )
+
+        project_section = f"""
+KONTEKS PROYEK RISET YANG DIHUBUNGKAN USER:
+Judul Proyek: {project_context.project_title}
+Daftar Paper di Proyek:
+{docs_text}
+{passages_text}
+
+INSTRUKSI KHUSUS HUBUNGAN DATA PROYEK:
+Pengguna secara khusus memilih untuk menghubungkan pesan ini dengan proyek riset "{project_context.project_title}".
+1. Gunakan data, informasi dokumen, dan topik pada proyek di atas untuk memberikan jawaban, wawasan, serta referensi yang akurat dan relevan bagi user.
+2. Jelaskan bagaimana data proyek tersebut menjawab pertanyaan user, dan berikan referensi judul paper terkait bila relevan.
+""".strip()
+
     prompt = f"""
 Anda adalah AI Assistant untuk aplikasi riset Modellyng.
-Tugas Anda adalah membantu pengguna memahami cara kerja aplikasi, menjawab pertanyaan seputar penelitian secara umum, atau memberikan ide/mencari topik jurnal yang bisa diunggah pengguna ke proyek riset mereka.
-Jawab dengan ramah, rapi, dan menggunakan Bahasa Indonesia. Jika perlu, berikan langkah-langkah praktis.
+Tugas Anda adalah membantu pengguna memahami cara kerja aplikasi, menjawab pertanyaan seputar penelitian, serta memberikan referensi dan wawasan berdasarkan proyek riset yang dipilih pengguna jika tersedia.
+Jawab dengan ramah, rapi, terstruktur, dan menggunakan Bahasa Indonesia.
+
+{project_section}
 
 RIWAYAT PERCAKAPAN:
 {history or '(belum ada)'}
@@ -205,7 +247,11 @@ PERTANYAAN USER:
             raise ChatUnavailableError("Gemini sedang sibuk atau kuotanya habis. Coba lagi beberapa saat.") from last_error
         raise ChatUnavailableError("Chatbot belum dapat menjawab. Silakan coba lagi.") from last_error
 
-    return GlobalChatResponse(answer=answer_text.strip(), model_name=used_model)
+    return GlobalChatResponse(
+        answer=answer_text.strip(),
+        model_name=used_model,
+        referenced_project=project_context.project_title if project_context else None,
+    )
 
 
 def revise_component(request: ComponentReviseRequest) -> ComponentReviseResponse:
