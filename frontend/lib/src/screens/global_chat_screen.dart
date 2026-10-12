@@ -36,6 +36,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
   bool _sending = false;
   bool _loadingHistory = true;
 
+  bool get _hasUserPrompt => _messages.any((m) => m.role == 'user');
+
   @override
   void initState() {
     super.initState();
@@ -243,31 +245,33 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       ),
       body: Column(
         children: [
-          Container(
-            key: const Key('chat-cache-banner'),
-            width: double.infinity,
-            color: AppColors.primarySoft,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.history_rounded,
-                  size: 18,
-                  color: AppColors.primaryDark,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Riwayat percakapan asisten disimpan sementara di perangkat Anda selama 24 jam.',
-                    style: TextStyle(
-                      color: AppColors.primaryDark,
-                      fontSize: 13,
+          if (!_loadingHistory && !_hasUserPrompt)
+            Container(
+              key: const Key('chat-cache-banner'),
+              width: double.infinity,
+              color: AppColors.primarySoft,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.history_rounded,
+                    size: 18,
+                    color: AppColors.primaryDark,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Sistem akan menghapus riwayat chat dalam waktu 1x24 jam.',
+                      style: TextStyle(
+                        color: AppColors.primaryDark,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: _loadingHistory
                 ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
@@ -372,6 +376,7 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                 ),
                 const SizedBox(width: 12),
                 FloatingActionButton(
+                  key: const Key('send-chat-button'),
                   elevation: 0,
                   onPressed: _sending ? null : _send,
                   backgroundColor: _sending

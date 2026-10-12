@@ -181,126 +181,190 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    testWidgets('renders 24-hour cache notice banner and loads cached messages', (
-      tester,
-    ) async {
-      final now = DateTime.now();
-      const cacheService = GlobalChatCacheService();
-      await cacheService.saveHistory('user-456', [
-        GlobalChatMessage(
-          role: 'user',
-          content: 'Pertanyaan tersimpan dari sesi sebelumnya',
-          timestamp: now.subtract(const Duration(hours: 1)),
-        ),
-        GlobalChatMessage(
-          role: 'assistant',
-          content: 'Jawaban tersimpan dari sesi sebelumnya',
-          timestamp: now.subtract(const Duration(minutes: 50)),
-        ),
-      ]);
+    testWidgets(
+      'renders 24-hour cache notice banner before user inputs first prompt, and hides it once prompt is entered',
+      (tester) async {
+        const cacheService = GlobalChatCacheService();
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            globalChatRepositoryProvider.overrideWithValue(
-              FakeGlobalChatRepository(),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              globalChatRepositoryProvider.overrideWithValue(
+                FakeGlobalChatRepository(),
+              ),
+              globalChatCacheServiceProvider.overrideWithValue(cacheService),
+            ],
+            child: const MaterialApp(
+              home: GlobalChatScreen(userId: 'user-empty'),
             ),
-            globalChatCacheServiceProvider.overrideWithValue(cacheService),
-          ],
-          child: const MaterialApp(home: GlobalChatScreen(userId: 'user-456')),
-        ),
-      );
+          ),
+        );
 
-      // Initial loading state
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        // Initial loading state
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Banner check
-      expect(find.byKey(const Key('chat-cache-banner')), findsOneWidget);
-      expect(
-        find.text(
-          'Riwayat percakapan asisten disimpan sementara di perangkat Anda selama 24 jam.',
-        ),
-        findsOneWidget,
-      );
+        // Banner check: Before any user prompt, banner MUST appear
+        expect(find.byKey(const Key('chat-cache-banner')), findsOneWidget);
+        expect(
+          find.text('Sistem akan menghapus riwayat chat dalam waktu 1x24 jam.'),
+          findsOneWidget,
+        );
 
-      // Cached messages rendered
-      expect(
-        find.text('Pertanyaan tersimpan dari sesi sebelumnya'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Jawaban tersimpan dari sesi sebelumnya'),
-        findsOneWidget,
-      );
-    });
+        // User inputs their first prompt
+        await tester.enterText(
+          find.byType(TextField),
+          'Halo asisten, jelaskan metodologi penelitian ini.',
+        );
+        await tester.tap(find.byKey(const Key('send-chat-button')));
+        await tester.pumpAndSettle();
 
-    testWidgets('clearing chat history prompts confirmation and wipes cache', (
-      tester,
-    ) async {
-      const cacheService = GlobalChatCacheService();
-      await cacheService.saveHistory('user-789', [
-        GlobalChatMessage(
-          role: 'user',
-          content: 'Pesan yang akan dihapus manual',
-          timestamp: DateTime.now(),
-        ),
-        GlobalChatMessage(
-          role: 'assistant',
-          content: 'Jawaban yang akan dihapus manual',
-          timestamp: DateTime.now(),
-        ),
-      ]);
+        // The banner MUST now disappear because the first prompt was successfully entered
+        expect(find.byKey(const Key('chat-cache-banner')), findsNothing);
+        expect(
+          find.text('Sistem akan menghapus riwayat chat dalam waktu 1x24 jam.'),
+          findsNothing,
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            globalChatRepositoryProvider.overrideWithValue(
-              FakeGlobalChatRepository(),
+        // Both user prompt and assistant response should be visible
+        expect(
+          find.text('Halo asisten, jelaskan metodologi penelitian ini.'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Ini adalah respons asisten AI yang dicache.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'banner does not show if history already contains previous user prompts',
+      (tester) async {
+        final now = DateTime.now();
+        const cacheService = GlobalChatCacheService();
+        await cacheService.saveHistory('user-456', [
+          GlobalChatMessage(
+            role: 'user',
+            content: 'Pertanyaan tersimpan dari sesi sebelumnya',
+            timestamp: now.subtract(const Duration(hours: 1)),
+          ),
+          GlobalChatMessage(
+            role: 'assistant',
+            content: 'Jawaban tersimpan dari sesi sebelumnya',
+            timestamp: now.subtract(const Duration(minutes: 50)),
+          ),
+        ]);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              globalChatRepositoryProvider.overrideWithValue(
+                FakeGlobalChatRepository(),
+              ),
+              globalChatCacheServiceProvider.overrideWithValue(cacheService),
+            ],
+            child: const MaterialApp(
+              home: GlobalChatScreen(userId: 'user-456'),
             ),
-            globalChatCacheServiceProvider.overrideWithValue(cacheService),
-          ],
-          child: const MaterialApp(home: GlobalChatScreen(userId: 'user-789')),
-        ),
-      );
+          ),
+        );
 
-      await tester.pumpAndSettle();
-      expect(find.text('Pesan yang akan dihapus manual'), findsOneWidget);
+        await tester.pumpAndSettle();
 
-      // Tap clear history button in AppBar
-      expect(
-        find.byKey(const Key('clear-chat-history-button')),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const Key('clear-chat-history-button')));
-      await tester.pumpAndSettle();
+        // Banner should NOT be visible because user prompt already exists
+        expect(find.byKey(const Key('chat-cache-banner')), findsNothing);
 
-      // Confirmation dialog should be visible
-      expect(find.text('Hapus Riwayat Chat?'), findsOneWidget);
-      expect(
-        find.text(
-          'Percakapan sementara Anda akan dihapus dari penyimpanan perangkat.',
-        ),
-        findsOneWidget,
-      );
+        // Cached messages rendered
+        expect(
+          find.text('Pertanyaan tersimpan dari sesi sebelumnya'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Jawaban tersimpan dari sesi sebelumnya'),
+          findsOneWidget,
+        );
+      },
+    );
 
-      // Tap "Hapus" button in dialog
-      await tester.tap(find.text('Hapus'));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'clearing chat history prompts confirmation, wipes cache, and brings banner back',
+      (tester) async {
+        const cacheService = GlobalChatCacheService();
+        await cacheService.saveHistory('user-789', [
+          GlobalChatMessage(
+            role: 'user',
+            content: 'Pesan yang akan dihapus manual',
+            timestamp: DateTime.now(),
+          ),
+          GlobalChatMessage(
+            role: 'assistant',
+            content: 'Jawaban yang akan dihapus manual',
+            timestamp: DateTime.now(),
+          ),
+        ]);
 
-      // Messages should be cleared and reset to initial greeting
-      expect(find.text('Pesan yang akan dihapus manual'), findsNothing);
-      expect(
-        find.text(
-          'Halo! Saya adalah asisten AI Modellyng. Ada yang bisa saya bantu terkait penggunaan aplikasi ini, atau apakah Anda ingin berdiskusi mengenai penelitian secara umum?',
-        ),
-        findsOneWidget,
-      );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              globalChatRepositoryProvider.overrideWithValue(
+                FakeGlobalChatRepository(),
+              ),
+              globalChatCacheServiceProvider.overrideWithValue(cacheService),
+            ],
+            child: const MaterialApp(
+              home: GlobalChatScreen(userId: 'user-789'),
+            ),
+          ),
+        );
 
-      // Storage should now be empty for user-789
-      final validInCache = await cacheService.getValidHistory('user-789');
-      expect(validInCache, isEmpty);
-    });
+        await tester.pumpAndSettle();
+        expect(find.text('Pesan yang akan dihapus manual'), findsOneWidget);
+        // Banner initially hidden because user prompt exists
+        expect(find.byKey(const Key('chat-cache-banner')), findsNothing);
+
+        // Tap clear history button in AppBar
+        expect(
+          find.byKey(const Key('clear-chat-history-button')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const Key('clear-chat-history-button')));
+        await tester.pumpAndSettle();
+
+        // Confirmation dialog should be visible
+        expect(find.text('Hapus Riwayat Chat?'), findsOneWidget);
+        expect(
+          find.text(
+            'Percakapan sementara Anda akan dihapus dari penyimpanan perangkat.',
+          ),
+          findsOneWidget,
+        );
+
+        // Tap "Hapus" button in dialog
+        await tester.tap(find.text('Hapus'));
+        await tester.pumpAndSettle();
+
+        // Messages should be cleared and reset to initial greeting
+        expect(find.text('Pesan yang akan dihapus manual'), findsNothing);
+        expect(
+          find.text(
+            'Halo! Saya adalah asisten AI Modellyng. Ada yang bisa saya bantu terkait penggunaan aplikasi ini, atau apakah Anda ingin berdiskusi mengenai penelitian secara umum?',
+          ),
+          findsOneWidget,
+        );
+
+        // Banner should now reappar because there are no user prompts anymore
+        expect(find.byKey(const Key('chat-cache-banner')), findsOneWidget);
+        expect(
+          find.text('Sistem akan menghapus riwayat chat dalam waktu 1x24 jam.'),
+          findsOneWidget,
+        );
+
+        // Storage should now be empty for user-789
+        final validInCache = await cacheService.getValidHistory('user-789');
+        expect(validInCache, isEmpty);
+      },
+    );
   });
 }
