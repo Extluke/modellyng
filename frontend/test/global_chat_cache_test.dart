@@ -14,6 +14,7 @@ class FakeGlobalChatRepository extends Fake implements GlobalChatRepository {
     String question,
     List<GlobalChatMessage> history, {
     String? projectId,
+    String? paperId,
   }) async {
     return const GlobalChatResponse(
       answer: 'Ini adalah respons asisten AI yang dicache.',

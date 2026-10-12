@@ -10,6 +10,8 @@ class GlobalChatMessage {
     this.timestamp,
     this.referencedProject,
     this.projectId,
+    this.referencedPaper,
+    this.paperId,
   });
 
   final String role;
@@ -17,6 +19,8 @@ class GlobalChatMessage {
   final DateTime? timestamp;
   final String? referencedProject;
   final String? projectId;
+  final String? referencedPaper;
+  final String? paperId;
 
   Map<String, dynamic> toJson() => {
     'role': role,
@@ -24,6 +28,8 @@ class GlobalChatMessage {
     if (timestamp != null) 'timestamp': timestamp!.toIso8601String(),
     if (referencedProject != null) 'referenced_project': referencedProject,
     if (projectId != null) 'project_id': projectId,
+    if (referencedPaper != null) 'referenced_paper': referencedPaper,
+    if (paperId != null) 'paper_id': paperId,
   };
 
   Map<String, dynamic> toApiJson() => {'role': role, 'content': content};
@@ -37,6 +43,8 @@ class GlobalChatMessage {
             : null,
         referencedProject: json['referenced_project'] as String?,
         projectId: json['project_id'] as String?,
+        referencedPaper: json['referenced_paper'] as String?,
+        paperId: json['paper_id'] as String?,
       );
 }
 
@@ -45,17 +53,20 @@ class GlobalChatResponse {
     required this.answer,
     required this.modelName,
     this.referencedProject,
+    this.referencedPaper,
   });
 
   final String answer;
   final String modelName;
   final String? referencedProject;
+  final String? referencedPaper;
 
   factory GlobalChatResponse.fromJson(Map<String, dynamic> json) {
     return GlobalChatResponse(
       answer: json['answer'] as String,
       modelName: json['model_name'] as String,
       referencedProject: json['referenced_project'] as String?,
+      referencedPaper: json['referenced_paper'] as String?,
     );
   }
 }
@@ -68,6 +79,7 @@ class GlobalChatRepository {
     String question,
     List<GlobalChatMessage> history, {
     String? projectId,
+    String? paperId,
   }) async {
     final response = await _client.post<Map<String, dynamic>>(
       '/api/v1/assistant/chat',
@@ -75,6 +87,7 @@ class GlobalChatRepository {
         'question': question,
         'history': history.map((e) => e.toApiJson()).toList(),
         if (projectId != null) 'project_id': projectId,
+        if (paperId != null) 'paper_id': paperId,
       },
     );
     return GlobalChatResponse.fromJson(response.data!);

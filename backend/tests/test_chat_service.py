@@ -124,3 +124,33 @@ def test_global_chat_with_connected_project(monkeypatch) -> None:
     assert resp.referenced_project == "Query study"
     assert "Query study" in captured["contents"]
     assert "Index Performance Study" in captured["contents"]
+
+
+def test_global_chat_with_connected_project_and_paper(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            captured["contents"] = contents
+            return SimpleNamespace(text="Berdasarkan paper Index Performance Study, benchmark menunjukkan latensi turun 20%.", parsed=None)
+
+    monkeypatch.setattr("app.chat_service.get_settings", lambda: SimpleNamespace(gemini_api_key="test-key", gemini_model="gemini-test", gemini_fallback_model="gemini-fallback", gemini_chat_timeout_ms=12_000))
+    monkeypatch.setattr("app.chat_service.genai.Client", lambda api_key, http_options: SimpleNamespace(models=FakeModels()))
+
+    ctx = _context()
+    target_paper = ctx.documents[0]
+    resp = answer_global_question(
+        GlobalChatRequest(
+            question="Berapa persen latensi turun menurut paper ini?",
+            project_id=ctx.project_id,
+            paper_id=target_paper.id,
+        ),
+        project_context=ctx,
+    )
+    assert "latensi turun 20%" in resp.answer
+    assert resp.referenced_project == "Query study"
+    assert resp.referenced_paper == "Index Performance Study"
+    assert "DOKUMEN PDF SPESIFIK YANG DIPILIH PENGGUNA" in captured["contents"]
+    assert "Index Performance Study" in captured["contents"]
+    assert "Index A reduced query latency by 20 percent" in captured["contents"]
+

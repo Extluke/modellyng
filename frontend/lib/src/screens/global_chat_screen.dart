@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/global_chat_cache_service.dart';
 import '../data/global_chat_repository.dart';
+import '../data/paper_repository.dart';
 import '../data/project_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
@@ -17,6 +18,8 @@ class _ChatMessage {
     this.timestamp,
     this.referencedProject,
     this.projectId,
+    this.referencedPaper,
+    this.paperId,
   });
 
   final String role;
@@ -24,6 +27,8 @@ class _ChatMessage {
   final DateTime? timestamp;
   final String? referencedProject;
   final String? projectId;
+  final String? referencedPaper;
+  final String? paperId;
 }
 
 class GlobalChatScreen extends ConsumerStatefulWidget {
@@ -48,6 +53,12 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
   String? _selectedProjectId;
   String? _selectedProjectTitle;
 
+  bool _showPaperPopup = false;
+  String _paperQuery = '';
+  int _slashSymbolIndex = -1;
+  String? _selectedPaperId;
+  String? _selectedPaperTitle;
+
   bool get _hasUserPrompt => _messages.any((m) => m.role == 'user');
 
   @override
@@ -63,11 +74,14 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
     final cursor = selection.baseOffset;
 
     if (cursor < 0 || text.isEmpty) {
-      if (_showProjectPopup) {
+      if (_showProjectPopup || _showPaperPopup) {
         setState(() {
           _showProjectPopup = false;
           _projectQuery = '';
           _atSymbolIndex = -1;
+          _showPaperPopup = false;
+          _paperQuery = '';
+          _slashSymbolIndex = -1;
         });
       }
       return;
@@ -77,13 +91,47 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       setState(() {
         _selectedProjectId = null;
         _selectedProjectTitle = null;
+        _selectedPaperId = null;
+        _selectedPaperTitle = null;
+      });
+    }
+
+    if (_selectedPaperId != null && !text.contains('/')) {
+      setState(() {
+        _selectedPaperId = null;
+        _selectedPaperTitle = null;
       });
     }
 
     final textBeforeCursor = text.substring(0, cursor);
     final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    final lastSlashIndex = textBeforeCursor.lastIndexOf('/');
 
-    if (lastAtIndex != -1) {
+    if (lastSlashIndex > lastAtIndex && lastSlashIndex != -1) {
+      final isAtStartOrAfterSpace =
+          lastSlashIndex == 0 ||
+          textBeforeCursor[lastSlashIndex - 1] == ' ' ||
+          textBeforeCursor[lastSlashIndex - 1] == '\n';
+
+      final queryCandidate = textBeforeCursor.substring(lastSlashIndex + 1);
+      final hasSpaceInQuery =
+          queryCandidate.contains(' ') || queryCandidate.contains('\n');
+
+      if (isAtStartOrAfterSpace && !hasSpaceInQuery) {
+        if (!_showPaperPopup ||
+            _paperQuery != queryCandidate ||
+            _slashSymbolIndex != lastSlashIndex ||
+            _showProjectPopup) {
+          setState(() {
+            _showProjectPopup = false;
+            _showPaperPopup = true;
+            _paperQuery = queryCandidate;
+            _slashSymbolIndex = lastSlashIndex;
+          });
+        }
+        return;
+      }
+    } else if (lastAtIndex != -1) {
       final isAtStartOrAfterSpace =
           lastAtIndex == 0 ||
           textBeforeCursor[lastAtIndex - 1] == ' ' ||
@@ -96,8 +144,10 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       if (isAtStartOrAfterSpace && !hasSpaceInQuery) {
         if (!_showProjectPopup ||
             _projectQuery != queryCandidate ||
-            _atSymbolIndex != lastAtIndex) {
+            _atSymbolIndex != lastAtIndex ||
+            _showPaperPopup) {
           setState(() {
+            _showPaperPopup = false;
             _showProjectPopup = true;
             _projectQuery = queryCandidate;
             _atSymbolIndex = lastAtIndex;
@@ -107,11 +157,14 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       }
     }
 
-    if (_showProjectPopup) {
+    if (_showProjectPopup || _showPaperPopup) {
       setState(() {
         _showProjectPopup = false;
         _projectQuery = '';
         _atSymbolIndex = -1;
+        _showPaperPopup = false;
+        _paperQuery = '';
+        _slashSymbolIndex = -1;
       });
     }
   }
@@ -146,6 +199,44 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       _showProjectPopup = false;
       _projectQuery = '';
       _atSymbolIndex = -1;
+      _selectedPaperId = null;
+      _selectedPaperTitle = null;
+    });
+  }
+
+  void _selectPaper(ProjectPaper paper) {
+    final text = _controller.text;
+    final slashIndex = _slashSymbolIndex;
+    final paperTitle = (paper.title != null && paper.title!.trim().isNotEmpty)
+        ? paper.title!.trim()
+        : paper.originalFilename;
+
+    String newText;
+    int newCursorPosition;
+
+    if (slashIndex != -1 && slashIndex <= text.length) {
+      final beforeSlash = text.substring(0, slashIndex);
+      final cursor = _controller.selection.baseOffset;
+      final afterCursor = (cursor >= slashIndex && cursor <= text.length)
+          ? text.substring(cursor)
+          : '';
+      final mention = '/$paperTitle ';
+      newText = '$beforeSlash$mention$afterCursor';
+      newCursorPosition = (beforeSlash + mention).length;
+    } else {
+      newText = '$text/$paperTitle ';
+      newCursorPosition = newText.length;
+    }
+
+    _controller.text = newText;
+    _controller.selection = TextSelection.collapsed(offset: newCursorPosition);
+
+    setState(() {
+      _selectedPaperId = paper.id;
+      _selectedPaperTitle = paperTitle;
+      _showPaperPopup = false;
+      _paperQuery = '';
+      _slashSymbolIndex = -1;
     });
   }
 
@@ -166,6 +257,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                 timestamp: m.timestamp,
                 referencedProject: m.referencedProject,
                 projectId: m.projectId,
+                referencedPaper: m.referencedPaper,
+                paperId: m.paperId,
               ),
             ),
           );
@@ -199,6 +292,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
             timestamp: m.timestamp ?? DateTime.now(),
             referencedProject: m.referencedProject,
             projectId: m.projectId,
+            referencedPaper: m.referencedPaper,
+            paperId: m.paperId,
           ),
         )
         .toList(growable: false);
@@ -274,6 +369,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
 
     final linkedProjectId = _selectedProjectId;
     final linkedProjectTitle = _selectedProjectTitle;
+    final linkedPaperId = _selectedPaperId;
+    final linkedPaperTitle = _selectedPaperTitle;
 
     final now = DateTime.now();
     final userMessage = _ChatMessage(
@@ -282,6 +379,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       timestamp: now,
       referencedProject: linkedProjectTitle,
       projectId: linkedProjectId,
+      referencedPaper: linkedPaperTitle,
+      paperId: linkedPaperId,
     );
     setState(() {
       _messages.add(userMessage);
@@ -290,8 +389,13 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
       _showProjectPopup = false;
       _projectQuery = '';
       _atSymbolIndex = -1;
+      _showPaperPopup = false;
+      _paperQuery = '';
+      _slashSymbolIndex = -1;
       _selectedProjectId = null;
       _selectedProjectTitle = null;
+      _selectedPaperId = null;
+      _selectedPaperTitle = null;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -307,13 +411,20 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
               timestamp: m.timestamp,
               referencedProject: m.referencedProject,
               projectId: m.projectId,
+              referencedPaper: m.referencedPaper,
+              paperId: m.paperId,
             ),
           )
           .toList();
 
       final response = await ref
           .read(globalChatRepositoryProvider)
-          .sendQuestion(text, history, projectId: linkedProjectId);
+          .sendQuestion(
+            text,
+            history,
+            projectId: linkedProjectId,
+            paperId: linkedPaperId,
+          );
 
       if (!mounted) return;
       setState(() {
@@ -324,6 +435,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
             timestamp: DateTime.now(),
             referencedProject: response.referencedProject ?? linkedProjectTitle,
             projectId: linkedProjectId,
+            referencedPaper: response.referencedPaper ?? linkedPaperTitle,
+            paperId: linkedPaperId,
           ),
         );
       });
@@ -365,15 +478,46 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              'Tersambung ke proyek: ${_selectedProjectTitle ?? ""}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryDark,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              children: [
+                Text(
+                  'Proyek: ${_selectedProjectTitle ?? ""}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryDark,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (_selectedPaperTitle != null) ...[
+                  const Text(
+                    '•',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.picture_as_pdf_rounded,
+                    size: 13,
+                    color: AppColors.primaryDark,
+                  ),
+                  Text(
+                    'PDF: $_selectedPaperTitle',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryDark,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
           ),
           InkWell(
@@ -382,6 +526,8 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
               setState(() {
                 _selectedProjectId = null;
                 _selectedProjectTitle = null;
+                _selectedPaperId = null;
+                _selectedPaperTitle = null;
               });
             },
             child: const Icon(
@@ -549,6 +695,231 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
     );
   }
 
+  Widget _buildPaperMentionPopup() {
+    if (_selectedProjectId == null) {
+      return Container(
+        key: const Key('paper-mention-popup-no-project'),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 10,
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.orangeSoft,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: AppColors.orange,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Pilih proyek menggunakan @ terlebih dahulu sebelum memilih dokumen PDF (/).',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final papersAsync = ref.watch(
+      projectPapersProvider((
+        userId: widget.userId,
+        projectId: _selectedProjectId!,
+      )),
+    );
+
+    return Container(
+      key: const Key('paper-mention-popup'),
+      constraints: const BoxConstraints(maxHeight: 220),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: const BoxDecoration(
+                color: AppColors.canvas,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+                border: Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.picture_as_pdf_rounded,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Pilih PDF dari: ${_selectedProjectTitle ?? "Proyek"}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: papersAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+                error: (err, _) => Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Gagal memuat dokumen: $err',
+                    style: const TextStyle(fontSize: 12, color: AppColors.red),
+                  ),
+                ),
+                data: (papers) {
+                  final query = _paperQuery.trim().toLowerCase();
+                  final filtered = query.isEmpty
+                      ? papers
+                      : papers.where((p) {
+                          final title = (p.title ?? '').toLowerCase();
+                          final filename = p.originalFilename.toLowerCase();
+                          return title.contains(query) ||
+                              filename.contains(query);
+                        }).toList();
+
+                  if (filtered.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          papers.isEmpty
+                              ? 'Belum ada PDF yang diunggah/diekstraksi di proyek ini.'
+                              : 'Tidak ada PDF yang sesuai pencarian.',
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.border),
+                    itemBuilder: (context, index) {
+                      final paper = filtered[index];
+                      final displayTitle =
+                          (paper.title != null &&
+                              paper.title!.trim().isNotEmpty)
+                          ? paper.title!.trim()
+                          : paper.originalFilename;
+
+                      return ListTile(
+                        dense: true,
+                        key: Key('paper-mention-option-${paper.id}'),
+                        leading: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoft,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        title: Text(
+                          displayTitle,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          paper.originalFilename,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.muted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _selectPaper(paper),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final projectsAsync = ref.watch(projectsProvider(widget.userId));
@@ -637,53 +1008,124 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                                     ? CrossAxisAlignment.end
                                     : CrossAxisAlignment.start,
                                 children: [
-                                  if (message.referencedProject != null) ...[
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isUser
-                                            ? AppColors.primaryDark
-                                            : AppColors.primarySoft,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: isUser
-                                              ? AppColors.primaryDark
-                                              : AppColors.primary.withValues(
-                                                  alpha: 0.2,
-                                                ),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.folder_open_rounded,
-                                            size: 12,
-                                            color: isUser
-                                                ? Colors.white
-                                                : AppColors.primaryDark,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              'Proyek: ${message.referencedProject}',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
+                                  if (message.referencedProject != null ||
+                                      message.referencedPaper != null) ...[
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      alignment: isUser
+                                          ? WrapAlignment.end
+                                          : WrapAlignment.start,
+                                      children: [
+                                        if (message.referencedProject != null)
+                                          Container(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 6,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isUser
+                                                  ? AppColors.primaryDark
+                                                  : AppColors.primarySoft,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
                                                 color: isUser
-                                                    ? Colors.white
-                                                    : AppColors.primaryDark,
+                                                    ? AppColors.primaryDark
+                                                    : AppColors.primary
+                                                          .withValues(
+                                                            alpha: 0.2,
+                                                          ),
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.folder_open_rounded,
+                                                  size: 12,
+                                                  color: isUser
+                                                      ? Colors.white
+                                                      : AppColors.primaryDark,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    'Proyek: ${message.referencedProject}',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: isUser
+                                                          ? Colors.white
+                                                          : AppColors
+                                                                .primaryDark,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        if (message.referencedPaper != null)
+                                          Container(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 6,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isUser
+                                                  ? const Color(0xFF0D9488)
+                                                  : AppColors.blueSoft,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: isUser
+                                                    ? const Color(0xFF0D9488)
+                                                    : AppColors.blue.withValues(
+                                                        alpha: 0.2,
+                                                      ),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.picture_as_pdf_rounded,
+                                                  size: 12,
+                                                  color: isUser
+                                                      ? Colors.white
+                                                      : AppColors.blue,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    'PDF: ${message.referencedPaper}',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: isUser
+                                                          ? Colors.white
+                                                          : AppColors.blue,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ],
                                   Container(
@@ -732,7 +1174,10 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                   ),
           ),
           if (_showProjectPopup) _buildProjectMentionPopup(projectsAsync),
-          if (!_showProjectPopup && _selectedProjectId != null)
+          if (_showPaperPopup) _buildPaperMentionPopup(),
+          if (!_showProjectPopup &&
+              !_showPaperPopup &&
+              _selectedProjectId != null)
             _buildLinkedProjectBadge(),
           Container(
             decoration: const BoxDecoration(
@@ -751,7 +1196,7 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     decoration: const InputDecoration(
-                      hintText: 'Tanyakan sesuatu atau ketik @ untuk proyek...',
+                      hintText: '@ /',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(12)),
                       ),

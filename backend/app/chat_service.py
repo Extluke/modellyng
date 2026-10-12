@@ -164,27 +164,85 @@ def answer_global_question(
         for message in request.history[-6:]
     )
 
+    referenced_paper_title: str | None = None
     project_section = ""
     if project_context:
-        doc_summaries: list[str] = []
-        for doc in project_context.documents:
-            doc_summaries.append(
-                f"- {doc.title} ({doc.original_filename}) [Status: {doc.status}, {len(doc.blocks)} blok teks]"
-            )
-        docs_text = "\n".join(doc_summaries) if doc_summaries else "(Belum ada dokumen/paper yang diunggah ke proyek ini)"
+        selected_paper = None
+        if request.paper_id:
+            for doc in project_context.documents:
+                if doc.id == request.paper_id:
+                    selected_paper = doc
+                    referenced_paper_title = doc.title or doc.original_filename
+                    break
 
-        retrieved_sources = _retrieve(
-            project_context,
-            ProjectChatRequest(question=request.question, history=request.history),
-        )
-        passages_text = ""
-        if retrieved_sources:
-            passages_text = "\n\nKUTIPAN DOKUMEN RELEVAN DARI PROYEK:\n" + "\n\n".join(
-                f"Paper: {s.model.paper_title} (Halaman {s.model.page_number})\nKutipan:\n{s.content}"
-                for s in retrieved_sources[:8]
+        if selected_paper:
+            doc_context = ProjectChatContext(
+                project_id=project_context.project_id,
+                project_title=project_context.project_title,
+                documents=(selected_paper,),
             )
+            retrieved_sources = _retrieve(
+                doc_context,
+                ProjectChatRequest(question=request.question, history=request.history),
+            )
+            if not retrieved_sources and selected_paper.blocks:
+                retrieved_sources = [
+                    _RetrievedSource(
+                        model=ProjectChatSource(
+                            source_id=f"S{idx+1}",
+                            paper_id=selected_paper.id,
+                            paper_title=selected_paper.title,
+                            quote=blk.content[:600],
+                            page_number=blk.page_number,
+                            block_id=blk.id,
+                        ),
+                        content=blk.content[:4_000],
+                        score=1.0,
+                    )
+                    for idx, blk in enumerate(selected_paper.blocks[:8])
+                ]
 
-        project_section = f"""
+            passages_text = ""
+            if retrieved_sources:
+                passages_text = "\n\nKUTIPAN EKSKLUSIF DARI DOKUMEN PDF TERPILIH:\n" + "\n\n".join(
+                    f"Paper: {s.model.paper_title} (Halaman {s.model.page_number})\nKutipan:\n{s.content}"
+                    for s in retrieved_sources[:10]
+                )
+
+            project_section = f"""
+KONTEKS DOKUMEN PDF SPESIFIK YANG DIPILIH PENGGUNA:
+Proyek: {project_context.project_title}
+Dokumen PDF Terpilih: {selected_paper.title} ({selected_paper.original_filename})
+Status Dokumen: {selected_paper.status}
+Jumlah Blok Teks: {len(selected_paper.blocks)}
+{passages_text}
+
+INSTRUKSI KHUSUS ANALISIS PDF TERPILIH:
+Pengguna secara spesifik memilih dokumen PDF "{selected_paper.title}" ({selected_paper.original_filename}) menggunakan parameter '/'.
+1. SETIAP JAWABAN ANDA HARUS BENAR-BENAR DISESUAIKAN dan berfokus pada isi serta konteks dokumen PDF ini.
+2. Jelaskan metodologi, hasil, temuan, atau poin-poin yang ditanyakan pengguna secara mendalam berdasarkan isi kutipan PDF tersebut.
+3. Sebutkan secara eksplisit bahwa rujukan ini berasal dari PDF "{selected_paper.title}".
+""".strip()
+        else:
+            doc_summaries: list[str] = []
+            for doc in project_context.documents:
+                doc_summaries.append(
+                    f"- {doc.title} ({doc.original_filename}) [Status: {doc.status}, {len(doc.blocks)} blok teks]"
+                )
+            docs_text = "\n".join(doc_summaries) if doc_summaries else "(Belum ada dokumen/paper yang diunggah ke proyek ini)"
+
+            retrieved_sources = _retrieve(
+                project_context,
+                ProjectChatRequest(question=request.question, history=request.history),
+            )
+            passages_text = ""
+            if retrieved_sources:
+                passages_text = "\n\nKUTIPAN DOKUMEN RELEVAN DARI PROYEK:\n" + "\n\n".join(
+                    f"Paper: {s.model.paper_title} (Halaman {s.model.page_number})\nKutipan:\n{s.content}"
+                    for s in retrieved_sources[:8]
+                )
+
+            project_section = f"""
 KONTEKS PROYEK RISET YANG DIHUBUNGKAN USER:
 Judul Proyek: {project_context.project_title}
 Daftar Paper di Proyek:
@@ -251,6 +309,7 @@ PERTANYAAN USER:
         answer=answer_text.strip(),
         model_name=used_model,
         referenced_project=project_context.project_title if project_context else None,
+        referenced_paper=referenced_paper_title,
     )
 
 
