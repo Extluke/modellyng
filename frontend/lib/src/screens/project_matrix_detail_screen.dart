@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/comparative_matrix_repository.dart';
-import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/project_synthesis_card.dart';
+import '../widgets/structure_status_cell.dart';
 import 'paper_result_screen.dart';
 
 // Helper class to sync multiple scroll controllers
@@ -53,8 +54,6 @@ class ProjectMatrixDetailScreen extends ConsumerStatefulWidget {
 
 class _ProjectMatrixDetailScreenState
     extends ConsumerState<ProjectMatrixDetailScreen> {
-  bool _isLoadingSynthesis = false;
-  Map<String, String>? _synthesisData;
   late final _SyncScrollController _tableScrollSync;
 
   bool _isFirstLoad = true;
@@ -167,7 +166,11 @@ class _ProjectMatrixDetailScreenState
               _buildContentTable(context, matrix, filteredPapers),
               
               const SizedBox(height: 40),
-              _buildSynthesisSection(),
+              ProjectSynthesisCard(
+                projectId: widget.projectId,
+                projectTitle: widget.projectTitle,
+                paperCount: matrix.papers.length,
+              ),
               
               const SizedBox(height: 40),
               
@@ -353,119 +356,6 @@ class _ProjectMatrixDetailScreenState
     );
   }
 
-  // --- BAGIAN C: SINTESIS AI ---
-
-  Widget _buildSynthesisSection() {
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.primarySoft, width: 1.5),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.auto_awesome, color: AppColors.primary),
-                SizedBox(width: 12),
-                Text(
-                  'AI Comparative Synthesis',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_synthesisData == null)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Buat rangkuman pola penelitian dari paper-paper ini secara otomatis menggunakan AI.',
-                        style: TextStyle(color: AppColors.muted),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      _isLoadingSynthesis
-                          ? const CircularProgressIndicator()
-                          : FilledButton.icon(
-                              onPressed: _generateSynthesis,
-                              icon: const Icon(Icons.analytics_outlined),
-                              label: const Text('Generate Sintesis AI'),
-                            ),
-                    ],
-                  ),
-                ),
-              )
-            else ...[
-              _buildSynthesisPoint(
-                  'Persamaan', _synthesisData!['similarities']!),
-              const SizedBox(height: 16),
-              _buildSynthesisPoint(
-                  'Perbedaan', _synthesisData!['differences']!),
-              const SizedBox(height: 16),
-              _buildSynthesisPoint(
-                  'Pola Penelitian', _synthesisData!['patterns']!),
-              const SizedBox(height: 16),
-              _buildSynthesisPoint(
-                  'Perbedaan Pendekatan', _synthesisData!['approaches']!),
-            ]
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSynthesisPoint(String title, String content) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-        const SizedBox(height: 4),
-        Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
-      ],
-    );
-  }
-
-  void _generateSynthesis() async {
-    setState(() => _isLoadingSynthesis = true);
-    try {
-      final repo = ref.read(comparativeMatrixRepositoryProvider);
-      final synthesisData = await repo.generateSynthesis(
-        widget.projectId,
-        _selectedPaperIds.toList(),
-      );
-      
-      setState(() {
-        _synthesisData = {
-          'similarities': synthesisData['similarities'] as String,
-          'differences': synthesisData['differences'] as String,
-          'patterns': synthesisData['research_patterns'] as String,
-          'approaches': synthesisData['approach_differences'] as String,
-        };
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal membuat sintesis AI: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingSynthesis = false);
-      }
-    }
-  }
-
   // --- BAGIAN B: STRUKTUR ---
 
   Widget _buildStructureTable(BuildContext context, ComparativeMatrix matrix, List<MatrixPaper> filteredPapers) {
@@ -502,64 +392,7 @@ class _ProjectMatrixDetailScreenState
 
   Widget _buildStructureCell(
       ComparativeMatrix matrix, String partKey, String paperId) {
-    String status = '❌ (Tidak Ada)';
-    Color color = Colors.red;
-
-    MatrixCell? getCell(String param) {
-      final row = matrix.rows.firstWhere(
-        (r) => r.parameter == param,
-        orElse: () => const MatrixRow(parameter: '', cells: []),
-      );
-      return row.cellFor(paperId);
-    }
-
-    bool hasContent(String param) {
-      final cell = getCell(param);
-      return cell != null &&
-          cell.displayValue.trim().isNotEmpty &&
-          cell.displayValue.trim() != '-';
-    }
-
-    final hasIntro = hasContent('research_problem') ||
-        hasContent('research_objective') ||
-        hasContent('research_question');
-    final hasMethod =
-        hasContent('methodology') || hasContent('dataset_sample');
-    final hasResults = hasContent('results_findings');
-    final hasConclusion = hasContent('contribution') ||
-        hasContent('limitations') ||
-        hasContent('future_work');
-
-    if (partKey == 'introduction') {
-      if (hasIntro) {
-        status = '✅ (Urutan 1)';
-        color = AppColors.green;
-      }
-    } else if (partKey == 'literature_review') {
-      status = '🔗 (Digabung dengan Introduction)';
-      color = Colors.blue;
-    } else if (partKey == 'method') {
-      if (hasMethod) {
-        status = '✅ (Urutan 3)';
-        color = AppColors.green;
-      }
-    } else if (partKey == 'results') {
-      if (hasResults) {
-        status = '✅ (Urutan 4)';
-        color = AppColors.green;
-      }
-    } else if (partKey == 'discussion') {
-      if (hasResults &&
-          (hasContent('limitations') || hasContent('future_work'))) {
-        status = '🔗 (Digabung dengan Results)';
-        color = Colors.blue;
-      }
-    } else if (partKey == 'conclusion') {
-      if (hasConclusion) {
-        status = '✅ (Urutan 6)';
-        color = AppColors.green;
-      }
-    }
+    final status = structureStatusFor(matrix, partKey, paperId);
 
     return Container(
       width: 280,
@@ -572,11 +405,7 @@ class _ProjectMatrixDetailScreenState
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       alignment: Alignment.centerLeft,
-      child: Text(
-        status,
-        style: TextStyle(
-            fontSize: 13, color: color, fontWeight: FontWeight.w600),
-      ),
+      child: StructureStatusIcon(status: status),
     );
   }
 
@@ -702,7 +531,6 @@ class _ProjectMatrixDetailScreenState
                             : () {
                                 setState(() {
                                   _selectedPaperIds = tempSelected;
-                                  _synthesisData = null; // Reset synthesis for new combination
                                 });
                                 Navigator.pop(ctx);
                               },

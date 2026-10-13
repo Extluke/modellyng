@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-10-11
+Last updated: 2026-10-13
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -37,6 +37,13 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   currently visible project filter. The owner-scoped batch is transactional,
   accepts only active pending components, preserves audit actions, and updates
   paper/project readiness atomically.
+- Each project page has its own confirmed “Terima semua analisis (N)” shortcut
+  on the “Paper dalam proyek” heading row (“Terima semua (N)” on narrow
+  screens). It is hidden when nothing in the project awaits review and covers
+  only papers in `needs_review` that are not being (re)processed. It reuses the
+  same accept-all endpoint; more than 200 results are sent as per-paper batches
+  of at most 200, and a partial failure is reported with exact counts. The
+  dashboard has no bulk-accept action; the Review queue keeps its own.
 - Paper/project status transition from processing to review and back to ready
   after the review queue is complete.
 - Dynamic dashboard totals for papers, projects, papers waiting for review,
@@ -99,12 +106,16 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   activates at logical tablet/desktop widths, and account affordances are
   either functional or honestly marked unavailable.
 
-The last verified automated baseline was (2026-10-12):
+The last verified automated baseline was (2026-10-13):
 
-- Backend: 138 tests passing, including project PATCH updates and authentication guards.
+- Backend: 190 tests passing with `python -m pytest tests` (the root-level
+  `backend/test_*.py` files are manual scripts that need live services).
 - Dependency checks and transactional bulk-review validation preserved.
-- Flutter: 30 widget/unit tests passing (including mobile aspect ratio upload visibility, defensive PDF validation, and project card menu regression tests).
-- Flutter web release build passing.
+- Flutter: 81 widget/unit tests passing, including the research flow canvas,
+  global synthesis card, structure-icon, and per-project accept-all regression
+  tests.
+- Flutter web release build passing. `flutter analyze` reports 16 existing
+  info/warning items in files outside the 2026-10-13 work; none are errors.
 - Mobile PDF upload defensively validated with in-memory bytes, sticky AppBar progress bar, reactive EmptyState upload indicator, and reliable Content-Length reporting.
 - Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 
@@ -186,6 +197,9 @@ removed immediately after testing.
   page. Text matching is best-effort; the viewer reports when it cannot locate
   the quote and retains page-level navigation.
 - Review history is read-only and limited to the latest 100 decisions.
+- The Review queue's “Terima semua” still sends one request, so more than 200
+  visible results are rejected as a whole; only the per-project shortcut
+  batches. Both read the review queue, which PostgREST caps at 1,000 rows.
 - Matrix and map currently include ready papers only. The map reflects the
   reviewed academic components; cross-paper comparison now uses the ordered
   workflow described below and does not claim a confirmed novel gap.
@@ -318,6 +332,52 @@ persisted in the owner profile through `GET/PUT /api/v1/account/settings`;
 the migration is `20260909120000_account_preferences.sql`. This completes the
 requested reference, traceability-report, structural-analysis, cluster, and
 personalization layer while preserving RLS and private-PDF provenance.
+
+## Completed — Research flow canvas, global synthesis, structure icons (2026-10-13)
+
+- Maps (GAP) replaces its graph view with a "Peta Alur Riset" canvas read left
+  to right: topic per paper -> shared theme (isi) -> problem -> solution ->
+  functions and conclusion points. Gemini only proposes short phrases and
+  groupings from active `verified`/`edited` matrix values. Backend code owns
+  the rules: a theme needs at least two papers, a paper without a shared theme
+  ends after its topic, a solution shared by two or more papers is green
+  ("sering diteliti") and continues, and a single-paper solution is red
+  ("jarang diteliti") and ends. Missing AI phrases fall back to reviewed
+  values. The canvas supports pan, zoom buttons/pinch, fit, and fullscreen;
+  tapping a node shows its stage, status, and source papers.
+  API: `GET /api/v1/projects/{project_id}/research-flow`.
+- Matrix & Sintesis replaces the selected-paper synthesis with one global AI
+  synthesis over every ready paper with reviewed values (minimum two):
+  similarities, differences, research patterns, approach differences, gaps and
+  opportunities, follow-up research ideas, and each paper's position. Points
+  without a valid paper reference are dropped and every included paper gets a
+  position. Gemini sees paper codes only; author-year citations and APA
+  references are rendered by code from stored metadata. `GET
+  /api/v1/projects/{project_id}/synthesis` returns the saved result or `null`
+  and sets `stale` when reviewed data changed; `POST` reuses the saved result
+  unless `force_regenerate` is true. The card can copy points or a paragraph.
+- Both results are cached per project (`research_flow_maps`,
+  `project_syntheses`) with a hash of the reviewed source data and prompt
+  version, so Gemini is called again only when reviewed data changes. Both
+  tables are owner-scoped through RLS. Both views state that the content is
+  AI-composed and must be checked against the source papers.
+- "B. Struktur Penulisan" cells show only RemixIcon check/close/link icons
+  (green/red/blue, 20 px) with screen-reader labels "Ada", "Tidak ada", and
+  "Digabung". Status rules are unchanged and covered by a test over all 512
+  parameter combinations. New pinned dependency: `remixicon 4.9.3`.
+- Synthesis, research-flow, and gap-synthesis Gemini calls share one JSON
+  helper with model fallback, run off the API event loop, and map provider
+  unavailability to HTTP 503 and insufficient input to HTTP 409.
+
+Migrations: `20261012120000_comparative_synthesis_rls_and_policies.sql`,
+`20261012150000_research_flow_maps.sql`, and
+`20261013090000_project_syntheses.sql`. Cache write failures are only logged,
+so without these tables each view still works but calls Gemini on every load.
+
+Limitations: flow nodes and synthesis points trace to source papers, not to
+individual evidence quotes or PDF pages. They are reading aids without an
+accept/reject step and are not reviewed research conclusions. The legacy
+`comparative_syntheses` table is no longer used by the API.
 
 ## Completed feature — Evidence-preserving result export
 

@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_repository.dart';
+import '../data/paper_comparison_repository.dart';
 import '../data/paper_repository.dart';
+import '../data/paper_result_repository.dart';
 import '../data/project_repository.dart';
+import '../data/review_repository.dart';
 import '../models/research_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
@@ -24,6 +27,7 @@ class ProjectOverviewScreen extends ConsumerStatefulWidget {
 
 class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
   bool _uploading = false;
+  bool _acceptingAll = false;
   double _uploadProgress = 0;
   Timer? _pollingTimer;
   final ScrollController _scrollController = ScrollController();
@@ -200,6 +204,122 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
     }
   }
 
+  /// Pending analyses the project shortcut may accept: active review-queue
+  /// components of this project whose paper awaits review. Papers that are
+  /// being (re)processed are skipped, so components about to be replaced are
+  /// not finalized and the paper is not marked ready in the middle of a job.
+  List<ReviewQueueItem> _acceptableAnalyses(
+    List<ProjectPaper>? papers,
+    List<ReviewQueueItem>? queue,
+  ) {
+    if (papers == null || queue == null) return const [];
+    final awaitingReview = {
+      for (final paper in papers)
+        if (paper.status == PaperStatus.needsReview && !paper.isProcessing)
+          paper.id,
+    };
+    return queue
+        .where(
+          (item) =>
+              item.projectId == widget.project.id &&
+              awaitingReview.contains(item.paperId),
+        )
+        .toList(growable: false);
+  }
+
+  /// Changes whenever a paper changes the review queue: a finished job adds
+  /// components, a completed review or deletion removes them.
+  static String _reviewStateSignature(List<ProjectPaper> papers) => [
+    for (final paper in papers)
+      '${paper.id}:${paper.status.name}:${paper.jobStatus?.name}',
+  ].join('|');
+
+  Future<void> _acceptAllAnalyses(
+    List<ReviewQueueItem> items, {
+    required String userId,
+    required int processingPaperCount,
+  }) async {
+    if (items.isEmpty || _acceptingAll) return;
+    final projectId = widget.project.id;
+    final total = items.length;
+    final paperCount = items.map((item) => item.paperId).toSet().length;
+    final batches = planBulkAcceptBatches(items);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Terima semua $total hasil analisis?'),
+        content: Text(
+          [
+            'Semua $total hasil analisis dari $paperCount paper di proyek '
+                '"${widget.project.title}" akan dijadikan final tanpa diperiksa '
+                'satu per satu. Sitasi dan riwayat keputusan tetap tersimpan '
+                'untuk audit.',
+            if (processingPaperCount > 0)
+              '$processingPaperCount paper yang masih diproses tidak termasuk.',
+            if (batches.length > 1)
+              'Hasil dikirim bertahap dalam ${batches.length} kelompok per '
+                  'paper. Jika satu kelompok gagal, kelompok lain tetap '
+                  'diproses dan hasilnya dilaporkan.',
+          ].join('\n\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton.icon(
+            key: const Key('confirm-accept-all-project-analyses'),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.done_all_rounded),
+            label: const Text('Ya, terima semua'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _acceptingAll = true);
+    // Captured before the requests so caches still refresh and the outcome is
+    // still reported if the user leaves this page while they run.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final repository = ref.read(reviewRepositoryProvider);
+    var accepted = 0;
+    var failed = 0;
+    // Each request is its own owner-scoped transaction. A failed batch leaves
+    // its papers pending, so continue with the rest and report what happened.
+    for (final batch in batches) {
+      try {
+        accepted += await repository.acceptAll(batch);
+      } catch (_) {
+        failed += batch.length;
+      }
+    }
+
+    container
+      ..invalidate(reviewQueueProvider(userId))
+      ..invalidate(reviewHistoryProvider(userId))
+      ..invalidate(projectsProvider(userId))
+      ..invalidate(projectPapersProvider((userId: userId, projectId: projectId)))
+      ..invalidate(paperComparisonsProvider)
+      ..invalidate(paperResultProvider);
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failed == 0
+              ? '$accepted hasil analisis berhasil diterima.'
+              : accepted == 0
+              ? 'Terima semua analisis gagal. Tidak ada hasil yang diterima.'
+              : '$accepted dari $total hasil analisis diterima. $failed hasil '
+                    'lainnya gagal diterima, silakan coba lagi.',
+        ),
+        backgroundColor: failed == 0 ? null : AppColors.red,
+      ),
+    );
+    if (mounted) setState(() => _acceptingAll = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
@@ -215,6 +335,35 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
             ?.where((paper) => paper.status == PaperStatus.needsReview)
             .length ??
         project.reviewCount;
+    if (userId != null) {
+      // Keep the shortcut's count in step with paper status changes that the
+      // polling above picks up.
+      ref.listen<AsyncValue<List<ProjectPaper>>>(
+        projectPapersProvider((userId: userId, projectId: project.id)),
+        (previous, next) {
+          final before = previous?.value;
+          final after = next.value;
+          if (before == null || after == null) return;
+          if (_reviewStateSignature(before) != _reviewStateSignature(after)) {
+            ref.invalidate(reviewQueueProvider(userId));
+          }
+        },
+      );
+    }
+    final pendingAnalyses = userId == null
+        ? const <ReviewQueueItem>[]
+        : _acceptableAnalyses(
+            papers.value,
+            ref.watch(reviewQueueProvider(userId)).value,
+          );
+    final processingPaperCount =
+        papers.value
+            ?.where(
+              (paper) =>
+                  paper.isProcessing || paper.status == PaperStatus.processing,
+            )
+            .length ??
+        0;
 
     return Scaffold(
       appBar: AppBar(
@@ -323,10 +472,15 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
                       progress: _uploadProgress,
                     ),
                     SizedBox(height: spacing),
-                    const SectionHeading(
-                      title: 'Paper dalam proyek',
-                      subtitle:
-                          'File tersimpan privat dan hanya dapat diakses oleh pemilik proyek.',
+                    _PaperSectionHeading(
+                      compact: isNarrow,
+                      pendingCount: pendingAnalyses.length,
+                      accepting: _acceptingAll,
+                      onAcceptAll: () => _acceptAllAnalyses(
+                        pendingAnalyses,
+                        userId: userId!,
+                        processingPaperCount: processingPaperCount,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     papers.when(
@@ -463,6 +617,84 @@ class _ProjectOverviewScreenState extends ConsumerState<ProjectOverviewScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// "Paper dalam proyek" heading with the project's accept-all shortcut on the
+/// same row. The shortcut is hidden while nothing in the project awaits review.
+class _PaperSectionHeading extends StatelessWidget {
+  const _PaperSectionHeading({
+    required this.compact,
+    required this.pendingCount,
+    required this.accepting,
+    required this.onAcceptAll,
+  });
+
+  final bool compact;
+  final int pendingCount;
+  final bool accepting;
+  final VoidCallback onAcceptAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              Expanded(
+                child: Text('Paper dalam proyek', style: textTheme.titleLarge),
+              ),
+              if (pendingCount > 0) ...[
+                const SizedBox(width: 12),
+                ConstrainedBox(
+                  // Leaves room for the title when large text widens the label.
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * 0.6,
+                  ),
+                  child: Tooltip(
+                    message:
+                        'Terima semua hasil analisis yang menunggu review di proyek ini',
+                    child: FilledButton.icon(
+                      key: const Key('accept-all-project-analyses'),
+                      onPressed: accepting ? null : onAcceptAll,
+                      style: compact
+                          ? FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                            )
+                          : null,
+                      icon: accepting
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.done_all_rounded, size: 18),
+                      label: Text(
+                        compact
+                            ? 'Terima semua ($pendingCount)'
+                            : 'Terima semua analisis ($pendingCount)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'File tersimpan privat dan hanya dapat diakses oleh pemilik proyek.',
+          style: textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 }

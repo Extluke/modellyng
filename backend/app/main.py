@@ -12,6 +12,7 @@ from .chat_service import ChatUnavailableError, answer_project_question
 from .export_service import ExportUnavailableError, build_project_export
 from .evidence_preview import build_evidence_page_preview
 from .health import dependency_health
+from .gemini_json import AiInputError, AiUnavailableError
 from .repository import (
     EntityNotFoundError,
     InvalidReviewError,
@@ -33,9 +34,10 @@ from .schemas import (
     PaperResultRead,
     ReviewHistoryItemRead,
     ComparativeMatrixRead,
-    ComparativeSynthesisRead,
-    ComparativeSynthesisCreate,
+    ProjectSynthesisCreate,
+    ProjectSynthesisRead,
     ConceptEvidenceMapRead,
+    ResearchFlowRead,
     ResearchGapMapRead,
     KnowledgeGraphMapRead,
     ResearchGapDecisionCreate,
@@ -111,6 +113,16 @@ async def export_unavailable_handler(_, exc: ExportUnavailableError) -> JSONResp
 @app.exception_handler(ChatUnavailableError)
 async def chat_unavailable_handler(_, exc: ChatUnavailableError) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(AiUnavailableError)
+async def ai_unavailable_handler(_, exc: AiUnavailableError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(AiInputError)
+async def ai_input_handler(_, exc: AiInputError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.get("/health", response_model=HealthRead, tags=["system"])
@@ -372,15 +384,32 @@ async def get_comparative_matrix(
 ) -> ComparativeMatrixRead:
     return await project_repository.get_comparative_matrix(current_user, project_id)
 
-@api.post(
+@api.get(
     "/projects/{project_id}/synthesis",
-    response_model=ComparativeSynthesisRead,
+    response_model=ProjectSynthesisRead | None,
     tags=["projects"],
 )
-async def generate_comparative_synthesis(
-    project_id: UUID, payload: ComparativeSynthesisCreate, current_user: CurrentUser
-) -> ComparativeSynthesisRead:
-    return await project_repository.generate_comparative_synthesis(current_user, project_id, payload.paper_ids)
+async def get_project_synthesis(
+    project_id: UUID, current_user: CurrentUser
+) -> ProjectSynthesisRead | None:
+    """Sintesis AI global yang tersimpan; null bila belum pernah dibuat."""
+    return await project_repository.get_project_synthesis(current_user, project_id)
+
+
+@api.post(
+    "/projects/{project_id}/synthesis",
+    response_model=ProjectSynthesisRead,
+    tags=["projects"],
+)
+async def generate_project_synthesis(
+    project_id: UUID, current_user: CurrentUser, payload: ProjectSynthesisCreate | None = None
+) -> ProjectSynthesisRead:
+    """Sintesis AI untuk semua paper terreview di project (dipakai ulang bila data sama)."""
+    return await project_repository.generate_project_synthesis(
+        current_user,
+        project_id,
+        force_regenerate=payload.force_regenerate if payload else False,
+    )
 
 
 @api.get(
@@ -416,6 +445,18 @@ async def generate_research_formulation_synthesis(
     from .synthesis_service import synthesize_gaps
     return await synthesize_gaps(current_user, project_id)
 
+
+
+@api.get(
+    "/projects/{project_id}/research-flow",
+    response_model=ResearchFlowRead,
+    tags=["projects"],
+)
+async def get_research_flow(
+    project_id: UUID, current_user: CurrentUser
+) -> ResearchFlowRead:
+    """Peta alur riset kanvas Maps (GAP); dibuat AI lalu disimpan per project."""
+    return await project_repository.get_research_flow(current_user, project_id)
 
 
 @api.get(

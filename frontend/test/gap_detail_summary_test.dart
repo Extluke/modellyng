@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:modellyng/src/data/concept_map_repository.dart';
 import 'package:modellyng/src/data/project_repository.dart';
+import 'package:modellyng/src/data/research_flow_repository.dart';
 import 'package:modellyng/src/data/research_gap_repository.dart';
 import 'package:modellyng/src/models/research_models.dart';
 import 'package:modellyng/src/screens/project_maps_detail_screen.dart';
 import 'package:modellyng/src/screens/research_gap_map_screen.dart';
+
+import 'fixtures/research_flow_fixture.dart';
 
 class FakeProjectRepositoryForMaps extends Fake implements ProjectRepository {
   @override
@@ -118,7 +121,12 @@ void main() {
 
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [projectRepositoryProvider.overrideWithValue(fakeRepo)],
+            overrides: [
+              projectRepositoryProvider.overrideWithValue(fakeRepo),
+              researchFlowRepositoryProvider.overrideWithValue(
+                FakeResearchFlowRepository([figmaFlow()]),
+              ),
+            ],
             child: const MaterialApp(
               home: ProjectMapsDetailScreen(
                 projectId: 'proj-123',

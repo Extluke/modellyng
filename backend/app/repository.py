@@ -23,8 +23,9 @@ from .schemas import (
     ExtractedComponentRead,
     ExtractionParameter,
     ComparativeMatrixRead,
-    ComparativeSynthesisRead,
     ConceptEvidenceMapRead,
+    ProjectSynthesisRead,
+    ResearchFlowRead,
     ResearchGapMapRead,
     ResearchGapDecisionCreate,
     ResearchGapDecisionRead,
@@ -198,15 +199,18 @@ class SupabaseProjectRepository:
         self,
         user: AuthenticatedUser,
     ) -> list[ProjectRead]:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{self._rest_url}/projects",
-                headers=self._headers(user),
-                params={
-                    "select": self._project_select(),
-                    "order": "updated_at.desc",
-                },
-            )
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self._rest_url}/projects",
+                    headers=self._headers(user),
+                    params={
+                        "select": self._project_select(),
+                        "order": "updated_at.desc",
+                    },
+                )
+        except httpx.RequestError as exc:
+            raise RepositoryError(f"Database connection error: {exc}") from exc
         self._raise_for_repository_error(response)
         return [self._to_project(row) for row in response.json()]
 
@@ -887,115 +891,141 @@ class SupabaseProjectRepository:
             ],
         })
 
-    async def generate_comparative_synthesis(
-        self, user: AuthenticatedUser, project_id: UUID, paper_ids: list[UUID]
-    ) -> ComparativeSynthesisRead:
-        sorted_ids = sorted([str(pid) for pid in paper_ids])
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._rest_url}/comparative_syntheses",
-                headers=self._headers(user),
-                params={
-                    "select": "*",
-                    "project_id": f"eq.{project_id}",
-                    "paper_ids": f"eq.{{{','.join(sorted_ids)}}}",
-                },
-            )
-            self._raise_for_repository_error(response)
-            rows = response.json()
-            if rows:
-                from .schemas import ComparativeSynthesisRead
-                return ComparativeSynthesisRead(**rows[0])
+    async def get_project_synthesis(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ProjectSynthesisRead | None:
+        """Sintesis AI global yang tersimpan, atau None bila belum pernah dibuat.
+
+        stale=True bila hasil review paper sudah berubah sejak sintesis dibuat.
+        """
+        from .project_synthesis import (
+            SynthesisContent,
+            collect_synthesis_inputs,
+            render_project_synthesis,
+            synthesis_source_hash,
+        )
 
         matrix = await self.get_comparative_matrix(user, project_id)
-        selected_pids = set(sorted_ids)
-        papers_info = []
-        for p in matrix.papers:
-            if str(p.id) in selected_pids:
-                papers_info.append(f"Title: {p.title}")
-        
-        extracted_text = []
-        for row in matrix.rows:
-            extracted_text.append(f"--- Parameter: {row.parameter.value} ---")
-            for cell in row.cells:
-                if str(cell.paper_id) in selected_pids:
-                    val = cell.final_value or cell.ai_value
-                    extracted_text.append(f"Paper {cell.paper_id}: {val}")
-
-        combined_text = "\n".join(papers_info) + "\n\n" + "\n".join(extracted_text)
-        
-        from google import genai
-        from google.genai import types
-        from pydantic import BaseModel
-        from .config import get_settings
-        
-        settings = get_settings()
-        if not settings.gemini_api_key:
-            raise RepositoryError("Gemini API key is not configured.")
-        
-        class SynthesisOutput(BaseModel):
-            similarities: str
-            differences: str
-            research_patterns: str
-            approach_differences: str
-            
-        prompt = (
-            "Analisis hasil ekstraksi paper ini dan berikan 4 output:\n"
-            "1. Ringkasan persamaan antar-paper\n"
-            "2. Ringkasan perbedaan antar-paper\n"
-            "3. Pola penelitian yang ditemukan\n"
-            "4. Perbedaan pendekatan penelitian\n\n"
-            "Data Ekstraksi:\n"
-            f"{combined_text[:settings.gemini_max_input_chars]}"
+        row = await self._read_project_ai_cache(user, "project_syntheses", project_id)
+        if row is None:
+            return None
+        try:
+            content = SynthesisContent.model_validate(row.get("content") or {})
+        except ValueError:
+            logger.warning("Ignoring invalid cached synthesis for %s", project_id)
+            return None
+        current_hash = synthesis_source_hash(collect_synthesis_inputs(matrix))
+        return render_project_synthesis(
+            matrix, content, stale=row.get("source_hash") != current_hash
         )
-        
-        models = list(dict.fromkeys(filter(None, [settings.gemini_model, settings.gemini_fallback_model])))
-        parsed = None
-        last_error = None
-        client_gemini = genai.Client(api_key=settings.gemini_api_key)
-        for model_name in models:
-            try:
-                response_llm = client_gemini.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=SynthesisOutput,
-                        temperature=0.2,
-                    ),
-                )
-                result_json = response_llm.text
-                if not result_json:
-                    raise ValueError("Empty response")
-                parsed = SynthesisOutput.model_validate_json(result_json)
-                break
-            except Exception as e:
-                last_error = e
-                continue
 
-        if not parsed:
-            raise RepositoryError(f"Gagal melakukan sintesis AI: {str(last_error)}")
-        
-        insert_payload = {
-            "project_id": str(project_id),
-            "paper_ids": sorted_ids,
-            "similarities": parsed.similarities,
-            "differences": parsed.differences,
-            "research_patterns": parsed.research_patterns,
-            "approach_differences": parsed.approach_differences,
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            res_insert = await client.post(
-                f"{self._rest_url}/comparative_syntheses",
-                headers=self._headers(user, return_representation=True),
-                json=insert_payload,
+    async def generate_project_synthesis(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        force_regenerate: bool = False,
+    ) -> ProjectSynthesisRead:
+        """Sintesis AI untuk semua paper terreview di project.
+
+        Hasil tersimpan dipakai ulang selama data sumbernya sama, kecuali
+        force_regenerate=True.
+        """
+        from .project_synthesis import (
+            MIN_PAPERS,
+            NotEnoughPapersError,
+            SynthesisContent,
+            collect_synthesis_inputs,
+            generate_synthesis_content,
+            included_inputs,
+            render_project_synthesis,
+            synthesis_source_hash,
+        )
+
+        matrix = await self.get_comparative_matrix(user, project_id)
+        inputs = collect_synthesis_inputs(matrix)
+        papers = included_inputs(inputs)
+        if len(papers) < MIN_PAPERS:
+            raise NotEnoughPapersError(
+                "Sintesis membutuhkan minimal 2 paper dengan hasil review terverifikasi."
             )
-            self._raise_for_repository_error(res_insert)
-            inserted_row = res_insert.json()[0]
-            from .schemas import ComparativeSynthesisRead
-            return ComparativeSynthesisRead(**inserted_row)
+        source_hash = synthesis_source_hash(inputs)
+
+        if not force_regenerate:
+            row = await self._read_project_ai_cache(user, "project_syntheses", project_id)
+            if row is not None and row.get("source_hash") == source_hash:
+                try:
+                    content = SynthesisContent.model_validate(row.get("content") or {})
+                except ValueError:
+                    content = None
+                if content is not None:
+                    return render_project_synthesis(matrix, content, stale=False)
+
+        content = await asyncio.to_thread(generate_synthesis_content, papers)
+        await self._write_project_ai_cache(
+            user,
+            "project_syntheses",
+            {
+                "project_id": str(project_id),
+                "source_hash": source_hash,
+                "content": content.model_dump(mode="json"),
+                "model_name": content.model_name,
+            },
+        )
+        return render_project_synthesis(matrix, content, stale=False)
+
+    async def _read_project_ai_cache(
+        self, user: AuthenticatedUser, table: str, project_id: UUID
+    ) -> dict | None:
+        """Baca satu baris cache AI per project (RLS pemilik project)."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(
+                    f"{self._rest_url}/{table}",
+                    headers=self._headers(user),
+                    params={
+                        "select": "source_hash,content,model_name,updated_at",
+                        "project_id": f"eq.{project_id}",
+                        "limit": "1",
+                    },
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("AI cache read from %s failed: %s", table, exc)
+            return None
+        if not response.is_success:
+            logger.warning(
+                "AI cache %s unavailable (%s): %s",
+                table,
+                response.status_code,
+                response.text[:300],
+            )
+            return None
+        rows = response.json()
+        return rows[0] if rows else None
+
+    async def _write_project_ai_cache(
+        self, user: AuthenticatedUser, table: str, row: dict
+    ) -> None:
+        """Simpan hasil AI. Kegagalan hanya dicatat agar hasil tetap sampai ke pengguna."""
+        headers = self._headers(user)
+        headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    f"{self._rest_url}/{table}",
+                    headers=headers,
+                    params={"on_conflict": "project_id"},
+                    json=row,
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("AI cache write to %s failed: %s", table, exc)
+            return
+        if not response.is_success:
+            logger.warning(
+                "AI cache write to %s rejected (%s): %s",
+                table,
+                response.status_code,
+                response.text[:300],
+            )
 
     async def get_concept_evidence_map(
         self, user: AuthenticatedUser, project_id: UUID
@@ -1126,6 +1156,68 @@ class SupabaseProjectRepository:
             "edges": edges,
             "candidate_count": candidate_count,
         })
+
+    async def get_research_flow(
+        self, user: AuthenticatedUser, project_id: UUID
+    ) -> ResearchFlowRead:
+        """Peta alur riset untuk kanvas Maps (GAP).
+
+        Hasil disimpan per project. Selama data matriks terverifikasi tidak
+        berubah (source_hash sama), peta dari cache dipakai tanpa memanggil
+        Gemini lagi.
+        """
+        from .research_flow import (
+            collect_flow_inputs,
+            flow_source_hash,
+            generate_research_flow,
+        )
+
+        matrix = await self.get_comparative_matrix(user, project_id)
+        inputs = collect_flow_inputs(matrix)
+        if not inputs:
+            return ResearchFlowRead(project_id=matrix.project_id)
+
+        source_hash = flow_source_hash(inputs)
+        cached = await self._read_research_flow_cache(user, project_id, source_hash)
+        if cached is not None:
+            return cached
+
+        flow = await asyncio.to_thread(
+            generate_research_flow, matrix.project_id, inputs
+        )
+        await self._write_research_flow_cache(user, project_id, source_hash, flow)
+        return flow
+
+    async def _read_research_flow_cache(
+        self, user: AuthenticatedUser, project_id: UUID, source_hash: str
+    ) -> ResearchFlowRead | None:
+        row = await self._read_project_ai_cache(user, "research_flow_maps", project_id)
+        if row is None or row.get("source_hash") != source_hash:
+            return None
+        try:
+            return ResearchFlowRead.model_validate(row.get("content") or {})
+        except ValueError:
+            logger.warning("Ignoring invalid cached research flow for %s", project_id)
+            return None
+
+    async def _write_research_flow_cache(
+        self,
+        user: AuthenticatedUser,
+        project_id: UUID,
+        source_hash: str,
+        flow: ResearchFlowRead,
+    ) -> None:
+        # Peta tetap dikembalikan ke pengguna walau penyimpanan cache gagal.
+        await self._write_project_ai_cache(
+            user,
+            "research_flow_maps",
+            {
+                "project_id": str(project_id),
+                "source_hash": source_hash,
+                "content": flow.model_dump(mode="json"),
+                "model_name": flow.model_name,
+            },
+        )
 
     async def get_project_chat_context(
         self, user: AuthenticatedUser, project_id: UUID

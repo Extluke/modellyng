@@ -210,19 +210,59 @@ class ExtractedComponentRead(BaseModel):
     prompt_version: str
     created_at: datetime
 
-class ComparativeSynthesisCreate(BaseModel):
-    paper_ids: list[UUID] = Field(min_length=2)
+# --- Sintesis AI global per project (menu Matriks & Sintesis) ---
+# Semua paper ready dengan hasil review verified/edited ikut disintesis.
 
-class ComparativeSynthesisRead(BaseModel):
-    id: UUID
+class ProjectSynthesisCreate(BaseModel):
+    force_regenerate: bool = False
+
+
+class SynthesisPaperRead(BaseModel):
+    paper_id: UUID
+    number: int = Field(ge=1)
+    title: str
+    # Sitasi penulis-tahun, misal "(Al-Qaheri dkk., 2010)".
+    citation: str
+    # False bila paper belum punya hasil review saat sintesis dibuat.
+    included: bool = True
+
+
+class SynthesisPointRead(BaseModel):
+    text: str
+    paper_ids: list[UUID] = Field(default_factory=list)
+
+
+class SynthesisSectionRead(BaseModel):
+    key: str
+    title: str
+    points: list[SynthesisPointRead] = Field(default_factory=list)
+    # Paragraf akademik dengan sitasi penulis-tahun.
+    paragraph: str = ""
+
+
+class SynthesisIdeaRead(BaseModel):
+    title: str
+    rationale: str
+    paper_ids: list[UUID] = Field(default_factory=list)
+
+
+class SynthesisPaperPositionRead(BaseModel):
+    paper_id: UUID
+    text: str
+
+
+class ProjectSynthesisRead(BaseModel):
     project_id: UUID
-    paper_ids: list[UUID]
-    similarities: str
-    differences: str
-    research_patterns: str
-    approach_differences: str
-    created_at: datetime
-    updated_at: datetime
+    papers: list[SynthesisPaperRead] = Field(default_factory=list)
+    sections: list[SynthesisSectionRead] = Field(default_factory=list)
+    research_ideas: list[SynthesisIdeaRead] = Field(default_factory=list)
+    paper_positions: list[SynthesisPaperPositionRead] = Field(default_factory=list)
+    # Seluruh paragraf per bagian beserta daftar pustaka, siap ditempel.
+    academic_text: str = ""
+    model_name: str | None = None
+    generated_at: datetime | None = None
+    # True bila hasil review paper berubah sejak sintesis dibuat.
+    stale: bool = False
 
 class PaperStructurePart(BaseModel):
     id: UUID
@@ -662,3 +702,50 @@ class GraphNodeSynthesisRequest(BaseModel):
 
 class GapValidationRequest(BaseModel):
     status: Literal["accepted", "rejected"]
+
+
+# --- Research flow map (kanvas Maps GAP) ---
+# Alur kiri ke kanan: topik -> isi -> masalah -> solusi -> fungsi/kesimpulan.
+# Warna dan titik "end" ditentukan oleh kode (lihat research_flow.py),
+# bukan oleh AI.
+
+class ResearchFlowPaperRead(BaseModel):
+    paper_id: UUID
+    number: int = Field(ge=1)
+    title: str
+
+
+class ResearchFlowItemRead(BaseModel):
+    paper_id: UUID
+    topic: str
+    problem: str
+
+
+class ResearchFlowSolutionRead(BaseModel):
+    label: str
+    paper_ids: list[UUID] = Field(min_length=1)
+    # True jika solusi dipakai minimal 2 paper: hijau dan alur berlanjut.
+    # False: merah (jarang diteliti) dan alur berhenti di solusi ini.
+    shared: bool
+    functions: list[str] = Field(default_factory=list)
+    conclusions: list[str] = Field(default_factory=list)
+
+
+class ResearchFlowThemeRead(BaseModel):
+    label: str
+    items: list[ResearchFlowItemRead] = Field(min_length=2)
+    solutions: list[ResearchFlowSolutionRead] = Field(min_length=1)
+
+
+class ResearchFlowUnrelatedRead(BaseModel):
+    paper_id: UUID
+    topic: str
+
+
+class ResearchFlowRead(BaseModel):
+    project_id: UUID
+    papers: list[ResearchFlowPaperRead] = Field(default_factory=list)
+    themes: list[ResearchFlowThemeRead] = Field(default_factory=list)
+    unrelated: list[ResearchFlowUnrelatedRead] = Field(default_factory=list)
+    model_name: str | None = None
+    generated_at: datetime | None = None

@@ -45,13 +45,15 @@ enum GraphGapType {
 
   static GraphGapType fromJson(String? value) {
     if (value == null) return GraphGapType.other;
+    // Backend mengirim nilai GapType bersama ("population"); data lama
+    // memakai akhiran "_gap". Keduanya diterima.
     return switch (value) {
       'unexplored_concept' => GraphGapType.unexploredConcept,
       'missing_relation' => GraphGapType.missingRelation,
-      'methodological' => GraphGapType.methodological,
-      'population_gap' => GraphGapType.populationGap,
-      'dataset_gap' => GraphGapType.datasetGap,
-      'empirical_gap' => GraphGapType.empiricalGap,
+      'methodological' || 'methodological_gap' => GraphGapType.methodological,
+      'population' || 'population_gap' => GraphGapType.populationGap,
+      'dataset' || 'dataset_gap' => GraphGapType.datasetGap,
+      'empirical' || 'empirical_gap' => GraphGapType.empiricalGap,
       _ => GraphGapType.other,
     };
   }

@@ -134,13 +134,4 @@ class ComparativeMatrixRepository {
     );
     return ComparativeMatrix.fromJson(response.data!);
   }
-
-  Future<Map<String, dynamic>> generateSynthesis(String projectId, List<String> paperIds) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/v1/projects/$projectId/synthesis',
-      data: {'paper_ids': paperIds},
-      options: Options(receiveTimeout: const Duration(minutes: 2)),
-    );
-    return response.data!;
-  }
 }

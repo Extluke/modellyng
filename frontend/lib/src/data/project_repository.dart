@@ -11,13 +11,14 @@ final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
 
 final projectsProvider = FutureProvider.autoDispose
     .family<List<ResearchProject>, String>((ref, userId) async {
-      final session = ref.watch(authSessionProvider).value;
-      if (session?.user.id != userId) return const [];
+      final currentUserId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (currentUserId != null && currentUserId != userId) return const [];
 
       final projects = await ref
-          .watch(projectRepositoryProvider)
+          .read(projectRepositoryProvider)
           .listProjects();
-      if (ref.read(authRepositoryProvider).currentUser?.id != userId) {
+      final afterUserId = ref.read(authRepositoryProvider).currentUser?.id;
+      if (afterUserId != null && afterUserId != userId) {
         return const [];
       }
       return projects;

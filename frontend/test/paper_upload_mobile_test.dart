@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:modellyng/src/data/auth_repository.dart';
 import 'package:modellyng/src/data/paper_repository.dart';
+import 'package:modellyng/src/data/review_repository.dart';
 import 'package:modellyng/src/models/research_models.dart';
 import 'package:modellyng/src/screens/project_overview_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supa;
@@ -278,6 +279,7 @@ void main() {
                 userId: 'user-test-456',
                 projectId: testEmptyProject.id,
               )).overrideWith((ref) => []),
+              reviewQueueProvider('user-test-456').overrideWith((ref) => []),
             ],
             child: const MaterialApp(
               home: ProjectOverviewScreen(project: testEmptyProject),
@@ -352,6 +354,7 @@ void main() {
                 providerBuildCount++;
                 return [];
               }),
+              reviewQueueProvider('user-test-456').overrideWith((ref) => []),
             ],
             child: const MaterialApp(
               home: ProjectOverviewScreen(project: testEmptyProject),

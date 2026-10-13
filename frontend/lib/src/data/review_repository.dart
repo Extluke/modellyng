@@ -164,3 +164,49 @@ class ReviewRepository {
     return (response.data?['accepted_count'] as num?)?.toInt() ?? 0;
   }
 }
+
+/// Largest `component_ids` list accepted by `POST /api/v1/reviews/accept-all`
+/// (`BulkReviewAcceptRequest` in the backend). Keep both limits in sync.
+const maxBulkReviewAcceptCount = 200;
+
+/// Splits pending components into accept-all requests of at most
+/// [maxBatchSize] IDs.
+///
+/// Components of one paper stay in the same request, so every paper is either
+/// accepted as a whole or left pending by that request's transaction. A paper
+/// that alone exceeds the limit (not expected with eleven parameters) is split
+/// into limit-sized chunks.
+List<List<String>> planBulkAcceptBatches(
+  Iterable<ReviewQueueItem> items, {
+  int maxBatchSize = maxBulkReviewAcceptCount,
+}) {
+  assert(maxBatchSize > 0, 'maxBatchSize must be positive');
+  final seen = <String>{};
+  final byPaper = <String, List<String>>{};
+  for (final item in items) {
+    // The backend rejects a request that repeats a component ID.
+    if (!seen.add(item.componentId)) continue;
+    byPaper.putIfAbsent(item.paperId, () => []).add(item.componentId);
+  }
+
+  final batches = <List<String>>[];
+  var current = <String>[];
+  for (final ids in byPaper.values) {
+    if (current.isNotEmpty && current.length + ids.length > maxBatchSize) {
+      batches.add(current);
+      current = <String>[];
+    }
+    if (ids.length > maxBatchSize) {
+      for (var start = 0; start < ids.length; start += maxBatchSize) {
+        final end = start + maxBatchSize < ids.length
+            ? start + maxBatchSize
+            : ids.length;
+        batches.add(ids.sublist(start, end));
+      }
+      continue;
+    }
+    current.addAll(ids);
+  }
+  if (current.isNotEmpty) batches.add(current);
+  return batches;
+}
