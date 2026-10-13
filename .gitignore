@@ -53,6 +53,7 @@ app.*.map.json
 /frontend/android/app/profile
 /frontend/android/app/release
 frontend/android/.gradle/
+frontend/android/build/
 frontend/android/local.properties
 frontend/ios/Pods/
 frontend/ios/Runner.xcworkspace/
