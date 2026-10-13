@@ -1,10 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/research_models.dart';
 import 'api_client.dart';
 import 'concept_map_repository.dart';
-import '../models/research_models.dart';
-
 
 final researchGapRepositoryProvider = Provider<ResearchGapRepository>((ref) {
   return ResearchGapRepository(ref.watch(dioProvider));

@@ -1,11 +1,10 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:ui' as ui;
 
 import '../data/project_repository.dart';
 import '../models/research_models.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common_widgets.dart';
 
 class KnowledgeGraphScreen extends ConsumerStatefulWidget {
   const KnowledgeGraphScreen({
@@ -20,11 +19,13 @@ class KnowledgeGraphScreen extends ConsumerStatefulWidget {
   final String userId;
 
   @override
-  ConsumerState<KnowledgeGraphScreen> createState() => _KnowledgeGraphScreenState();
+  ConsumerState<KnowledgeGraphScreen> createState() =>
+      _KnowledgeGraphScreenState();
 }
 
 class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
-  final TransformationController _transformController = TransformationController();
+  final TransformationController _transformController =
+      TransformationController();
   bool _isLoading = true;
   KnowledgeGraphMap? _graphMap;
   String _error = '';
@@ -56,7 +57,7 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
 
   void _centerView() {
     if (!mounted || _graphMap == null || _graphMap!.nodes.isEmpty) return;
-    
+
     // Find average x, y to center
     double sumX = 0, sumY = 0;
     int count = 0;
@@ -68,15 +69,15 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
       }
     }
     if (count == 0) return;
-    
+
     final avgX = sumX / count;
     final avgY = sumY / count;
-    
+
     final size = MediaQuery.of(context).size;
     const double scale = 0.5;
     final dx = (size.width / 2) - (avgX * scale);
     final dy = (size.height / 2) - (avgY * scale);
-    
+
     _transformController.value = Matrix4.identity()
       ..translate(dx, dy)
       ..scale(scale);
@@ -104,7 +105,9 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
       return Center(child: Text('Gagal memuat: $_error'));
     }
     if (_graphMap == null || _graphMap!.nodes.isEmpty) {
-      return const Center(child: Text('Graph kosong. Pastikan PDF sudah diproses.'));
+      return const Center(
+        child: Text('Graph kosong. Pastikan PDF sudah diproses.'),
+      );
     }
 
     return Stack(
@@ -141,8 +144,8 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
     // Offset coordinate by 2500 (Center of 5000x5000 canvas)
     final x = (node.x ?? 0.0) + 2500;
     final y = (node.y ?? 0.0) + 2500;
-    
-    bool isGap = node.kind == 'gap';
+
+    final bool isGap = node.kind == 'gap';
     IconData icon = Icons.circle;
     List<Color> gradientColors = [Colors.blue.shade400, Colors.blue.shade700];
     Color glowColor = Colors.blue.withValues(alpha: 0.3);
@@ -167,7 +170,7 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
 
     return Positioned(
       left: x - 120, // half width
-      top: y - 40,  // half height
+      top: y - 40, // half height
       child: GestureDetector(
         onTap: () => _showNodeDetail(node),
         child: Container(
@@ -180,7 +183,10 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: glowColor,
@@ -260,17 +266,27 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
             children: [
               Text(
                 'DETAIL ${node.kind.toUpperCase()}',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo.shade800),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo.shade800,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 node.label,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Expanded(
                 child: SingleChildScrollView(
-                  child: Text(node.detail, style: const TextStyle(fontSize: 16, height: 1.5)),
+                  child: Text(
+                    node.detail,
+                    style: const TextStyle(fontSize: 16, height: 1.5),
+                  ),
                 ),
               ),
               if (node.kind == 'gap')
@@ -309,7 +325,9 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // close loading
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -328,18 +346,43 @@ class _KnowledgeGraphScreenState extends ConsumerState<KnowledgeGraphScreen> {
           padding: const EdgeInsets.all(24),
           child: ListView(
             children: [
-              const Text('RUMUSAN MASALAH (HASIL SINTESIS)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                'RUMUSAN MASALAH (HASIL SINTESIS)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 24),
-              const Text('Usulan Judul:', style: TextStyle(fontWeight: FontWeight.bold)),
-              ...synth.usulanJudul.map((j) => Padding(padding: const EdgeInsets.only(top: 8), child: Text('- $j'))),
+              const Text(
+                'Usulan Judul:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              ...synth.usulanJudul.map(
+                (j) => Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('- $j'),
+                ),
+              ),
               const SizedBox(height: 16),
-              const Text('Pertanyaan Penelitian:', style: TextStyle(fontWeight: FontWeight.bold)),
-              ...synth.rumusanMasalah.map((r) => Padding(padding: const EdgeInsets.only(top: 8), child: Text('- $r'))),
+              const Text(
+                'Pertanyaan Penelitian:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              ...synth.rumusanMasalah.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('- $r'),
+                ),
+              ),
               const SizedBox(height: 16),
-              const Text('Pernyataan Novelty:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Pernyataan Novelty:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               Text(synth.pernyataanNovelty),
               const SizedBox(height: 16),
-              const Text('Alasan Pemilihan:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Alasan Pemilihan:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               Text(synth.alasanPemilihan),
             ],
           ),
@@ -360,39 +403,46 @@ class _GraphEdgePainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final Map<String, KnowledgeGraphNode> nodeMap = {
-      for (var n in map.nodes) n.id: n
+      for (var n in map.nodes) n.id: n,
     };
 
     for (var edge in map.edges) {
       final src = nodeMap[edge.source];
       final tgt = nodeMap[edge.target];
-      if (src != null && tgt != null && src.x != null && src.y != null && tgt.x != null && tgt.y != null) {
+      if (src != null &&
+          tgt != null &&
+          src.x != null &&
+          src.y != null &&
+          tgt.x != null &&
+          tgt.y != null) {
         // Offset coordinate by 2500 (Center of 5000x5000 canvas)
         final p1 = Offset(src.x! + 2500, src.y! + 2500);
         final p2 = Offset(tgt.x! + 2500, tgt.y! + 2500);
-        
+
         final path = Path();
         path.moveTo(p1.dx, p1.dy);
-        
+
         // Create a smooth cubic bezier curve
         final controlPointX1 = p1.dx + (p2.dx - p1.dx) / 2;
         final controlPointY1 = p1.dy;
         final controlPointX2 = p1.dx + (p2.dx - p1.dx) / 2;
         final controlPointY2 = p2.dy;
-        
+
         path.cubicTo(
-          controlPointX1, controlPointY1,
-          controlPointX2, controlPointY2,
-          p2.dx, p2.dy
+          controlPointX1,
+          controlPointY1,
+          controlPointX2,
+          controlPointY2,
+          p2.dx,
+          p2.dy,
         );
 
         // Add a subtle gradient to the line
-        paint.shader = ui.Gradient.linear(
-          p1,
-          p2,
-          [Colors.blue.withValues(alpha: 0.4), Colors.purple.withValues(alpha: 0.4)],
-        );
-        
+        paint.shader = ui.Gradient.linear(p1, p2, [
+          Colors.blue.withValues(alpha: 0.4),
+          Colors.purple.withValues(alpha: 0.4),
+        ]);
+
         canvas.drawPath(path, paint);
       }
     }

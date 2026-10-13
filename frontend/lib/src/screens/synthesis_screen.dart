@@ -53,9 +53,7 @@ class _SynthesisScreenState extends ConsumerState<SynthesisScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Research Formulation Synthesizer'),
-      ),
+      appBar: AppBar(title: const Text('Research Formulation Synthesizer')),
       body: _loading
           ? const Center(
               child: Column(
@@ -68,96 +66,104 @@ class _SynthesisScreenState extends ConsumerState<SynthesisScreen> {
               ),
             )
           : _error != null
-              ? Center(
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: AppColors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _synthesize,
+                      child: const Text('Coba Lagi'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _synthesis != null
+          ? ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                const PageHeading(
+                  title: 'Hasil Sintesis Riset',
+                  subtitle:
+                      'Rekomendasi judul dan rumusan masalah berdasarkan celah penelitian yang Anda pilih.',
+                ),
+                const SizedBox(height: 24),
+
+                const _SectionTitle('Pernyataan Novelty'),
+                Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline,
-                            size: 48, color: AppColors.red),
-                        const SizedBox(height: 16),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _synthesize,
-                          child: const Text('Coba Lagi'),
-                        ),
-                      ],
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_synthesis!.pernyataanNovelty),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                const _SectionTitle('Usulan Judul Penelitian'),
+                ..._synthesis!.usulanJudul.map(
+                  (judul) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.green,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              judul,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                )
-              : _synthesis != null
-                  ? ListView(
-                      padding: const EdgeInsets.all(24),
-                      children: [
-                        const PageHeading(
-                          title: 'Hasil Sintesis Riset',
-                          subtitle:
-                              'Rekomendasi judul dan rumusan masalah berdasarkan celah penelitian yang Anda pilih.',
-                        ),
-                        const SizedBox(height: 24),
-                        
-                        _SectionTitle('Pernyataan Novelty'),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(_synthesis!.pernyataanNovelty),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
+                ),
+                const SizedBox(height: 24),
 
-                        _SectionTitle('Usulan Judul Penelitian'),
-                        ..._synthesis!.usulanJudul.map((judul) => Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.check_circle_outline, color: Colors.green),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        judul,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )),
-                        const SizedBox(height: 24),
+                const _SectionTitle('Rumusan Masalah (Research Questions)'),
+                ..._synthesis!.rumusanMasalah.map(
+                  (rq) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.help_outline, color: Colors.blue),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(rq)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
 
-                        _SectionTitle('Rumusan Masalah (Research Questions)'),
-                        ..._synthesis!.rumusanMasalah.map((rq) => Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.help_outline, color: Colors.blue),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(rq),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )),
-                        const SizedBox(height: 24),
-                        
-                        _SectionTitle('Alasan Pemilihan'),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(_synthesis!.alasanPemilihan),
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                      ],
-                    )
-                  : const SizedBox(),
+                const _SectionTitle('Alasan Pemilihan'),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_synthesis!.alasanPemilihan),
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+            )
+          : const SizedBox(),
     );
   }
 }
