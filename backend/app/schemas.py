@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ProjectStatus(StrEnum):
@@ -602,11 +602,25 @@ class ProjectChatRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=10)
 
 
+GLOBAL_CHAT_HISTORY_LIMIT = 15
+
+
 class GlobalChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2_000)
-    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=15)
+    history: list[ChatHistoryMessage] = Field(
+        default_factory=list, max_length=GLOBAL_CHAT_HISTORY_LIMIT
+    )
     project_id: UUID | None = None
     paper_id: UUID | None = None
+
+    @field_validator("history", mode="before")
+    @classmethod
+    def keep_recent_history(cls, value: object) -> object:
+        # Versi aplikasi lama mengirim seluruh percakapan, sedangkan hanya pesan
+        # terbaru yang dipakai. Potong daripada menolak seluruh permintaan.
+        if isinstance(value, list) and len(value) > GLOBAL_CHAT_HISTORY_LIMIT:
+            return value[-GLOBAL_CHAT_HISTORY_LIMIT:]
+        return value
 
 
 class ComponentReviseRequest(BaseModel):

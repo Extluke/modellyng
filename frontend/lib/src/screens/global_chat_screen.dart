@@ -402,20 +402,11 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
     _saveToCache();
 
     try {
-      final history = _messages
-          .where((m) => m != userMessage && m.role != 'assistant')
-          .map(
-            (m) => GlobalChatMessage(
-              role: m.role,
-              content: m.content,
-              timestamp: m.timestamp,
-              referencedProject: m.referencedProject,
-              projectId: m.projectId,
-              referencedPaper: m.referencedPaper,
-              paperId: m.paperId,
-            ),
-          )
-          .toList();
+      final history = buildChatHistory(
+        _messages
+            .where((m) => m != userMessage)
+            .map((m) => GlobalChatMessage(role: m.role, content: m.content)),
+      );
 
       final response = await ref
           .read(globalChatRepositoryProvider)
@@ -441,12 +432,37 @@ class _GlobalChatScreenState extends ConsumerState<GlobalChatScreen> {
         );
       });
       _saveToCache();
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
+      // Pertanyaan yang tidak terjawab dilepas dari percakapan dan dikembalikan
+      // ke kolom ketik: tidak mengotori riwayat, tidak ikut tersimpan 24 jam,
+      // dan bisa dikirim ulang tanpa mengetik lagi.
+      final restoreDraft = _controller.text.isEmpty;
+      setState(() {
+        _messages.remove(userMessage);
+        if (restoreDraft) {
+          _selectedProjectId = linkedProjectId;
+          _selectedProjectTitle = linkedProjectTitle;
+          _selectedPaperId = linkedPaperId;
+          _selectedPaperTitle = linkedPaperTitle;
+        }
+      });
+      if (restoreDraft) {
+        // Di luar setState: mengubah teks memicu listener yang memanggil setState.
+        _controller.value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        );
+      }
+      _saveToCache();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengirim pesan: $e'),
+          content: Text(chatErrorMessage(error)),
           backgroundColor: AppColors.red,
+          // Melayang di atas baris input agar tombol kirim tetap bisa diketuk
+          // untuk mencoba lagi selama pesan tampil.
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 104),
         ),
       );
     } finally {

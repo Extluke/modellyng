@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from collections import Counter
 from dataclasses import dataclass
 from uuid import UUID
@@ -78,6 +79,69 @@ _REFUSAL = (
     "Informasi tersebut tidak ditemukan dalam PDF yang diunggah. "
     "Saya tidak akan menjawabnya menggunakan pengetahuan di luar dokumen."
 )
+
+# Gangguan sementara di sisi Google layak dicoba ulang. Kuota (429) dan
+# kesalahan permintaan/kunci tidak: mengulanginya hanya membuang waktu dan kuota.
+_TRANSIENT_MARKERS = ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")
+_QUOTA_MARKERS = ("429", "RESOURCE_EXHAUSTED")
+_CHAT_RETRY_DELAY_SECONDS = 1.5
+# Total waktu menunggu Gemini harus tetap di bawah receiveTimeout aplikasi (45 dtk).
+_CHAT_TIME_BUDGET_SECONDS = 38.0
+# Jumlah pertanyaan terakhir pengguna yang dipakai untuk mencari kutipan PDF.
+_RETRIEVAL_QUESTIONS = 4
+
+
+def _is_transient_gemini_error(error: Exception) -> bool:
+    text = str(error).upper()
+    if any(marker in text for marker in _QUOTA_MARKERS):
+        return False
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
+def _generate_chat_text(
+    client: genai.Client,
+    models: list[str],
+    prompt: str,
+    *,
+    attempt_seconds: float,
+    temperature: float,
+) -> tuple[str, str, Exception | None]:
+    """Coba tiap model; ulangi sekali model yang gagal karena gangguan sementara.
+
+    Mengembalikan (jawaban, model yang menjawab, error terakhir). Jawaban kosong
+    berarti semua percobaan gagal. Putaran ulang hanya berjalan bila sisa waktu
+    masih cukup untuk satu percobaan penuh.
+    """
+    started = time.monotonic()
+    pending = list(models)
+    last_error: Exception | None = None
+    for round_index in range(2):
+        retry_models: list[str] = []
+        for model in pending:
+            if round_index and time.monotonic() - started + attempt_seconds > _CHAT_TIME_BUDGET_SECONDS:
+                break
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(temperature=temperature),
+                )
+            except Exception as exc:  # provider errors vary across SDK versions
+                last_error = exc
+                if _is_transient_gemini_error(exc):
+                    retry_models.append(model)
+                continue
+            text = response.text or ""
+            if text:
+                return text, model, None
+        # Hanya ada satu putaran ulang; setelah itu langsung menyerah tanpa menunggu.
+        if round_index or not retry_models:
+            break
+        if time.monotonic() - started + _CHAT_RETRY_DELAY_SECONDS + attempt_seconds > _CHAT_TIME_BUDGET_SECONDS:
+            break
+        time.sleep(_CHAT_RETRY_DELAY_SECONDS)
+        pending = retry_models
+    return "", "", last_error
 
 
 def answer_project_question(
@@ -163,6 +227,11 @@ def answer_global_question(
         f"{message.role.upper()}: {message.content}"
         for message in request.history[-6:]
     )
+    # Pencarian kutipan hanya memakai pertanyaan pengguna. Riwayat dipotong agar
+    # tidak melewati batas ProjectChatRequest (10 pesan) yang dipakai ulang di bawah.
+    retrieval_history = [
+        message for message in request.history if message.role == "user"
+    ][-_RETRIEVAL_QUESTIONS:]
 
     referenced_paper_title: str | None = None
     project_section = ""
@@ -183,7 +252,7 @@ def answer_global_question(
             )
             retrieved_sources = _retrieve(
                 doc_context,
-                ProjectChatRequest(question=request.question, history=request.history),
+                ProjectChatRequest(question=request.question, history=retrieval_history),
             )
             if not retrieved_sources and selected_paper.blocks:
                 retrieved_sources = [
@@ -233,7 +302,7 @@ Pengguna secara spesifik memilih dokumen PDF "{selected_paper.title}" ({selected
 
             retrieved_sources = _retrieve(
                 project_context,
-                ProjectChatRequest(question=request.question, history=request.history),
+                ProjectChatRequest(question=request.question, history=retrieval_history),
             )
             passages_text = ""
             if retrieved_sources:
@@ -280,24 +349,13 @@ PERTANYAAN USER:
     if settings.gemini_model not in models:
         models.append(settings.gemini_model)
 
-    answer_text = ""
-    used_model = settings.gemini_model
-    last_error: Exception | None = None
-    for model in models:
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.6,
-                ),
-            )
-            answer_text = response.text or ""
-            if answer_text:
-                used_model = model
-                break
-        except Exception as exc:
-            last_error = exc
+    answer_text, used_model, last_error = _generate_chat_text(
+        client,
+        models,
+        prompt,
+        attempt_seconds=settings.gemini_chat_timeout_ms / 1000,
+        temperature=0.6,
+    )
 
     if not answer_text:
         message = str(last_error or "Gemini tidak mengembalikan jawaban").upper()

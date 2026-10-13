@@ -95,6 +95,16 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   authenticated backend authorizes the owner once, fetches the cited block and
   private PDF concurrently, and renders only the cited page as a highlighted
   PNG. Full PDF viewing remains available for non-chat evidence navigation.
+- Global assistant chat (`POST /api/v1/assistant/chat`): history stays on the
+  device for 24 hours per user; `@project` and `/paper` scope answers to the
+  owner's own project text. Each question carries at most the last 6 messages
+  (user questions and AI answers, long answers truncated), the greeting is not
+  sent, and the backend trims over-long history instead of rejecting it.
+  Temporary Gemini outages (503/504) are retried once within a 38 s budget;
+  quota (429) and key errors are not retried. A failed question is removed from
+  the conversation and cache and returns to the input box, and the backend
+  message is shown instead of raw Dio text. Global chat answers still carry no
+  structured citations, and logout does not clear the on-device history.
 - Research Gap Map now provides a persisted, owner-scoped Yes/No decision flow:
   paper -> candidate -> evidence -> decision -> next research action.
 - Authenticated project exports in Word, Excel, UTF-8 CSV, and PowerPoint.
