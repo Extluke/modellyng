@@ -264,6 +264,24 @@ class ProjectSynthesisRead(BaseModel):
     # True bila hasil review paper berubah sejak sintesis dibuat.
     stale: bool = False
 
+# --- Rekomendasi tindak lanjut untuk satu research gap (Maps GAP) ---
+
+
+class GapRecommendationRead(BaseModel):
+    gap_id: UUID
+    # Inti keterbatasan yang dinyatakan gap.
+    core_issue: str
+    # Satu perubahan konkret yang bisa dicoba peneliti.
+    concrete_solution: str
+    # Penjelasan apa yang bisa dilakukan dan mengapa menjawab gap.
+    what_user_can_do: str
+    # Langkah kelanjutan riset yang berurutan.
+    next_steps: list[str] = Field(default_factory=list)
+    proposed_titles: list[str] = Field(default_factory=list)
+    model_name: str | None = None
+    generated_at: datetime | None = None
+
+
 class PaperStructurePart(BaseModel):
     id: UUID
     paper_id: UUID
@@ -622,6 +640,13 @@ class GlobalChatRequest(BaseModel):
             return value[-GLOBAL_CHAT_HISTORY_LIMIT:]
         return value
 
+    @model_validator(mode="after")
+    def require_project_for_paper(self) -> "GlobalChatRequest":
+        # PDF ("/") hanya bisa dipilih dari proyek yang sudah dihubungkan ("@").
+        if self.paper_id is not None and self.project_id is None:
+            raise ValueError("paper_id membutuhkan project_id")
+        return self
+
 
 class ComponentReviseRequest(BaseModel):
     parameter: ExtractionParameter
@@ -660,6 +685,9 @@ class GlobalChatResponse(BaseModel):
     model_name: str
     referenced_project: str | None = None
     referenced_paper: str | None = None
+    # Sumber yang dikutip jawaban saat proyek (@) atau PDF (/) dihubungkan.
+    # Setiap sumber menunjuk paper, halaman, dan blok teks milik pemilik proyek.
+    sources: list[ProjectChatSource] = Field(default_factory=list)
 
 
 class ProjectChatMessageRead(BaseModel):

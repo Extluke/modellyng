@@ -1,6 +1,6 @@
 # Modellyng Project Status
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 This file is the shared handoff source for the team and coding assistants. It
 describes what exists in the repository today and what should be built next.
@@ -103,10 +103,11 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   Temporary Gemini outages (503/504) are retried once within a 38 s budget;
   quota (429) and key errors are not retried. A failed question is removed from
   the conversation and cache and returns to the input box, and the backend
-  message is shown instead of raw Dio text. Global chat answers still carry no
-  structured citations, and logout does not clear the on-device history.
-- Research Gap Map now provides a persisted, owner-scoped Yes/No decision flow:
-  paper -> candidate -> evidence -> decision -> next research action.
+  message is shown instead of raw Dio text. Global chat answers carry grounded
+  citations `[S#]` for referenced project and paper blocks.
+- Research Gap Map provides a persisted, owner-scoped decision and follow-up
+  flow: paper -> candidate -> evidence -> 'SELESAI' action -> concrete research
+  recommendation and roadmap.
 - Authenticated project exports in Word, Excel, UTF-8 CSV, and PowerPoint.
   Exports contain ready papers only and preserve reviewed/original AI values,
   status, confidence, evidence quote, page, block ID, and paper ID.
@@ -116,16 +117,15 @@ verification is recorded in `docs/QA_REPORT_2026-08-25.md`.
   activates at logical tablet/desktop widths, and account affordances are
   either functional or honestly marked unavailable.
 
-The last verified automated baseline was (2026-10-13):
+The last verified automated baseline was (2026-10-14):
 
-- Backend: 190 tests passing with `python -m pytest tests` (the root-level
+- Backend: 235 tests passing with `python -m pytest tests` (the root-level
   `backend/test_*.py` files are manual scripts that need live services).
 - Dependency checks and transactional bulk-review validation preserved.
-- Flutter: 81 widget/unit tests passing, including the research flow canvas,
-  global synthesis card, structure-icon, and per-project accept-all regression
+- Flutter: 95 widget/unit tests passing, including the research flow canvas,
+  global synthesis card, structure-icon, gap summary detail, mobile upload, and per-project accept-all regression
   tests.
-- Flutter web release build passing. `flutter analyze` reports 16 existing
-  info/warning items in files outside the 2026-10-13 work; none are errors.
+- Flutter web release build passing.
 - Mobile PDF upload defensively validated with in-memory bytes, sticky AppBar progress bar, reactive EmptyState upload indicator, and reliable Content-Length reporting.
 - Dependency health: Redis, Celery, FastAPI, and local Supabase healthy.
 

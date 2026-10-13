@@ -12,6 +12,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
+from .ai_text import readable_component_value
 from .schemas import ComparativeMatrixRead, ExtractionParameter
 
 
@@ -72,7 +73,10 @@ def _records(matrix: ComparativeMatrixRead):
             paper = paper_by_id.get(cell.paper_id)
             if paper is None:
                 continue
-            value = cell.final_value if cell.final_value is not None else cell.ai_value
+            raw_value = cell.final_value if cell.final_value is not None else cell.ai_value
+            # Nilai seperti future_work disimpan sebagai JSON; ekspor memakai
+            # teks yang terbaca tanpa mengubah isinya.
+            value = readable_component_value(raw_value)
             evidence = "\n".join(
                 f'Page {item.page_number}: "{item.quote}" [block {item.block_id}]'
                 for item in cell.evidence
@@ -84,7 +88,7 @@ def _records(matrix: ComparativeMatrixRead):
                 "parameter": PARAMETER_LABELS[row.parameter],
                 "parameter_key": row.parameter.value,
                 "reviewed_value": value,
-                "original_ai_value": cell.ai_value,
+                "original_ai_value": readable_component_value(cell.ai_value),
                 "status": cell.status.value,
                 "confidence": "" if cell.confidence is None else f"{cell.confidence:.0%}",
                 "evidence": evidence,

@@ -58,6 +58,7 @@ from .schemas import (
     AccountSettingsUpdate,
     AiResearchSynthesis,
     GraphNodeSynthesisRequest,
+    GapRecommendationRead,
     GapValidationRequest,
 )
 from .structured_pdf import build_structured_tables_pdf, structured_pdf_filename
@@ -470,6 +471,18 @@ async def get_knowledge_graph_map(
     return await project_repository.get_knowledge_graph(current_user, project_id)
 
 
+@api.get(
+    "/projects/{project_id}/gaps/{gap_id}/recommendation",
+    response_model=GapRecommendationRead,
+    tags=["projects"],
+)
+async def get_gap_recommendation(
+    project_id: UUID, gap_id: UUID, current_user: CurrentUser
+) -> GapRecommendationRead:
+    """Rekomendasi tindak lanjut satu gap (tombol Selesai di Maps); disimpan per gap."""
+    return await project_repository.get_gap_recommendation(current_user, project_id, gap_id)
+
+
 @api.post(
     "/projects/{project_id}/synthesize-graph-nodes",
     response_model=AiResearchSynthesis,
@@ -606,11 +619,20 @@ async def chat_with_assistant(
 ) -> GlobalChatResponse:
     from .chat_service import answer_global_question
     project_context = None
+    paper_parameters: tuple = ()
     if payload.project_id:
         project_context = await project_repository.get_project_chat_context(
             current_user, payload.project_id
         )
-    return await asyncio.to_thread(answer_global_question, payload, project_context)
+        if payload.paper_id:
+            # 404 bila PDF bukan milik proyek ini; sebelumnya chat diam-diam
+            # beralih ke seluruh proyek.
+            paper_parameters = await project_repository.get_paper_chat_parameters(
+                current_user, payload.project_id, payload.paper_id
+            )
+    return await asyncio.to_thread(
+        answer_global_question, payload, project_context, paper_parameters
+    )
 
 
 @api.post(

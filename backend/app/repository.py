@@ -40,13 +40,20 @@ from .schemas import (
     BulkReviewAcceptResponse,
     AccountSettingsRead,
     AccountSettingsUpdate,
+    GapRecommendationRead,
 )
 from .structured_results import build_structured_tables
 from .source_verification import (
     BibliographicMetadata, SourceVerificationRead, SourceReviewCreate,
     SourceReviewRead, VerificationRequest, verify_source,
 )
-from .chat_service import ProjectChatBlock, ProjectChatContext, ProjectChatDocument
+from .chat_service import (
+    ProjectChatBlock,
+    ProjectChatContext,
+    ProjectChatDocument,
+    ProjectChatParameter,
+    chat_parameters_from_rows,
+)
 
 
 class EntityNotFoundError(LookupError):
@@ -974,9 +981,17 @@ class SupabaseProjectRepository:
         return render_project_synthesis(matrix, content, stale=False)
 
     async def _read_project_ai_cache(
-        self, user: AuthenticatedUser, table: str, project_id: UUID
+        self,
+        user: AuthenticatedUser,
+        table: str,
+        project_id: UUID,
+        *,
+        key_column: str = "project_id",
     ) -> dict | None:
-        """Baca satu baris cache AI per project (RLS pemilik project)."""
+        """Baca satu baris cache AI (RLS pemilik project).
+
+        Kunci default project_id; cache per gap memakai key_column="gap_id".
+        """
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
@@ -984,7 +999,7 @@ class SupabaseProjectRepository:
                     headers=self._headers(user),
                     params={
                         "select": "source_hash,content,model_name,updated_at",
-                        "project_id": f"eq.{project_id}",
+                        key_column: f"eq.{project_id}",
                         "limit": "1",
                     },
                 )
@@ -1003,7 +1018,12 @@ class SupabaseProjectRepository:
         return rows[0] if rows else None
 
     async def _write_project_ai_cache(
-        self, user: AuthenticatedUser, table: str, row: dict
+        self,
+        user: AuthenticatedUser,
+        table: str,
+        row: dict,
+        *,
+        on_conflict: str = "project_id",
     ) -> None:
         """Simpan hasil AI. Kegagalan hanya dicatat agar hasil tetap sampai ke pengguna."""
         headers = self._headers(user)
@@ -1013,7 +1033,7 @@ class SupabaseProjectRepository:
                 response = await client.post(
                     f"{self._rest_url}/{table}",
                     headers=headers,
-                    params={"on_conflict": "project_id"},
+                    params={"on_conflict": on_conflict},
                     json=row,
                 )
         except httpx.HTTPError as exc:
@@ -1219,6 +1239,72 @@ class SupabaseProjectRepository:
             },
         )
 
+    async def get_gap_recommendation(
+        self, user: AuthenticatedUser, project_id: UUID, gap_id: UUID
+    ) -> GapRecommendationRead:
+        """Rekomendasi tindak lanjut satu gap; dibuat AI lalu disimpan per gap.
+
+        Gap dibaca dengan token pengguna (RLS), sehingga gap proyek lain atau
+        milik pengguna lain menghasilkan 404.
+        """
+        from datetime import datetime, timezone
+
+        from .gap_recommendation import (
+            gap_input_from_node,
+            gap_source_hash,
+            generate_gap_recommendation,
+            recommendation_from_cache,
+            render_gap_recommendation,
+        )
+
+        await self.get_project(user, project_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/knowledge_graph_nodes",
+                headers=self._headers(user),
+                params={
+                    "select": "id,node_type,label,detail,gap_typology,evidence",
+                    "id": f"eq.{gap_id}",
+                    "project_id": f"eq.{project_id}",
+                    "limit": "1",
+                },
+            )
+        self._raise_for_repository_error(response)
+        rows = response.json()
+        if not rows or rows[0].get("node_type") not in ("gap", "research_gap"):
+            raise EntityNotFoundError(f"Gap {gap_id} was not found")
+
+        gap = gap_input_from_node(rows[0])
+        source_hash = gap_source_hash(gap)
+        cached = await self._read_project_ai_cache(
+            user, "gap_recommendations", gap_id, key_column="gap_id"
+        )
+        if cached is not None and cached.get("source_hash") == source_hash:
+            rendered = recommendation_from_cache(gap_id, cached)
+            if rendered is not None:
+                return rendered
+
+        content, model_name = await asyncio.to_thread(generate_gap_recommendation, gap)
+        generated_at = datetime.now(timezone.utc)
+        await self._write_project_ai_cache(
+            user,
+            "gap_recommendations",
+            {
+                "gap_id": str(gap_id),
+                "project_id": str(project_id),
+                "source_hash": source_hash,
+                "content": {
+                    **content.model_dump(mode="json"),
+                    "generated_at": generated_at.isoformat(),
+                },
+                "model_name": model_name,
+            },
+            on_conflict="gap_id",
+        )
+        return render_gap_recommendation(
+            gap_id, content, model_name=model_name, generated_at=generated_at
+        )
+
     async def get_project_chat_context(
         self, user: AuthenticatedUser, project_id: UUID
     ) -> ProjectChatContext:
@@ -1274,6 +1360,32 @@ class SupabaseProjectRepository:
             project_title=project.title,
             documents=tuple(documents),
         )
+
+    async def get_paper_chat_parameters(
+        self, user: AuthenticatedUser, project_id: UUID, paper_id: UUID
+    ) -> tuple[ProjectChatParameter, ...]:
+        """Parameter hasil ekstraksi satu PDF untuk chat global ("/").
+
+        get_paper memastikan PDF milik pemilik dan memang ada di proyek itu
+        (404 bila tidak), sehingga chat tidak diam-diam memakai proyek lain.
+        """
+        await self.get_paper(user, project_id, paper_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{self._rest_url}/extracted_components",
+                headers=self._headers(user),
+                params={
+                    "select": (
+                        "parameter,ai_value,final_value,status,created_at,"
+                        "evidence_spans(quote,page_number,paper_blocks(id))"
+                    ),
+                    "paper_id": f"eq.{paper_id}",
+                    "is_active": "eq.true",
+                    "order": "created_at.desc",
+                },
+            )
+        self._raise_for_repository_error(response)
+        return chat_parameters_from_rows(response.json())
 
     async def list_project_chat_messages(
         self, user: AuthenticatedUser, project_id: UUID
